@@ -5,11 +5,36 @@ spring:
     ollama:
       base-url: http://localhost:11434
       chat:
-        model: qwen3:8b
+        options:
+          model: qwen3:8b
+          # Ollama defaults to a 4096-token context, which is not enough once
+          # five tool schemas, the tool results and the model's reasoning all
+          # have to fit. A single "fundamental overview" question can fan out
+          # to four tools and bring back several KB of JSON; at 4096 the
+          # earlier tool results get evicted and the model answers from
+          # whatever survived. This is a host setting, not a model-specific
+          # one - any Ollama-served model needs the same headroom.
+          num-ctx: 16384
+          # Tool calling is a structured-output task; low randomness keeps the
+          # model from improvising arguments or skipping a tool it should call.
+          temperature: 0.3
 
 app:
   market-data:
     yahoo-finance:
       base-url: https://query1.finance.yahoo.com
+      # Issues the anonymous session cookie that the fundamentals endpoints
+      # require; deliberately a different host from base-url.
+      cookie-url: https://fc.yahoo.com
       user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-      timeout-ms: 5000
+      # Fundamentals payloads are larger and slower than a quote, and a single
+      # question can fan out to several of them.
+      timeout-ms: 10000
+
+logging:
+  level:
+    # Shows "TOOL CALLED: <tool> symbol=<symbol>" for every tool the model
+    # chooses, plus which provider served it.
+    com.ashish.stockresearch.tool: INFO
+    com.ashish.stockresearch.research: INFO
+    com.ashish.stockresearch.marketdata: INFO
