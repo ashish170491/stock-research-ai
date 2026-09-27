@@ -41,7 +41,8 @@ class YahooFinanceMarketDataProviderTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         server = MockRestServiceServer.bindTo(builder).build();
         llmSymbolResolver = mock(LlmSymbolResolver.class);
-        provider = new YahooFinanceMarketDataProvider(builder.build(), llmSymbolResolver);
+        provider = new YahooFinanceMarketDataProvider(
+                new YahooSymbolResolver(builder.build(), llmSymbolResolver));
     }
 
     @Test

@@ -5,11 +5,72 @@ spring:
     ollama:
       base-url: http://localhost:11434
       chat:
-        model: qwen3:8b
+        options:
+          model: qwen3:8b
+          # Ollama defaults to a 4096-token context, which is not enough once
+          # five tool schemas, the tool results and the model's reasoning all
+          # have to fit. A single "fundamental overview" question can fan out
+          # to four tools and bring back several KB of JSON; at 4096 the
+          # earlier tool results get evicted and the model answers from
+          # whatever survived. This is a host setting, not a model-specific
+          # one - any Ollama-served model needs the same headroom.
+          num-ctx: 16384
+          # Tool calling is a structured-output task; low randomness keeps the
+          # model from improvising arguments or skipping a tool it should call.
+          temperature: 0.3
 
 app:
   market-data:
     yahoo-finance:
       base-url: https://query1.finance.yahoo.com
+      # Issues the anonymous session cookie that the fundamentals endpoints
+      # require; deliberately a different host from base-url.
+      cookie-url: https://fc.yahoo.com
       user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-      timeout-ms: 5000
+      # Fundamentals payloads are larger and slower than a quote, and a single
+      # question can fan out to several of them.
+      timeout-ms: 10000
+
+  trace:
+    # Logs how a question flows through the model and the tools. Development
+    # aid - turn it off to remove the logging entirely (behaviour is unchanged
+    # either way, the tracer only decorates).
+    enabled: true
+    # How much of each tool payload to show at INFO. The full payload is always
+    # available at DEBUG.
+    max-payload-chars: 600
+
+logging:
+  level:
+    # Shows "TOOL CALLED: <tool> symbol=<symbol>" for every tool the model
+    # chooses, plus which provider served it.
+    com.ashish.stockresearch.tool: INFO
+    com.ashish.stockresearch.research: INFO
+    com.ashish.stockresearch.marketdata: INFO
+    # The dataflow trace: the question, each tool the model asks for with its
+    # arguments, the JSON handed back, and the final answer. Set this to DEBUG
+    # to also get full untruncated payloads, the model's reasoning between
+    # rounds, and the whole prompt.
+    com.ashish.stockresearch.trace: INFO
+  pattern:
+    # Trace lines are meant to be read as a flow, so keep them free of the
+    # thread and logger columns that would push them off the right edge.
+    console: "%d{HH:mm:ss.SSS} %-5level %-42logger{42} : %msg%n"
+    # Same layout in the file, but with the date: a daily file is read after the fact.
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %-42logger{42} : %msg%n"
+  file:
+    # Everything that goes to the console is also written here (relative to
+    # the working directory the app is started from).
+    name: logs/stock-research-ai.log
+  logback:
+    rollingpolicy:
+      # At midnight the current file is renamed to the dated pattern below and
+      # a fresh stock-research-ai.log is started. %i only comes into play if a
+      # single day exceeds max-file-size, splitting that day into .0, .1, ...
+      file-name-pattern: logs/stock-research-ai.%d{yyyy-MM-dd}.%i.log
+      max-file-size: 100MB
+      # Keep 7 days of archives; older ones are deleted at each rollover.
+      max-history: 7
+      # Also prune archives when the app starts, so an app that was stopped for
+      # a while does not keep stale files until its next midnight rollover.
+      clean-history-on-start: true
