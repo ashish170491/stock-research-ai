@@ -1,13 +1,15 @@
 package com.ashish.stockresearch.research;
 
-import com.ashish.stockresearch.research.model.FinancialSummary;
+import com.ashish.stockresearch.research.model.ReportedFinancials;
 
 /**
- * Supplies headline financial figures. Implementations must leave metrics
- * they cannot source as {@code null} and name them in
- * {@link com.ashish.stockresearch.research.model.FinancialSummary#unavailableMetrics()}
- * rather than substituting a zero or deriving a number the source does not
- * actually support.
+ * Supplies reported financial figures, normalised to canonical units
+ * (crore, percent) with a period and source on every number.
+ *
+ * Implementations report facts only. They must return an UNAVAILABLE data
+ * point - never zero and never an estimate - for anything they cannot
+ * source, and must not calculate derived metrics: growth, CAGR, margins and
+ * returns are calculated from these facts by the service layer.
  */
 public interface FinancialDataProvider {
 
@@ -15,5 +17,5 @@ public interface FinancialDataProvider {
      * @param symbolOrName an NSE/BSE trading symbol or company name
      * @throws ResearchDataUnavailableException if no financial data can be retrieved
      */
-    FinancialSummary getFinancialSummary(String symbolOrName);
+    ReportedFinancials getReportedFinancials(String symbolOrName);
 }

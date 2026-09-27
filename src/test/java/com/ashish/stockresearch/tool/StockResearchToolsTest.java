@@ -6,6 +6,7 @@ import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.service.ResearchReportWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +27,8 @@ class StockResearchToolsTest {
 
     @Mock
     private StockResearchService stockResearchService;
+    @Mock
+    private ResearchReportWriter researchReportWriter;
 
     @InjectMocks
     private StockResearchTools tools;
@@ -39,7 +42,8 @@ class StockResearchToolsTest {
                 .toList();
 
         assertThat(toolNames).containsExactly(
-                "getCompanyProfile", "getFinancialSummary", "getHistoricalPerformance", "getShareholding");
+                "getCompanyProfile", "getFinancialSummary", "getHistoricalPerformance", "getShareholding",
+                "getStockResearchReport");
     }
 
     @Test
@@ -92,6 +96,26 @@ class StockResearchToolsTest {
 
         assertThat(tools.getHistoricalPerformance("TCS", null)).isSameAs(expected);
         verify(stockResearchService).getHistoricalPerformance("TCS", null);
+    }
+
+    @Test
+    void neverTellsTheModelToConvertUnitsItself() {
+        Arrays.stream(StockResearchTools.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(Tool.class))
+                .forEach(method -> assertThat(method.getAnnotation(Tool.class).description())
+                        .as("description of %s", method.getName())
+                        .doesNotContain("divide by")
+                        .doesNotContain("10,000,000"));
+    }
+
+    @Test
+    void returnsTheJavaWrittenReportDirectlySoTheModelCannotRetypeTheFacts() throws Exception {
+        when(researchReportWriter.write("HDFC Bank")).thenReturn("# report\n| a | b |");
+
+        assertThat(tools.getStockResearchReport("HDFC Bank")).isEqualTo("# report\n| a | b |");
+        Tool tool = StockResearchTools.class.getMethod("getStockResearchReport", String.class).getAnnotation(Tool.class);
+        assertThat(tool.returnDirect()).isTrue();
+        assertThat(new PlainTextResultConverter().convert("# a\nb", String.class)).isEqualTo("# a\nb");
     }
 
     @Test

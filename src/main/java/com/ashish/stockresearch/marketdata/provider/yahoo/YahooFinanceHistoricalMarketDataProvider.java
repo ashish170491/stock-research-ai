@@ -2,11 +2,12 @@ package com.ashish.stockresearch.marketdata.provider.yahoo;
 
 import com.ashish.stockresearch.research.HistoricalMarketDataProvider;
 import com.ashish.stockresearch.research.ResearchDataUnavailableException;
-import com.ashish.stockresearch.research.model.CalendarYearReturn;
 import com.ashish.stockresearch.research.model.DataFreshness;
 import com.ashish.stockresearch.research.model.DataProvenance;
-import com.ashish.stockresearch.research.model.HistoricalPerformance;
+import com.ashish.stockresearch.research.model.PriceHistory;
+import com.ashish.stockresearch.research.model.PricePoint;
 import com.ashish.stockresearch.research.model.ResearchStatus;
+import com.ashish.stockresearch.research.model.SourceType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -15,27 +16,24 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
-import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Multi-year price performance backed by Yahoo's chart endpoint, which is
- * open (no crumb needed) and returns a split- and dividend-adjusted series.
+ * Daily price history backed by Yahoo's chart endpoint, which is open (no
+ * crumb needed) and returns a split- and dividend-adjusted series.
  *
- * The returns here are <em>derived by this application</em> from that
- * series, not published by Yahoo. They are arithmetic over real prices, so
- * nothing is invented - but the provenance note says so explicitly, and
- * {@code actualYears} reports the span the series genuinely covers, which
- * is shorter than requested for recently listed companies.
+ * This provider returns prices only. Returns, CAGR, drawdown and
+ * calendar-year returns are calculated by {@code HistoricalPerformanceService}.
  *
- * Prices are read in the exchange's own timezone: bucketing IST closes by
+ * Daily bars rather than monthly: a monthly bar is timestamped at the start
+ * of the month but carries the month-end close, which mislabels the start
+ * and end dates, and month-end sampling understates drawdowns that recover
+ * within a month.
+ *
+ * Prices are dated in the exchange's own timezone: bucketing IST closes by
  * UTC date would push a year-end close into the wrong calendar year.
  */
 @Component
@@ -45,8 +43,6 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
     private static final Logger log = LoggerFactory.getLogger(YahooFinanceHistoricalMarketDataProvider.class);
 
     private static final ZoneId EXCHANGE_ZONE = ZoneId.of("Asia/Kolkata");
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private static final MathContext MATH = MathContext.DECIMAL64;
     /** Yahoo only accepts a fixed set of range tokens, so a request is widened to the next supported one. */
     private static final List<Integer> SUPPORTED_RANGE_YEARS = List.of(1, 2, 5, 10);
 
@@ -60,7 +56,7 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
     }
 
     @Override
-    public HistoricalPerformance getHistoricalPerformance(String symbolOrName, int years) {
+    public PriceHistory getPriceHistory(String symbolOrName, int years) {
         YahooSymbolResolver.Resolution resolution = symbolResolver.resolve(symbolOrName)
                 .orElseThrow(() -> new ResearchDataUnavailableException(ResearchStatus.SYMBOL_NOT_FOUND,
                         "No NSE or BSE listed company found matching '%s'".formatted(symbolOrName)));
@@ -73,42 +69,31 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
                             .formatted(resolution.providerSymbol(), years));
         }
 
-        PricePoint first = series.get(0);
-        PricePoint last = series.get(series.size() - 1);
-        BigDecimal actualYears = yearsBetween(first, last);
+        log.info("Retrieved Yahoo Finance {}y daily price history for {} ({} points, {} to {})",
+                years, resolution.providerSymbol(), series.size(),
+                series.get(0).date(), series.get(series.size() - 1).date());
 
-        log.info("Retrieved Yahoo Finance {}y price history for {} ({} points, {} to {})",
-                years, resolution.providerSymbol(), series.size(), first.date(), last.date());
-
-        return new HistoricalPerformance(
+        return new PriceHistory(
                 resolution.symbol(),
                 resolution.exchange(),
-                chart.meta() != null && chart.meta().currency() != null ? chart.meta().currency() : "INR",
-                first.date(),
-                last.date(),
-                years,
-                actualYears,
-                first.price(),
-                last.price(),
-                totalReturnPercent(first.price(), last.price()),
-                cagrPercent(first.price(), last.price(), actualYears),
-                series.stream().map(PricePoint::price).max(BigDecimal::compareTo).orElse(null),
-                series.stream().map(PricePoint::price).min(BigDecimal::compareTo).orElse(null),
-                maxDrawdownPercent(series),
-                calendarYearReturns(series),
-                "Month-end closing prices adjusted for stock splits and dividends",
+                chart.meta() != null ? chart.meta().currency() : null,
+                series,
+                "Daily closing prices adjusted for stock splits and dividends (if the market is open, the final "
+                        + "point is the latest traded price rather than a close)",
                 new DataProvenance(
-                        "Yahoo Finance (unofficial/undocumented endpoint)",
+                        YahooFinanceFinancialDataProvider.SOURCE,
+                        SourceType.MARKET_DATA_PROVIDER,
                         DataFreshness.HISTORICAL,
                         Instant.now(),
-                        last.date(),
-                        "Historical price series. The end price is the last close in this window, "
-                                + "NOT a live quote - use the stock-quote tool for the current price. "
-                                + "Returns, CAGR and drawdown are calculated by this application from the "
-                                + "series above; they are not figures published by the provider. "
-                                + "In calendarYearReturns, a null returnPercent means there is no earlier "
-                                + "close inside this window to measure that year against - report it as not "
-                                + "applicable and never substitute a computed or recalled figure."));
+                        null,
+                        series.get(series.size() - 1).date(),
+                        null,
+                        "Source: Yahoo Finance (unofficial, undocumented endpoints). Historical price series. The end price is the last close in the window, NOT a live "
+                                + "quote - use the stock-quote tool for the current price. Returns, CAGR, drawdown "
+                                + "and calendar-year returns were calculated by this application; quote them as "
+                                + "given and never recalculate them. A null returnPercent means there is no earlier "
+                                + "year-end close in the window - report it as not applicable. A yearToDate return "
+                                + "covers a partial year and must not be called an annual return."));
     }
 
     private YahooChartResponse.Result fetchSeries(String providerSymbol, int years) {
@@ -122,7 +107,7 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
         try {
             response = restClient.get()
                     .uri(uriBuilder -> uriBuilder.path("/v8/finance/chart/{symbol}")
-                            .queryParam("interval", "1mo")
+                            .queryParam("interval", "1d")
                             .queryParam("range", range)
                             .build(providerSymbol))
                     .retrieve()
@@ -143,9 +128,6 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
                     "Yahoo Finance returned no price history for '%s'".formatted(providerSymbol));
         }
         return results.get(0);
-    }
-
-    private record PricePoint(LocalDate date, BigDecimal price) {
     }
 
     /**
@@ -173,9 +155,7 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
             if (price == null || epochSeconds == null || price.signum() <= 0) {
                 continue;
             }
-            series.add(new PricePoint(
-                    Instant.ofEpochSecond(epochSeconds).atZone(EXCHANGE_ZONE).toLocalDate(),
-                    price));
+            series.add(new PricePoint(Instant.ofEpochSecond(epochSeconds).atZone(EXCHANGE_ZONE).toLocalDate(), price));
         }
         return series;
     }
@@ -191,72 +171,5 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
             return quotes.get(0).close();
         }
         return null;
-    }
-
-    private BigDecimal yearsBetween(PricePoint first, PricePoint last) {
-        long days = java.time.temporal.ChronoUnit.DAYS.between(first.date(), last.date());
-        return BigDecimal.valueOf(days)
-                .divide(BigDecimal.valueOf(365.25), MATH)
-                .setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal totalReturnPercent(BigDecimal start, BigDecimal end) {
-        return end.divide(start, MATH)
-                .subtract(BigDecimal.ONE)
-                .multiply(HUNDRED)
-                .setScale(2, RoundingMode.HALF_UP);
-    }
-
-    /** Uses Math.pow for the fractional root; the inputs are prices, so double precision is ample. */
-    private BigDecimal cagrPercent(BigDecimal start, BigDecimal end, BigDecimal years) {
-        if (years.signum() <= 0) {
-            return null;
-        }
-        double growth = end.doubleValue() / start.doubleValue();
-        double cagr = Math.pow(growth, 1.0 / years.doubleValue()) - 1.0;
-        if (!Double.isFinite(cagr)) {
-            return null;
-        }
-        return BigDecimal.valueOf(cagr * 100).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    /** Largest peak-to-trough fall in the window, returned as a negative percentage. */
-    private BigDecimal maxDrawdownPercent(List<PricePoint> series) {
-        BigDecimal peak = null;
-        BigDecimal worst = BigDecimal.ZERO;
-        for (PricePoint point : series) {
-            if (peak == null || point.price().compareTo(peak) > 0) {
-                peak = point.price();
-            }
-            BigDecimal drawdown = totalReturnPercent(peak, point.price());
-            if (drawdown.compareTo(worst) < 0) {
-                worst = drawdown;
-            }
-        }
-        return worst.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * Year-on-year returns using each year's last available close. The
-     * earliest year has no prior close in the window, so its return is null
-     * rather than a misleading 0%.
-     */
-    private List<CalendarYearReturn> calendarYearReturns(List<PricePoint> series) {
-        Map<Integer, BigDecimal> lastCloseByYear = new LinkedHashMap<>();
-        for (PricePoint point : series) {
-            lastCloseByYear.put(point.date().getYear(), point.price());
-        }
-
-        List<CalendarYearReturn> returns = new ArrayList<>();
-        BigDecimal previousClose = null;
-        for (Map.Entry<Integer, BigDecimal> entry : lastCloseByYear.entrySet()) {
-            BigDecimal close = entry.getValue();
-            returns.add(new CalendarYearReturn(
-                    entry.getKey(),
-                    close.setScale(2, RoundingMode.HALF_UP),
-                    previousClose == null ? null : totalReturnPercent(previousClose, close)));
-            previousClose = close;
-        }
-        return List.copyOf(returns);
     }
 }

@@ -1,9 +1,9 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
 import com.ashish.stockresearch.research.ResearchDataUnavailableException;
-import com.ashish.stockresearch.research.model.CalendarYearReturn;
 import com.ashish.stockresearch.research.model.DataFreshness;
-import com.ashish.stockresearch.research.model.HistoricalPerformance;
+import com.ashish.stockresearch.research.model.PriceHistory;
+import com.ashish.stockresearch.research.model.PricePoint;
 import com.ashish.stockresearch.research.model.ResearchStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,8 +25,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * Exercises the return arithmetic against a hand-built series whose answers
- * can be checked by hand. No real Yahoo call is made.
+ * Exercises series parsing: dates, timezone, gaps and fallbacks. The return
+ * arithmetic lives in HistoricalPerformanceService and is tested there.
+ * No real Yahoo call is made.
  */
 class YahooFinanceHistoricalMarketDataProviderTest {
 
@@ -64,49 +65,26 @@ class YahooFinanceHistoricalMarketDataProviderTest {
     }
 
     @Test
-    void derivesTotalReturnAndCagrFromTheAdjustedSeries() {
+    void returnsTheAdjustedSeriesAsDatedPricesWithoutCalculatingAnything() {
         server.expect(requestTo(containsString("/v8/finance/chart/TCS.NS")))
                 .andRespond(withSuccess(FOUR_YEAR_SERIES, MediaType.APPLICATION_JSON));
 
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
+        PriceHistory history = provider.getPriceHistory("TCS", 5);
 
-        assertThat(performance.startPrice()).isEqualByComparingTo("100.0");
-        assertThat(performance.endPrice()).isEqualByComparingTo("400.0");
-        // 4x over three years -> 300% total, and 4^(1/3)-1 = 58.74% a year.
-        assertThat(performance.totalReturnPercent()).isEqualByComparingTo("300.00");
-        assertThat(performance.cagrPercent()).isEqualByComparingTo("58.74");
-        assertThat(performance.actualYears()).isEqualByComparingTo("3.00");
+        assertThat(history.closes()).extracting(PricePoint::close)
+                .extracting(BigDecimal::doubleValue).containsExactly(100.0, 200.0, 150.0, 400.0);
+        assertThat(history.closes().get(0).date()).isEqualTo(LocalDate.of(2021, 12, 31));
+        assertThat(history.currency()).isEqualTo("INR");
     }
 
     @Test
-    void measuresDrawdownFromTheRunningPeakNotFromTheStart() {
-        server.expect(requestTo(containsString("/v8/finance/chart/TCS.NS")))
+    void requestsDailyBarsSoDatesMatchTheirClosingPrices() {
+        server.expect(requestTo(containsString("interval=1d")))
                 .andRespond(withSuccess(FOUR_YEAR_SERIES, MediaType.APPLICATION_JSON));
 
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
+        provider.getPriceHistory("TCS", 5);
 
-        // 200 -> 150 is the worst peak-to-trough fall, even though the series ends up.
-        assertThat(performance.maxDrawdownPercent()).isEqualByComparingTo("-25.00");
-        assertThat(performance.periodHigh()).isEqualByComparingTo("400.0");
-        assertThat(performance.periodLow()).isEqualByComparingTo("100.0");
-    }
-
-    @Test
-    void leavesTheFirstCalendarYearReturnNullRatherThanCallingItZero() {
-        server.expect(requestTo(containsString("/v8/finance/chart/TCS.NS")))
-                .andRespond(withSuccess(FOUR_YEAR_SERIES, MediaType.APPLICATION_JSON));
-
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
-
-        assertThat(performance.calendarYearReturns()).hasSize(4);
-        CalendarYearReturn first = performance.calendarYearReturns().get(0);
-        assertThat(first.year()).isEqualTo(2021);
-        assertThat(first.closingPrice()).isEqualByComparingTo("100.00");
-        assertThat(first.returnPercent()).isNull();
-        assertThat(performance.calendarYearReturns().get(1).returnPercent()).isEqualByComparingTo("100.00");
-        // The null must be explained in the payload, not only in the javadoc -
-        // the model sees the JSON and will otherwise fill the gap itself.
-        assertThat(performance.provenance().note()).contains("null returnPercent");
+        server.verify();
     }
 
     @Test
@@ -128,10 +106,9 @@ class YahooFinanceHistoricalMarketDataProviderTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
+        PriceHistory history = provider.getPriceHistory("TCS", 5);
 
-        assertThat(performance.periodStart()).isEqualTo(LocalDate.of(2022, 1, 1));
-        assertThat(performance.calendarYearReturns().get(0).year()).isEqualTo(2022);
+        assertThat(history.closes().get(0).date()).isEqualTo(LocalDate.of(2022, 1, 1));
     }
 
     @Test
@@ -150,12 +127,11 @@ class YahooFinanceHistoricalMarketDataProviderTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
+        PriceHistory history = provider.getPriceHistory("TCS", 5);
 
         // A zero-filled gap would have produced a -100% drawdown and a nonsense CAGR.
-        assertThat(performance.calendarYearReturns()).hasSize(2);
-        assertThat(performance.periodLow()).isEqualByComparingTo("100.0");
-        assertThat(performance.totalReturnPercent()).isEqualByComparingTo("50.00");
+        assertThat(history.closes()).extracting(PricePoint::close)
+                .extracting(BigDecimal::doubleValue).containsExactly(100.0, 150.0);
     }
 
     @Test
@@ -174,9 +150,9 @@ class YahooFinanceHistoricalMarketDataProviderTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
+        PriceHistory history = provider.getPriceHistory("TCS", 5);
 
-        assertThat(performance.totalReturnPercent()).isEqualByComparingTo("10.00");
+        assertThat(history.closes().get(1).close()).isEqualByComparingTo("110.0");
     }
 
     @Test
@@ -184,11 +160,11 @@ class YahooFinanceHistoricalMarketDataProviderTest {
         server.expect(requestTo(containsString("/v8/finance/chart/TCS.NS")))
                 .andRespond(withSuccess(FOUR_YEAR_SERIES, MediaType.APPLICATION_JSON));
 
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
+        PriceHistory history = provider.getPriceHistory("TCS", 5);
 
-        assertThat(performance.provenance().freshness()).isEqualTo(DataFreshness.HISTORICAL);
-        assertThat(performance.provenance().asOf()).isEqualTo(LocalDate.of(2024, 12, 31));
-        assertThat(performance.provenance().note()).contains("NOT a live quote");
+        assertThat(history.provenance().freshness()).isEqualTo(DataFreshness.HISTORICAL);
+        assertThat(history.provenance().asOf()).isEqualTo(LocalDate.of(2024, 12, 31));
+        assertThat(history.provenance().note()).contains("NOT a live quote").contains("never recalculate");
     }
 
     @Test
@@ -207,7 +183,7 @@ class YahooFinanceHistoricalMarketDataProviderTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> provider.getHistoricalPerformance("TCS", 5))
+        assertThatThrownBy(() -> provider.getPriceHistory("TCS", 5))
                 .isInstanceOf(ResearchDataUnavailableException.class)
                 .extracting(ex -> ((ResearchDataUnavailableException) ex).status())
                 .isEqualTo(ResearchStatus.DATA_NOT_AVAILABLE);
@@ -218,7 +194,7 @@ class YahooFinanceHistoricalMarketDataProviderTest {
         server.expect(requestTo(containsString("/v8/finance/chart/TCS.NS")))
                 .andRespond(withServerError());
 
-        assertThatThrownBy(() -> provider.getHistoricalPerformance("TCS", 5))
+        assertThatThrownBy(() -> provider.getPriceHistory("TCS", 5))
                 .isInstanceOf(ResearchDataUnavailableException.class)
                 .extracting(ex -> ((ResearchDataUnavailableException) ex).status())
                 .isEqualTo(ResearchStatus.PROVIDER_UNAVAILABLE);
@@ -231,7 +207,7 @@ class YahooFinanceHistoricalMarketDataProviderTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://query1.finance.yahoo.com");
 
         assertThatThrownBy(() -> new YahooFinanceHistoricalMarketDataProvider(builder.build(), resolver)
-                .getHistoricalPerformance("NOTACOMPANY", 5))
+                .getPriceHistory("NOTACOMPANY", 5))
                 .isInstanceOf(ResearchDataUnavailableException.class)
                 .extracting(ex -> ((ResearchDataUnavailableException) ex).status())
                 .isEqualTo(ResearchStatus.SYMBOL_NOT_FOUND);
@@ -242,23 +218,9 @@ class YahooFinanceHistoricalMarketDataProviderTest {
         server.expect(requestTo(containsString("range=5y")))
                 .andRespond(withSuccess(FOUR_YEAR_SERIES, MediaType.APPLICATION_JSON));
 
-        // Yahoo has no "3y" token, so a 3-year ask must be widened to 5y.
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 3);
+        // Yahoo has no "3y" token, so a 3-year ask must be widened to 5y (the service trims it back).
+        provider.getPriceHistory("TCS", 3);
 
-        assertThat(performance.requestedYears()).isEqualTo(3);
         server.verify();
-    }
-
-    @Test
-    void assertBigDecimalScaleIsStable() {
-        server.expect(requestTo(containsString("/v8/finance/chart/TCS.NS")))
-                .andRespond(withSuccess(FOUR_YEAR_SERIES, MediaType.APPLICATION_JSON));
-
-        HistoricalPerformance performance = provider.getHistoricalPerformance("TCS", 5);
-
-        assertThat(performance.totalReturnPercent().scale()).isEqualTo(2);
-        assertThat(performance.cagrPercent()).isNotNull();
-        assertThat(performance.currency()).isEqualTo("INR");
-        assertThat(BigDecimal.ZERO.compareTo(performance.actualYears())).isNegative();
     }
 }

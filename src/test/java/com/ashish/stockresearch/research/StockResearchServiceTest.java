@@ -33,7 +33,8 @@ class StockResearchServiceTest {
 
     private StockResearchService service() {
         return new StockResearchService(companyProfileProvider, financialDataProvider,
-                shareholdingProvider, historicalMarketDataProvider);
+                shareholdingProvider, historicalMarketDataProvider,
+                new FinancialMetricsService(), new HistoricalPerformanceService());
     }
 
     @Test
@@ -68,7 +69,7 @@ class StockResearchServiceTest {
 
     @Test
     void preservesTheProviderStatusSoTheModelCanTellFailureModesApart() {
-        when(financialDataProvider.getFinancialSummary("NOTLISTED")).thenThrow(
+        when(financialDataProvider.getReportedFinancials("NOTLISTED")).thenThrow(
                 new ResearchDataUnavailableException(ResearchStatus.SYMBOL_NOT_FOUND, "No such listing"));
 
         FinancialSummaryResult result = service().getFinancialSummary("NOTLISTED");
@@ -91,7 +92,7 @@ class StockResearchServiceTest {
 
     @Test
     void containsAnUnexpectedProviderExceptionInsteadOfLettingItReachTheToolLayer() {
-        when(historicalMarketDataProvider.getHistoricalPerformance(any(), anyInt()))
+        when(historicalMarketDataProvider.getPriceHistory(any(), anyInt()))
                 .thenThrow(new IllegalStateException("boom"));
 
         HistoricalPerformanceResult result = service().getHistoricalPerformance("TCS", 5);
@@ -105,20 +106,30 @@ class StockResearchServiceTest {
     void defaultsToFiveYearsWhenTheModelOmitsTheWindow() {
         service().getHistoricalPerformance("TCS", null);
 
-        verify(historicalMarketDataProvider).getHistoricalPerformance("TCS", 5);
+        verify(historicalMarketDataProvider).getPriceHistory("TCS", 5);
     }
 
     @Test
     void clampsAnAbsurdWindowInsteadOfFailingTheCall() {
         service().getHistoricalPerformance("TCS", 900);
 
-        verify(historicalMarketDataProvider).getHistoricalPerformance(eq("TCS"), eq(25));
+        verify(historicalMarketDataProvider).getPriceHistory(eq("TCS"), eq(25));
     }
 
     @Test
     void treatsANonPositiveWindowAsTheDefault() {
         service().getHistoricalPerformance("TCS", -3);
 
-        verify(historicalMarketDataProvider).getHistoricalPerformance("TCS", 5);
+        verify(historicalMarketDataProvider).getPriceHistory("TCS", 5);
+    }
+
+    @Test
+    void runsTheJavaCalculationsOverTheProvidersFactsBeforeReturningThem() {
+        when(financialDataProvider.getReportedFinancials("HDFCBANK")).thenReturn(ResearchFixtures.hdfcReported());
+
+        FinancialSummaryResult result = service().getFinancialSummary("HDFCBANK");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.financialSummary().calculated().revenueCagrPercent().value()).isEqualByComparingTo("16.90");
     }
 }

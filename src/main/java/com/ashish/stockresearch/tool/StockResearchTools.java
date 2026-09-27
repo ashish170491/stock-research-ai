@@ -5,6 +5,7 @@ import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.service.ResearchReportWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
@@ -33,14 +34,44 @@ public class StockResearchTools {
     private static final Logger log = LoggerFactory.getLogger(StockResearchTools.class);
 
     private final StockResearchService stockResearchService;
+    private final ResearchReportWriter researchReportWriter;
 
-    public StockResearchTools(StockResearchService stockResearchService) {
+    public StockResearchTools(StockResearchService stockResearchService,
+                              ResearchReportWriter researchReportWriter) {
         this.stockResearchService = stockResearchService;
+        this.researchReportWriter = researchReportWriter;
+    }
+
+    /**
+     * The model decides to call this; it does not get to retype the result.
+     * {@code returnDirect} sends the finished report - Java-rendered facts plus
+     * a screened, evidence-only interpretation - straight back to the user,
+     * because a small model transcribing tables drops sections, shifts periods
+     * and adds claims of its own.
+     */
+    @Tool(description = """
+            Produce a complete, verified research report on an Indian listed company: company profile \
+            and market capitalisation, financial statements, reported quarters with their period-end and \
+            publication dates, growth / CAGR / margin / ROE / ROA figures calculated by the application, \
+            five-year share-price performance with calculated CAGR and maximum drawdown, shareholding \
+            availability, observations, data gaps, an interpretation and sources. \
+            Use this for broad requests - "analyse X", "research X", "give me a report on X" - instead of \
+            calling the individual research tools. The report is returned to the user as-is. \
+            Accepts an NSE/BSE trading symbol (e.g. HDFCBANK) or a company name (e.g. "HDFC Bank").""",
+            returnDirect = true, resultConverter = PlainTextResultConverter.class)
+    public String getStockResearchReport(
+            @ToolParam(description = "Indian stock trading symbol (e.g. HDFCBANK, TCS) or company name "
+                    + "(e.g. 'HDFC Bank')")
+            String symbol) {
+        log.info("TOOL CALLED: getStockResearchReport symbol={}", symbol);
+        return researchReportWriter.write(symbol);
     }
 
     @Tool(description = """
             Get a company's business profile: what it actually does, its sector and industry, \
             business summary, country, website, employee headcount and market capitalisation. \
+            Market cap is already normalised to crore with an as-of date - quote its 'display' field. \
+            The business summary is the only basis for qualitative claims about the company. \
             Use this for qualitative questions about the company as a business - "tell me about X", \
             "what does X do", "what sector is X in", "how big is X". \
             Returns no revenue, profit or valuation ratios - use getFinancialSummary for those, \
@@ -56,19 +87,19 @@ public class StockResearchTools {
     }
 
     @Tool(description = """
-            Get a company's headline financial figures: revenue, net profit, EBITDA, operating and \
-            net margins, return on equity, return on assets, total debt, debt-to-equity, cash, \
-            free cash flow, and revenue and earnings growth. \
+            Get a company's financials: headline TTM revenue, net profit, margins, returns, debt and cash; \
+            recent reported quarters with period-end and results-publication dates; fiscal-year statements; \
+            and YoY growth, CAGR, margins, ROE and ROA calculated by the application. \
             Use this for questions about financial or fundamental performance, profitability, \
             margins, growth, leverage or balance-sheet strength. \
-            These are trailing-twelve-month figures from past company filings, NOT live data - the \
-            reportingPeriod and provenance fields state the period they cover, and you must not \
-            describe them as current or as today's numbers. \
-            Read the currency field: it is the currency of the accounts and is not always INR. \
-            Absolute amounts are whole currency units, not crore or millions - divide by 10,000,000 \
-            to express a figure in crore. \
-            Any metric that is null is UNAVAILABLE, not zero; the unavailableMetrics field names \
-            each one - report those as not available rather than guessing or omitting them. \
+            Every number is a data point with a unit, a period (with a fiscal label computed by the application), \
+            a source and an origin (REPORTED by the source or CALCULATED by the application). \
+            Amounts are already normalised to crore - quote the 'display' field; never convert units and \
+            never recalculate a CALCULATED value. Use period labels exactly as given; \
+            latestReportedQuarter is the latest quarter with results - never describe a later quarter as reported. \
+            These figures describe past reporting periods, NOT live data. Their source is Yahoo Finance. \
+            A data point with availability UNAVAILABLE is unknown, not zero - report it as not available \
+            using its unavailableReason. dataGaps and dataQualityWarnings must be reported. \
             Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""")
     public FinancialSummaryResult getFinancialSummary(
             @ToolParam(description = "Indian stock trading symbol (e.g. TCS, INFY) or company name "
@@ -103,7 +134,9 @@ public class StockResearchTools {
             over five years", "long-term returns", "has X been volatile". \
             This is HISTORY: endPrice is the last close in the window and is not the live price, so use \
             getStockQuote when the user wants the current price. \
-            Prices are adjusted for splits and dividends; returns are calculated from that series. \
+            Prices are daily closes adjusted for splits and dividends. Returns, CAGR, drawdown (with peak \
+            and trough dates) and calendar-year returns are CALCULATED by the application - quote them as \
+            given and never recalculate them. A yearToDate calendar-year return is partial. \
             Check actualYears - a recently listed company may have a shorter history than requested. \
             Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""")
     public HistoricalPerformanceResult getHistoricalPerformance(

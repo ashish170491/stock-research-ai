@@ -13,8 +13,12 @@ public enum DataFreshness {
     /** Exchange price on a delay (typically 15 minutes for Indian exchanges via free feeds). */
     DELAYED,
 
-    /** Derived from a periodic company filing - annual report or quarterly result. */
-    PERIODIC_FILING,
+    /**
+     * Financial-statement figures for a past reporting period (quarter, fiscal
+     * year, trailing twelve months), as supplied by the stated source. Says
+     * nothing about the source being an official filing.
+     */
+    PERIODIC_FINANCIALS,
 
     /** A past price series; describes what already happened, never the present. */
     HISTORICAL,

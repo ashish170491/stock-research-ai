@@ -13,7 +13,8 @@ import java.util.function.Function;
 
 /**
  * Business logic for the stock research toolkit: validates input, delegates
- * to the right provider, and converts every failure mode into a structured
+ * to the right provider, runs the Java calculation services over the
+ * provider's facts, and converts every failure mode into a structured
  * result rather than letting an exception escape into the AI tool layer.
  *
  * One tool failing must never sink the others - each method here is
@@ -34,15 +35,21 @@ public class StockResearchService {
     private final FinancialDataProvider financialDataProvider;
     private final ShareholdingProvider shareholdingProvider;
     private final HistoricalMarketDataProvider historicalMarketDataProvider;
+    private final FinancialMetricsService financialMetricsService;
+    private final HistoricalPerformanceService historicalPerformanceService;
 
     public StockResearchService(CompanyProfileProvider companyProfileProvider,
                                 FinancialDataProvider financialDataProvider,
                                 ShareholdingProvider shareholdingProvider,
-                                HistoricalMarketDataProvider historicalMarketDataProvider) {
+                                HistoricalMarketDataProvider historicalMarketDataProvider,
+                                FinancialMetricsService financialMetricsService,
+                                HistoricalPerformanceService historicalPerformanceService) {
         this.companyProfileProvider = companyProfileProvider;
         this.financialDataProvider = financialDataProvider;
         this.shareholdingProvider = shareholdingProvider;
         this.historicalMarketDataProvider = historicalMarketDataProvider;
+        this.financialMetricsService = financialMetricsService;
+        this.historicalPerformanceService = historicalPerformanceService;
     }
 
     public CompanyProfileResult getCompanyProfile(String rawSymbol) {
@@ -53,7 +60,8 @@ public class StockResearchService {
 
     public FinancialSummaryResult getFinancialSummary(String rawSymbol) {
         return execute("financial summary", rawSymbol,
-                symbol -> FinancialSummaryResult.success(financialDataProvider.getFinancialSummary(symbol)),
+                symbol -> FinancialSummaryResult.success(
+                        financialMetricsService.summarize(financialDataProvider.getReportedFinancials(symbol))),
                 FinancialSummaryResult::failure);
     }
 
@@ -66,8 +74,8 @@ public class StockResearchService {
     public HistoricalPerformanceResult getHistoricalPerformance(String rawSymbol, Integer years) {
         int window = normalizeYears(years);
         return execute("historical performance", rawSymbol,
-                symbol -> HistoricalPerformanceResult.success(
-                        historicalMarketDataProvider.getHistoricalPerformance(symbol, window)),
+                symbol -> HistoricalPerformanceResult.success(historicalPerformanceService.analyze(
+                        historicalMarketDataProvider.getPriceHistory(symbol, window), window)),
                 HistoricalPerformanceResult::failure);
     }
 

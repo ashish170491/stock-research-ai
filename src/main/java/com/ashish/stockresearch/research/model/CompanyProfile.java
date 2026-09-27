@@ -1,17 +1,18 @@
 package com.ashish.stockresearch.research.model;
 
-import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Descriptive, slow-changing information about a listed company: what it
- * does and what sector it operates in. Contains no valuation or performance
- * figures - those belong to {@link FinancialSummary}.
+ * does and what sector it operates in, plus its market capitalisation.
  *
- * Any field may be {@code null} when the provider does not publish it. A
- * null means "not available", never zero.
+ * Descriptive fields may be {@code null} when the provider does not publish
+ * them. Market cap and share count are {@link FinancialDataPoint}s, already
+ * normalised to crore and carrying their as-of date.
  *
- * @param marketCap         market capitalisation in {@code marketCapCurrency}, or null if not published
- * @param fullTimeEmployees headcount as last reported by the company, or null
+ * @param businessSummary      the provider's own description - the only source for any
+ *                             qualitative claim about what the company does
+ * @param dataQualityIssues    failed consistency checks (e.g. market cap vs price x shares)
  */
 public record CompanyProfile(
         String symbol,
@@ -22,9 +23,10 @@ public record CompanyProfile(
         String country,
         String website,
         Integer fullTimeEmployees,
-        BigDecimal marketCap,
-        String marketCapCurrency,
+        FinancialDataPoint marketCap,
+        FinancialDataPoint sharesOutstanding,
         String businessSummary,
+        List<DataQualityIssue> dataQualityIssues,
         DataProvenance provenance
 ) {
 }

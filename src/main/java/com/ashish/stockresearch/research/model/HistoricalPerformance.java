@@ -1,40 +1,34 @@
 package com.ashish.stockresearch.research.model;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Past price performance of a stock over a requested window.
+ * Past price performance over a requested window, calculated in Java from a
+ * {@link PriceHistory}.
  *
- * This is HISTORY. {@code endPrice} is the last close in the window, which
- * is not the same thing as a live quote - use the stock-quote tool for the
- * current price.
+ * This is HISTORY. {@code endPrice} is the last close in the window, not a
+ * live quote.
  *
- * Returns are derived from the price series in {@code basis}; they are
- * computed by this application, not published by the provider.
- *
- * @param basis              what the series is made of, e.g. split- and dividend-adjusted monthly closes
- * @param cagrPercent        compound annual growth rate over {@code actualYears}
- * @param maxDrawdownPercent largest peak-to-trough fall within the window, as a negative percentage
- * @param actualYears        the span actually covered, which can be shorter than requested for
- *                           recently listed companies
+ * @param window             the exact dates the calculations span
+ * @param actualYears        the span actually covered; shorter than requested for recent listings
+ * @param maxDrawdownPercent largest peak-to-trough fall, negative; peak and trough dates alongside
  */
 public record HistoricalPerformance(
         String symbol,
         String exchange,
-        String currency,
-        LocalDate periodStart,
-        LocalDate periodEnd,
+        ReportingPeriod window,
         int requestedYears,
-        BigDecimal actualYears,
-        BigDecimal startPrice,
-        BigDecimal endPrice,
-        BigDecimal totalReturnPercent,
-        BigDecimal cagrPercent,
-        BigDecimal periodHigh,
-        BigDecimal periodLow,
-        BigDecimal maxDrawdownPercent,
+        FinancialDataPoint actualYears,
+        FinancialDataPoint startPrice,
+        FinancialDataPoint endPrice,
+        FinancialDataPoint totalReturnPercent,
+        FinancialDataPoint cagrPercent,
+        FinancialDataPoint periodHigh,
+        FinancialDataPoint periodLow,
+        FinancialDataPoint maxDrawdownPercent,
+        LocalDate drawdownPeakDate,
+        LocalDate drawdownTroughDate,
         List<CalendarYearReturn> calendarYearReturns,
         String basis,
         DataProvenance provenance
