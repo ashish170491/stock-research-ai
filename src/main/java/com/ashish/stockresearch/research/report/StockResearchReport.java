@@ -24,8 +24,8 @@ import java.util.List;
  * @param sectorContext         the company's industry group and which metrics matter for it; UNKNOWN
  *                              when the sector could not be identified
  * @param observations          patterns directly visible in the facts, stated by the application
- * @param withheldObservations  observations not presented because they depend on a field in a
- *                              DATA_CONFLICT
+ * @param withheldObservations  observations not generated because their metric is in a DATA_CONFLICT,
+ *                              INVALID, or not a primary indicator for the company's industry group
  * @param dataGaps              everything that could not be established, with reasons
  * @param dataQualityIssues     failed cross-checks; conflicting values are shown, flagged, and not
  *                              used for conclusions
@@ -43,11 +43,22 @@ public record StockResearchReport(
         HistoricalPerformanceResult historicalPerformance,
         ShareholdingResult shareholding,
         List<Observation> observations,
-        List<Observation> withheldObservations,
+        List<WithheldObservation> withheldObservations,
         List<DataGap> dataGaps,
         List<DataQualityIssue> dataQualityIssues,
         List<SourceReference> sources
 ) {
+
+    /**
+     * Topics on which no interpretation may be generated, because every observation about them was
+     * withheld and none survived. A topic with at least one VALID observation is not listed.
+     */
+    public List<String> withheldTopics() {
+        java.util.Set<String> covered = new java.util.HashSet<>();
+        observations.forEach(o -> covered.add(o.topic()));
+        return withheldObservations.stream().map(WithheldObservation::topic)
+                .filter(topic -> !covered.contains(topic)).distinct().toList();
+    }
 
     /** Every provider field involved in a DATA_CONFLICT - nothing may be concluded from these. */
     public java.util.Set<String> conflictedFields() {

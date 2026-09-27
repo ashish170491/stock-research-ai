@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.research.calc;
 
+import com.ashish.stockresearch.research.model.CurrencyInfo;
 import com.ashish.stockresearch.research.model.Unit;
 
 import java.math.BigDecimal;
@@ -44,7 +45,8 @@ public final class FinancialUnits {
     }
 
     /** An amount after normalisation, in a canonical unit. */
-    public record NormalizedAmount(BigDecimal value, Unit unit) {
+    /** A normalised amount and its currency metadata: scaled within one currency, never converted. */
+    public record NormalizedAmount(BigDecimal value, Unit unit, CurrencyInfo currency) {
     }
 
     private FinancialUnits() {
@@ -86,8 +88,10 @@ public final class FinancialUnits {
             return Optional.empty();
         }
         return switch (currency.toUpperCase()) {
-            case "INR" -> Optional.of(new NormalizedAmount(toCrore(amount, scale), Unit.INR_CRORE));
-            case "USD" -> Optional.of(new NormalizedAmount(toMillions(amount, scale), Unit.USD_MILLION));
+            case "INR" -> Optional.of(new NormalizedAmount(toCrore(amount, scale), Unit.INR_CRORE,
+                    CurrencyInfo.scaled("INR")));
+            case "USD" -> Optional.of(new NormalizedAmount(toMillions(amount, scale), Unit.USD_MILLION,
+                    CurrencyInfo.scaled("USD")));
             default -> Optional.empty();
         };
     }

@@ -125,11 +125,22 @@ class StockResearchServiceTest {
 
     @Test
     void runsTheJavaCalculationsOverTheProvidersFactsBeforeReturningThem() {
-        when(financialDataProvider.getReportedFinancials("HDFCBANK")).thenReturn(ResearchFixtures.hdfcReported());
+        when(financialDataProvider.getReportedFinancials("HDFCBANK")).thenReturn(ResearchFixtures.consistentReported());
 
         FinancialSummaryResult result = service().getFinancialSummary("HDFCBANK");
 
         assertThat(result.success()).isTrue();
         assertThat(result.financialSummary().calculated().revenueCagrPercent().value()).isEqualByComparingTo("16.90");
+    }
+
+    @Test
+    void neverReturnsAMetricCalculatedFromConflictingProviderFigures() {
+        when(financialDataProvider.getReportedFinancials("HDFCBANK")).thenReturn(ResearchFixtures.hdfcReported());
+
+        FinancialSummaryResult result = service().getFinancialSummary("HDFCBANK");
+
+        assertThat(result.financialSummary().calculated().revenueCagrPercent().value()).isNull();
+        assertThat(result.financialSummary().calculated().revenueCagrPercent().status())
+                .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.DATA_CONFLICT);
     }
 }

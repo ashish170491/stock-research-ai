@@ -11,8 +11,9 @@ import java.util.List;
  * @param basis       the calculation it rests on
  * @param inputFields provider fields it depends on - used to withhold it when any of them is in
  *                    a DATA_CONFLICT
+ * @param topic       what it is about, e.g. "revenue growth"
  */
-public record Observation(String statement, String basis, List<String> inputFields) {
+public record Observation(String statement, String basis, List<String> inputFields, String topic) {
 
     public Observation {
         inputFields = List.copyOf(inputFields);

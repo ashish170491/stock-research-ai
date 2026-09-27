@@ -83,4 +83,13 @@ class LlmSymbolResolverTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    void ignoresTheModelsInlineReasoning() {
+        when(callResponseSpec.content()).thenReturn("<think>Bharti Airtel trades as BHARTIARTL on NSE.</think>\nBHARTIARTL");
+
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Bharti Airtel");
+
+        assertThat(result).contains("BHARTIARTL");
+    }
 }

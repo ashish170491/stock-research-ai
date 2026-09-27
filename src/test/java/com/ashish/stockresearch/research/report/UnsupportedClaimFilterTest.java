@@ -122,4 +122,50 @@ class UnsupportedClaimFilterTest {
 
         assertThat(result.text()).isEqualTo("Readers should verify these figures against the company's regulatory filings.");
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "The company appears financially healthy.",
+            "Revenue growth was strong.",
+            "Margins look weak.",
+            "The bank has high leverage.",
+            "Low leverage reduces risk.",
+            "Execution has been excellent.",
+            "The valuation is attractive.",
+            "Cost control was poor.",
+            "The stock shows strong momentum.",
+            "Total debt of 0.81x indicates a relatively stable capital structure.",
+            "The bank is a major player in India.",
+            "The market cap indicates significant scale.",
+            "Revenue and net profit have grown steadily.",
+            "Return on equity remained stable at 16.69% in FY26.",
+            "These trends suggest resilience in the stock's performance."})
+    void removesQualitativeLabelsForWhichNoCriteriaExist(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter("The reported ROE was 16.89% for FY26. " + sentence, EVIDENCE);
+
+        assertThat(result.text()).isEqualTo("The reported ROE was 16.89% for FY26.");
+    }
+
+    @Test
+    void removesConclusionsAboutWithheldTopicsButKeepsStatementsAboutTheConflict() {
+        String text = "Revenue grew 4.73% in FY26. Revenue figures from two Yahoo Finance fields conflict, so no "
+                + "revenue trend can be stated. Net profit margin remained stable. Share price fell 3.26% over the window.";
+
+        UnsupportedClaimFilter.Result result = filter.filter(text, EVIDENCE,
+                java.util.List.of("revenue growth", "net profit margin"));
+
+        assertThat(result.text()).isEqualTo("Revenue figures from two Yahoo Finance fields conflict, so no revenue "
+                + "trend can be stated. Share price fell 3.26% over the window.");
+        assertThat(result.removedSentences()).containsExactly("Revenue grew 4.73% in FY26.",
+                "Net profit margin remained stable.");
+    }
+
+    @Test
+    void aCompanyNameEndingInLimitedDoesNotExemptAConclusion() {
+        UnsupportedClaimFilter.Result result = filter.filter(
+                "HDFC Bank Limited reported a 4.65% increase in net profit for FY26.", EVIDENCE,
+                java.util.List.of("net profit growth"));
+
+        assertThat(result.text()).isEmpty();
+    }
 }

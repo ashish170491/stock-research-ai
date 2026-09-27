@@ -15,7 +15,9 @@ public record DataQualityIssue(Type type, String message, List<String> affectedF
         /** Something looks questionable but no two sources contradict each other. */
         DATA_QUALITY_WARNING,
         /** Two values that should agree do not. Neither is chosen, and neither is used for conclusions. */
-        DATA_CONFLICT
+        DATA_CONFLICT,
+        /** A calculated value did not survive verification against its inputs; it is withheld as INVALID. */
+        CALCULATION_INVALID
     }
 
     public DataQualityIssue {
@@ -24,6 +26,10 @@ public record DataQualityIssue(Type type, String message, List<String> affectedF
 
     public static DataQualityIssue conflict(String message, List<String> fields) {
         return new DataQualityIssue(Type.DATA_CONFLICT, message, fields);
+    }
+
+    public static DataQualityIssue invalidCalculation(String message, List<String> fields) {
+        return new DataQualityIssue(Type.CALCULATION_INVALID, message, fields);
     }
 
     public static DataQualityIssue warning(String message, List<String> fields) {

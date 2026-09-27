@@ -26,6 +26,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -115,7 +116,7 @@ public class MockStockResearchProvider
                     crore("totalDebt", String.valueOf(500 + 20 * (3 - i)), closing)));
         }
         return new ReportedFinancials(symbol, "NSE", symbol + " Limited (sample)", "INR", quarter,
-                CALENDAR.fiscalYear(FISCAL_YEAR_END), headline, quarters, annual, List.of(),
+                CALENDAR.fiscalYear(FISCAL_YEAR_END), headline, quarters, annual, List.of(), List.of(),
                 provenance(DataFreshness.PERIODIC_FINANCIALS, QUARTER_END, QUARTER_END));
     }
 
@@ -127,7 +128,7 @@ public class MockStockResearchProvider
         List<PricePoint> closes = new ArrayList<>();
         for (int month = years * 12; month >= 0; month--) {
             double drift = 100 + (years * 12 - month) * 0.8 + (month % 7 == 0 ? -6 : 0);
-            closes.add(new PricePoint(end.minusMonths(month), BigDecimal.valueOf(drift).setScale(2)));
+            closes.add(new PricePoint(end.minusMonths(month), BigDecimal.valueOf(drift).setScale(2, RoundingMode.HALF_UP)));
         }
         return new PriceHistory(symbol, "NSE", "INR", closes, "Fabricated sample series (NOT REAL PRICES)",
                 provenance(DataFreshness.HISTORICAL, end, null));

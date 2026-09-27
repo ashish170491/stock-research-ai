@@ -38,9 +38,31 @@ If Ollama isn't running, the endpoint returns HTTP 503 with an explanatory messa
 
 ## Research tools
 
-The assistant decides for itself which of these to call for a given question -
-one, several, or none. There is no hard-coded workflow; Spring AI runs the
-tool-calling loop and the model does the routing.
+Every chat message is routed first (`agent.RequestRouter`), then answered by
+the path its intent needs:
+
+| Intent | Answered by |
+| --- | --- |
+| `FULL_RESEARCH` ("fundamental overview of X", "analyse X") | the verified report (`ResearchReportWriter`) |
+| `QUOTE` ("price of X") | the quote service, rendered as text - no model |
+| `COMPARE` ("compare X and Y") | one report per company, one after another |
+| `SPECIFIC_QUESTION` | the model with the research tools below |
+| `NOT_STOCK_RELATED` | the model without tools |
+
+Keyword rules route the unambiguous shapes, and only when every company they
+extract is in the NSE equity list; anything else goes to a tool-free model
+call that returns a `RoutedRequest`. If that call fails or returns anything
+unusable, the request is treated as a `SPECIFIC_QUESTION`.
+
+For specific questions the model decides which tools to call - one, several,
+or none - and Spring AI runs the tool-calling loop.
+
+Tools hand the model compact Markdown tables (rendered by
+`ResearchReportRenderer`), not the result records as JSON. One company's
+financial summary as JSON was ~47 KB; several of those overflowed the context
+and the model silently lost the earliest results - which is how "Fundamental
+Overview of ICICI Bank" came back as a profile-only answer. The structured
+records are still the source of truth: `GET /api/research/report/data`.
 
 | Tool | Returns | Data source |
 | --- | --- | --- |
@@ -48,7 +70,6 @@ tool-calling loop and the model does the routing.
 | `getCompanyProfile` | Sector, industry, business summary, employees, market cap | Yahoo Finance `assetProfile` |
 | `getFinancialSummary` | TTM figures, dated quarters, fiscal years, calculated YoY / CAGR / margins / ROE / ROA | Yahoo Finance `financialData`, `earnings`, fundamentals time series |
 | `getHistoricalPerformance` | Total return, CAGR, drawdown, yearly returns (calculated in Java) | Yahoo Finance chart API (daily) |
-| `getStockResearchReport` | Full report, returned to the user as-is (see below) | All of the above |
 | `getShareholding` | Promoter / FII / DII / public split | **None - reports itself unavailable** |
 
 `getShareholding` deliberately has no implementation. The only holder data our
@@ -57,6 +78,31 @@ date, which is not the SEBI shareholding pattern and cannot be honestly relabell
 as one. The tool reports the capability as unavailable so the model says the
 figures are unknown rather than inventing them. See
 `UnsupportedShareholdingProvider` for the full reasoning.
+
+### Answer checks
+
+A tool-loop answer is screened against what the tools returned before it is
+sent. A statement with a figure that does not appear in the tool output
+(mistyped, recalculated, converted, invented) is removed
+(`NumericClaimVerifier`), as are unsupported labels, causal claims and source
+upgrades (`UnsupportedClaimFilter`). The answer says what was removed.
+
+### Symbol resolution
+
+Company names and symbols are resolved in this order, and every candidate is
+confirmed with a real chart lookup:
+
+1. `NseSymbolDirectory` - NSE's own equity list, bundled at
+   `src/main/resources/nse/equity-list.csv` (a snapshot of NSE's
+   `EQUITY_L.csv`): exact symbol, then normalised name, then the best word
+   overlap at or above 0.5 (a tie resolves to nothing). Offline and
+   deterministic: "Bharti Airtel" -> BHARTIARTL, "Infosys" -> INFY.
+2. The input as an NSE, then BSE, symbol.
+3. Yahoo Finance search.
+4. The model's guess (`LlmSymbolResolver`), with any `<think>` block removed.
+
+Refresh the list by replacing the CSV with the first two columns of a newer
+`EQUITY_L.csv`.
 
 ### Watching the dataflow
 
@@ -118,19 +164,38 @@ anything:
 - YoY, CAGR, margins, ROE, ROA, drawdown and annual returns are calculated in
   `FinancialCalculator`, via `FinancialMetricsService` and
   `HistoricalPerformanceService`.
-- Unknown is its own state: an `UNAVAILABLE` point cannot hold a value and must
-  give a reason. It is never zero and never an estimate.
-- Cross-checks flag problems instead of hiding them: market cap vs price x
-  shares (catches 10x unit errors), and revenue fields that disagree.
+- Every point has a `DataStatus`: `VALID`, `UNAVAILABLE`, `DATA_CONFLICT` or
+  `INVALID`. Only VALID values are used in a calculation, an observation or an
+  interpretation. Unknown is never zero and never an estimate.
+- Cross-checks run before anything is calculated: TTM vs the sum of its four
+  quarters, TTM vs the latest fiscal year, each fiscal year vs Yahoo's second
+  annual feed, provider ratios vs the application's own figures, and market cap
+  vs price x shares. A disagreement is a `DATA_CONFLICT`; every value depending
+  on those fields (including Yahoo ratios derived from its revenue) is marked,
+  and no metric is calculated from it. Nothing picks one side.
+- Every calculated value records its formula and the exact input values used.
+  `CalculationVerifier` recomputes it independently and checks the inputs
+  against the source values; one that does not reproduce is `INVALID` and
+  never shown. The report ends with a calculation audit.
+- Currencies are read per feed (headline, quarterly charts, each time-series
+  value) and recorded on every amount. Amounts are scaled within a currency and
+  never converted; figures in different currencies are never combined.
+- Industry groups (BANK, NBFC, INSURANCE, IT_SERVICES, PHARMA, MANUFACTURING,
+  CONSUMER, OTHER, UNKNOWN) say which metrics are primary. For a bank, EBITDA,
+  free cash flow, operating margin and debt-to-equity are shown as facts but
+  never turned into observations.
 
 ### Research reports
 
-`GET /api/research/report?symbol=HDFC Bank` (and the `getStockResearchReport`
-chat tool) returns a report with FACTS, OBSERVATIONS, RISKS / DATA GAPS,
-INTERPRETATION and SOURCES. Everything except INTERPRETATION is built and
-rendered in Java from a `StockResearchReport`. The interpretation comes from a
-tool-free model call that sees only the evidence, and any sentence making an
-unsupported market-position claim is removed. `GET /api/research/report/data`
+`GET /api/research/report?symbol=HDFC Bank` (and a chat request routed as
+`FULL_RESEARCH`) returns a report with FACTS, OBSERVATIONS, RISKS / DATA GAPS,
+INTERPRETATION and SOURCES, plus a calculation audit. Everything except
+INTERPRETATION is built and rendered in Java from a `StockResearchReport`.
+Observations whose values are in a DATA_CONFLICT, INVALID or not primary for
+the sector are listed as not generated, and the INTERPRETATION section states
+which conclusions were withheld. The interpretation comes from a tool-free
+model call that sees only the evidence; sentences with figures not in the
+evidence, unsupported claims, or conclusions about withheld topics are removed. `GET /api/research/report/data`
 returns the structured report with no model involved.
 
 ## Running the tests

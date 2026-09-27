@@ -16,7 +16,7 @@ class ResearchInstructionsTest {
     void coversEachRuleArea() {
         assertThat(ResearchInstructions.EVIDENCE_RULES).contains(
                 "1. FACT, OBSERVATION, INTERPRETATION", "2. FACTS AND CALCULATIONS", "3. SOURCE ATTRIBUTION",
-                "4. CAUSALITY", "5. QUALITATIVE LABELS", "6. GROWTH TERMINOLOGY", "7. DATA CONFLICTS AND DATA GAPS",
+                "4. CAUSALITY", "5. QUALITATIVE LABELS", "6. GROWTH TERMINOLOGY", "7. DATA STATUS, CONFLICTS AND GAPS",
                 "8. SECTOR CONTEXT", "9. FINAL INTERPRETATION", "If it says Yahoo Finance", "grew at a",
                 "NOT SUPPORTED BY CURRENT DATA SOURCE", "does not establish the specific cause");
     }

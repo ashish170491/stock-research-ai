@@ -1,24 +1,40 @@
 package com.ashish.stockresearch.research;
 
+import com.ashish.stockresearch.research.calc.CalculationVerifier;
+import com.ashish.stockresearch.research.model.AnnualCrossCheckFigures;
+import com.ashish.stockresearch.research.model.AnnualFinancials;
 import com.ashish.stockresearch.research.model.AnnualRatios;
-import com.ashish.stockresearch.research.model.FinancialDataPoint;
-import com.ashish.stockresearch.research.model.FinancialSummary;
+import com.ashish.stockresearch.research.model.CalculationInput;
 import com.ashish.stockresearch.research.model.CalculationStatus;
 import com.ashish.stockresearch.research.model.DataQualityIssue;
-import com.ashish.stockresearch.research.model.Unit;
+import com.ashish.stockresearch.research.model.DataStatus;
+import com.ashish.stockresearch.research.model.FinancialDataPoint;
+import com.ashish.stockresearch.research.model.FinancialSummary;
+import com.ashish.stockresearch.research.model.Formula;
 import com.ashish.stockresearch.research.model.PeriodType;
+import com.ashish.stockresearch.research.model.ProviderUnit;
+import com.ashish.stockresearch.research.model.QuarterlyResult;
+import com.ashish.stockresearch.research.model.ReportedFinancials;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
+import com.ashish.stockresearch.research.model.Unit;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.ashish.stockresearch.research.ResearchFixtures.CALENDAR;
+import static com.ashish.stockresearch.research.ResearchFixtures.LATEST_QUARTER_END;
+import static com.ashish.stockresearch.research.ResearchFixtures.SOURCE;
+import static com.ashish.stockresearch.research.ResearchFixtures.consistentReported;
 import static com.ashish.stockresearch.research.ResearchFixtures.crore;
 import static com.ashish.stockresearch.research.ResearchFixtures.hdfcAnnual;
 import static com.ashish.stockresearch.research.ResearchFixtures.hdfcHeadline;
+import static com.ashish.stockresearch.research.ResearchFixtures.hdfcQuarters;
 import static com.ashish.stockresearch.research.ResearchFixtures.hdfcReported;
 import static com.ashish.stockresearch.research.ResearchFixtures.missing;
+import static com.ashish.stockresearch.research.ResearchFixtures.percent;
 import static com.ashish.stockresearch.research.ResearchFixtures.quarter;
 import static com.ashish.stockresearch.research.ResearchFixtures.reported;
 import static com.ashish.stockresearch.research.ResearchFixtures.year;
@@ -28,87 +44,139 @@ class FinancialMetricsServiceTest {
 
     private final FinancialMetricsService service = new FinancialMetricsService();
 
+    // --- Calculations on data that passes every source check ---------------------------------
+
     @Test
-    void calculatesYearOnYearGrowthForTheLatestFiscalYear() {
-        AnnualRatios fy26 = last(service.summarize(hdfcReported()).calculated().annual());
+    void calculatesYearOnYearGrowthAndRecordsTheExactInputs() {
+        AnnualRatios fy26 = last(service.summarize(consistentReported()).calculated().annual());
+        FinancialDataPoint revenueYoy = fy26.revenueGrowthYoyPercent();
 
         assertThat(fy26.period().label()).isEqualTo("FY26");
-        assertThat(fy26.revenueGrowthYoyPercent().value()).isEqualByComparingTo("4.73");
+        assertThat(revenueYoy.value()).isEqualByComparingTo("4.73");
         assertThat(fy26.netProfitGrowthYoyPercent().value()).isEqualByComparingTo("4.65");
-        assertThat(fy26.revenueGrowthYoyPercent().calculationStatus()).isEqualTo(CalculationStatus.CALCULATED);
-        assertThat(fy26.revenueGrowthYoyPercent().inputFields()).containsExactly("fundamentals-timeseries.annualTotalRevenue");
-        assertThat(fy26.revenueGrowthYoyPercent().calculation()).isEqualTo("(FY26 revenue / FY25 revenue - 1) x 100");
+        assertThat(revenueYoy.status()).isEqualTo(DataStatus.VALID);
+        assertThat(revenueYoy.calculationStatus()).isEqualTo(CalculationStatus.CALCULATED);
+        assertThat(revenueYoy.formula()).isEqualTo(Formula.GROWTH_PERCENT);
+        assertThat(revenueYoy.calculation()).isEqualTo("(FY26 revenue / FY25 revenue - 1) x 100");
+        assertThat(revenueYoy.inputFields()).containsExactly("fundamentals-timeseries.annualTotalRevenue");
+        assertThat(revenueYoy.inputs()).extracting(CalculationInput::name, CalculationInput::value,
+                        CalculationInput::period)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("FY25 revenue", new BigDecimal("183864.11"), "FY25"),
+                        org.assertj.core.groups.Tuple.tuple("FY26 revenue", new BigDecimal("192566.78"), "FY26"));
     }
 
     @Test
-    void calculatesCagrAcrossTheAvailableFiscalYears() {
-        FinancialSummary summary = service.summarize(hdfcReported());
+    void calculatesCagrFromItsRecordedInputs() {
+        FinancialSummary summary = service.summarize(consistentReported());
         FinancialDataPoint revenueCagr = summary.calculated().revenueCagrPercent();
 
         assertThat(revenueCagr.value()).isEqualByComparingTo("16.90");
         assertThat(summary.calculated().netProfitCagrPercent().value()).isEqualByComparingTo("12.47");
         assertThat(revenueCagr.period().type()).isEqualTo(PeriodType.MULTI_YEAR);
         assertThat(revenueCagr.period().label()).isEqualTo("FY23 to FY26 (3 years)");
+        assertThat(revenueCagr.inputs()).extracting(CalculationInput::name)
+                .containsExactly("FY23 revenue", "FY26 revenue", "years");
+        // CAGR = (end / start)^(1 / years) - 1, recomputed here independently of the service.
+        double start = revenueCagr.inputs().get(0).value().doubleValue();
+        double end = revenueCagr.inputs().get(1).value().doubleValue();
+        double years = revenueCagr.inputs().get(2).value().doubleValue();
+        assertThat(revenueCagr.value().doubleValue())
+                .isCloseTo((Math.pow(end / start, 1 / years) - 1) * 100, org.assertj.core.data.Offset.offset(0.005));
     }
 
     @Test
     void calculatesMarginsAndReturnsOnAverageBalances() {
-        List<AnnualRatios> annual = service.summarize(hdfcReported()).calculated().annual();
+        List<AnnualRatios> annual = service.summarize(consistentReported()).calculated().annual();
         AnnualRatios fy23 = annual.get(0);
         AnnualRatios fy26 = last(annual);
 
         assertThat(fy26.netProfitMarginPercent().value()).isEqualByComparingTo("36.60");
         assertThat(fy26.returnOnEquityPercent().value()).isEqualByComparingTo("8.90");
         assertThat(fy26.returnOnEquityPercent().calculation()).contains("average shareholders' equity (FY25 and FY26 closing)");
+        assertThat(fy26.returnOnEquityPercent().inputs()).hasSize(3);
         // The first year has no opening balance, so ROE falls back to closing equity - and says so.
         assertThat(fy23.returnOnEquityPercent().value()).isEqualByComparingTo("17.01");
         assertThat(fy23.returnOnEquityPercent().calculation()).contains("closing shareholders' equity").contains("not averaged");
+        assertThat(fy23.returnOnEquityPercent().inputs()).hasSize(2);
     }
 
     @Test
     void reportsFirstYearGrowthAsUnavailableNotZero() {
-        AnnualRatios fy23 = service.summarize(hdfcReported()).calculated().annual().get(0);
+        AnnualRatios fy23 = service.summarize(consistentReported()).calculated().annual().get(0);
 
-        assertThat(fy23.revenueGrowthYoyPercent().available()).isFalse();
+        assertThat(fy23.revenueGrowthYoyPercent().status()).isEqualTo(DataStatus.UNAVAILABLE);
         assertThat(fy23.revenueGrowthYoyPercent().value()).isNull();
-        assertThat(fy23.revenueGrowthYoyPercent().unavailableReason()).contains("No prior fiscal year");
+        assertThat(fy23.revenueGrowthYoyPercent().statusReason()).contains("No prior fiscal year");
     }
 
     @Test
     void leavesAMarginUnavailableWhenAnInputIsMissingAndSaysWhy() {
-        AnnualRatios fy26 = last(service.summarize(hdfcReported()).calculated().annual());
+        AnnualRatios fy26 = last(service.summarize(consistentReported()).calculated().annual());
 
         // Yahoo publishes no operating income for banks.
-        assertThat(fy26.operatingMarginPercent().available()).isFalse();
-        assertThat(fy26.operatingMarginPercent().unavailableReason()).contains("did not publish");
+        assertThat(fy26.operatingMarginPercent().status()).isEqualTo(DataStatus.UNAVAILABLE);
+        assertThat(fy26.operatingMarginPercent().statusReason()).contains("did not publish");
     }
 
     @Test
     void calculatesTtmNetMarginFromReportedTtmFigures() {
-        FinancialDataPoint margin = service.summarize(hdfcReported()).calculated().netProfitMarginTtmPercent();
+        FinancialDataPoint margin = service.summarize(consistentReported()).calculated().netProfitMarginTtmPercent();
 
-        assertThat(margin.value()).isEqualByComparingTo("26.79");
+        assertThat(margin.value()).isEqualByComparingTo("42.85");
         assertThat(margin.period().label()).isEqualTo("TTM to Q1 FY27 (ending 2026-06-30)");
     }
 
     @Test
     void calculatesQuarterOnQuarterGrowthOnlyForConsecutiveQuarters() {
-        FinancialSummary consecutive = service.summarize(hdfcReported());
+        FinancialSummary consecutive = service.summarize(consistentReported());
         assertThat(consecutive.calculated().latestQuarterRevenueGrowthQoqPercent().value()).isEqualByComparingTo("0.16");
         assertThat(consecutive.calculated().latestQuarterRevenueGrowthQoqPercent().period().label()).isEqualTo("Q1 FY27");
 
-        FinancialSummary gap = service.summarize(reported(hdfcHeadline(), List.of(
+        FinancialSummary gap = service.summarize(reported(consistentReported().headline(), List.of(
                 quarter(LocalDate.of(2025, 12, 31), "45868.84", "18653.75"),
                 quarter(LocalDate.of(2026, 6, 30), "46355.55", "19059.72")), hdfcAnnual(),
                 CALENDAR.quarter(LocalDate.of(2026, 6, 30))));
         assertThat(gap.calculated().latestQuarterRevenueGrowthQoqPercent().available()).isFalse();
-        assertThat(gap.calculated().latestQuarterRevenueGrowthQoqPercent().unavailableReason())
+        assertThat(gap.calculated().latestQuarterRevenueGrowthQoqPercent().statusReason())
                 .contains("not consecutive");
     }
 
     @Test
+    void calculatesDebtToEquityAsAMultipleFromSameDateBalances() {
+        AnnualRatios fy26 = last(service.summarize(consistentReported()).calculated().annual());
+
+        // 6,64,364 / 8,16,740 = 0.81x - a multiple, never "81%".
+        assertThat(fy26.debtToEquityMultiple().unit()).isEqualTo(Unit.MULTIPLE);
+        assertThat(fy26.debtToEquityMultiple().value()).isEqualByComparingTo("0.81");
+        assertThat(fy26.debtToEquityMultiple().display()).isEqualTo("0.81x");
+        assertThat(fy26.debtToEquityMultiple().inputFields()).containsExactly(
+                "fundamentals-timeseries.annualTotalDebt", "fundamentals-timeseries.annualStockholdersEquity");
+    }
+
+    /** The invariant behind every figure shown: it reproduces from its recorded inputs, which match the source. */
+    @Test
+    void everyValidCalculatedValueReproducesFromItsInputsAndTheInputsMatchTheSource() {
+        FinancialSummary summary = service.summarize(consistentReported());
+        CalculationVerifier.SourceValues sources = new CalculationVerifier.SourceValues();
+        summary.reported().headline().points().forEach(sources::add);
+        summary.reported().recentQuarters().forEach(q -> q.points().forEach(sources::add));
+        summary.reported().annualHistory().forEach(y -> y.points().forEach(sources::add));
+
+        List<FinancialDataPoint> valid = summary.calculated().points().stream().filter(FinancialDataPoint::available)
+                .toList();
+        assertThat(valid).hasSizeGreaterThan(15);
+        assertThat(valid).allSatisfy(point -> {
+            assertThat(point.inputs()).as(point.metric()).isNotEmpty();
+            assertThat(CalculationVerifier.problem(point, sources)).as(point.metric()).isEmpty();
+        });
+        assertThat(summary.dataQualityIssues())
+                .noneMatch(issue -> issue.type() == DataQualityIssue.Type.CALCULATION_INVALID);
+    }
+
+    @Test
     void refusesCagrWithFewerThanTwoYearsOfData() {
-        FinancialSummary summary = service.summarize(reported(hdfcHeadline(), List.of(),
+        FinancialSummary summary = service.summarize(reported(consistentReported().headline(), List.of(),
                 List.of(year(2026, "192566.78", "70479.34", "816739.56", "5262119.32")),
                 CALENDAR.quarter(LocalDate.of(2026, 6, 30))));
 
@@ -134,6 +202,8 @@ class FinancialMetricsServiceTest {
             assertThat(gap.reason()).contains("UNKNOWN");
         });
     }
+
+    // --- DATA_CONFLICT detection and propagation ---------------------------------------------
 
     @Test
     void reportsConflictingRevenueDefinitionsAsADataConflictWithBothValuesAndFields() {
@@ -167,44 +237,154 @@ class FinancialMetricsServiceTest {
     }
 
     @Test
-    void doesNotFlagTheMarginsWhenTheCalculatedAndPublishedValuesAgree() {
-        assertThat(service.summarize(hdfcReported()).dataQualityIssues())
-                .noneSatisfy(issue -> assertThat(issue.message()).contains("net profit margin"));
+    void keepsConflictingReportedValuesVisibleButMarksThemUnusable() {
+        FinancialSummary summary = service.summarize(hdfcReported());
+
+        FinancialDataPoint ttm = summary.reported().headline().revenue();
+        FinancialDataPoint fy26 = last(summary.reported().annualHistory()).revenue();
+        assertThat(ttm.status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(ttm.value()).isEqualByComparingTo("294964.43");
+        assertThat(fy26.status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(fy26.value()).isEqualByComparingTo("192566.78");
+        assertThat(summary.reported().recentQuarters()).allSatisfy(q ->
+                assertThat(q.revenue().status()).isEqualTo(DataStatus.DATA_CONFLICT));
+        // Yahoo derives these from the disputed revenue figure, so they are covered by the conflict too.
+        assertThat(summary.reported().headline().netProfitMarginPercent().status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(summary.reported().headline().operatingMarginPercent().status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(summary.reported().headline().quarterlyRevenueGrowthYoyPercent().status())
+                .isEqualTo(DataStatus.DATA_CONFLICT);
+        // Figures not involved stay VALID.
+        assertThat(summary.reported().headline().netProfit().status()).isEqualTo(DataStatus.VALID);
     }
 
     @Test
-    void calculatesDebtToEquityAsAMultipleFromSameDateBalances() {
-        AnnualRatios fy26 = last(service.summarize(hdfcReported()).calculated().annual());
+    void neverCalculatesAMetricFromAConflictingInput() {
+        FinancialSummary summary = service.summarize(hdfcReported());
+        AnnualRatios fy26 = last(summary.calculated().annual());
 
-        // 6,64,364 / 8,16,740 = 0.81x - a multiple, never "81%".
-        assertThat(fy26.debtToEquityMultiple().unit()).isEqualTo(Unit.MULTIPLE);
-        assertThat(fy26.debtToEquityMultiple().value()).isEqualByComparingTo("0.81");
-        assertThat(fy26.debtToEquityMultiple().display()).isEqualTo("0.81x");
-        assertThat(fy26.debtToEquityMultiple().inputFields()).containsExactly(
-                "fundamentals-timeseries.annualTotalDebt", "fundamentals-timeseries.annualStockholdersEquity");
+        for (FinancialDataPoint dependent : List.of(summary.calculated().revenueCagrPercent(),
+                fy26.revenueGrowthYoyPercent(), fy26.netProfitMarginPercent(),
+                summary.calculated().netProfitMarginTtmPercent(),
+                summary.calculated().latestQuarterRevenueGrowthQoqPercent())) {
+            assertThat(dependent.status()).as(dependent.metric()).isEqualTo(DataStatus.DATA_CONFLICT);
+            assertThat(dependent.value()).as(dependent.metric()).isNull();
+            assertThat(dependent.display()).isEqualTo("DATA_CONFLICT");
+            assertThat(dependent.statusReason()).as(dependent.metric()).contains("not calculated")
+                    .contains("DATA_CONFLICT");
+        }
+        assertThat(summary.calculated().revenueCagrPercent().statusReason())
+                .contains("fundamentals-timeseries.annualTotalRevenue");
+        // Metrics that do not depend on revenue are still calculated.
+        assertThat(fy26.netProfitGrowthYoyPercent().value()).isEqualByComparingTo("4.65");
+        assertThat(fy26.returnOnEquityPercent().value()).isEqualByComparingTo("8.90");
+        assertThat(summary.calculated().netProfitCagrPercent().value()).isEqualByComparingTo("12.47");
     }
+
+    @Test
+    void conflictsBetweenTheTwoAnnualFeedsBlockEveryDependentMetric() {
+        ReportedFinancials base = consistentReported();
+        ReportingPeriod fy25 = CALENDAR.fiscalYear(LocalDate.of(2025, 3, 31));
+        ReportingPeriod fy26 = CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31));
+        // HDFC's real second feed: FY25 net profit 70,792 vs 67,351 crore, FY26 revenue matching within 1%.
+        List<AnnualCrossCheckFigures> crossCheck = List.of(
+                new AnnualCrossCheckFigures(fy25,
+                        crore("annualRevenue", "earnings.financialsChart.yearly.revenue", "183900.00", fy25),
+                        crore("annualNetProfit", "earnings.financialsChart.yearly.earnings", "70792.25", fy25)),
+                new AnnualCrossCheckFigures(fy26,
+                        crore("annualRevenue", "earnings.financialsChart.yearly.revenue", "191218.61", fy26),
+                        crore("annualNetProfit", "earnings.financialsChart.yearly.earnings", "70479.34", fy26)));
+        ReportedFinancials twoFeeds = new ReportedFinancials(base.symbol(), base.exchange(), base.companyName(),
+                base.reportingCurrency(), base.latestReportedQuarter(), base.latestFiscalYear(), base.headline(),
+                base.recentQuarters(), base.annualHistory(), crossCheck, base.dataGaps(), base.provenance());
+
+        FinancialSummary summary = service.summarize(twoFeeds);
+
+        assertThat(summary.dataQualityIssues()).filteredOn(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT)
+                .singleElement().satisfies(issue -> {
+                    assertThat(issue.message()).contains("net profit").contains("FY25").doesNotContain("FY26:");
+                    assertThat(issue.affectedFields()).containsExactly("fundamentals-timeseries.annualNetIncome",
+                            "earnings.financialsChart.yearly.earnings");
+                });
+        AnnualRatios last = last(summary.calculated().annual());
+        assertThat(last.netProfitGrowthYoyPercent().status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(last.returnOnEquityPercent().status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(summary.calculated().netProfitCagrPercent().status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(last.revenueGrowthYoyPercent().status()).isEqualTo(DataStatus.VALID);
+    }
+
+    @Test
+    void doesNotTrustAProviderGrowthRateThatContradictsTheReportedQuarters() {
+        List<QuarterlyResult> quarters = new ArrayList<>(List.of(quarter(LocalDate.of(2025, 6, 30), "40000.00", "16000.00")));
+        quarters.addAll(hdfcQuarters());
+        ReportedFinancials base = consistentReported();
+        // Q1 FY27 vs Q1 FY26 from the quarters: 46,355.55 / 40,000 - 1 = 15.89%. Yahoo says 25%.
+        var headline = base.headline().map(p -> p.metric().equals("quarterlyRevenueGrowthYoyPercent")
+                ? percent("quarterlyRevenueGrowthYoyPercent", "financialData.revenueGrowth", "25.00",
+                        CALENDAR.quarter(LATEST_QUARTER_END)).derivedFrom(List.of("financialData.totalRevenue"))
+                : p);
+
+        FinancialSummary summary = service.summarize(reported(headline, quarters, hdfcAnnual(),
+                CALENDAR.quarter(LATEST_QUARTER_END)));
+
+        assertThat(summary.dataQualityIssues()).anySatisfy(issue -> {
+            assertThat(issue.type()).isEqualTo(DataQualityIssue.Type.DATA_CONFLICT);
+            assertThat(issue.message()).contains("25.00%").contains("15.89%").contains("not used");
+        });
+        assertThat(summary.reported().headline().quarterlyRevenueGrowthYoyPercent().status())
+                .isEqualTo(DataStatus.DATA_CONFLICT);
+    }
+
+    @Test
+    void doesNotFlagTheMarginsWhenTheCalculatedAndPublishedValuesAgree() {
+        assertThat(service.summarize(hdfcReported()).dataQualityIssues())
+                .noneSatisfy(issue -> assertThat(issue.message()).contains("Calculated TTM net profit margin"));
+    }
+
+    // --- Currencies ----------------------------------------------------------------------------
 
     @Test
     void refusesToCombineAmountsInDifferentUnits() {
-        var mixed = reported(hdfcHeadline(), List.of(), List.of(
+        ReportingPeriod fy26 = CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31));
+        var mixed = reported(consistentReported().headline(), List.of(), List.of(
                 year(2025, "183864.11", "67350.83", "767689.14", "4818767.11"),
-                new com.ashish.stockresearch.research.model.AnnualFinancials(
-                        CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31)),
-                        FinancialDataPoint.reported("annualRevenue", new java.math.BigDecimal("23000000000"),
-                                com.ashish.stockresearch.research.model.ProviderUnit.WHOLE_CURRENCY_UNITS,
-                                new java.math.BigDecimal("23000"), Unit.USD_MILLION,
-                                CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31)), ResearchFixtures.SOURCE),
-                        crore("annualNetProfit", "f", "70479.34", CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31))),
-                        missing("a", "f", CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31))),
-                        missing("b", "f", CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31))),
-                        missing("c", "f", CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31))),
-                        missing("d", "f", CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31))))),
+                new AnnualFinancials(fy26,
+                        FinancialDataPoint.reported("annualRevenue", new BigDecimal("23000000000"),
+                                ProviderUnit.WHOLE_CURRENCY_UNITS, new BigDecimal("23000"), Unit.USD_MILLION, fy26,
+                                SOURCE.withField("fundamentals-timeseries.annualTotalRevenue")),
+                        crore("annualNetProfit", "f", "70479.34", fy26),
+                        missing("a", "f", fy26), missing("b", "f", fy26), missing("c", "f", fy26),
+                        missing("d", "f", fy26))),
                 CALENDAR.quarter(LocalDate.of(2026, 6, 30)));
 
-        AnnualRatios fy26 = last(service.summarize(mixed).calculated().annual());
+        FinancialSummary summary = service.summarize(mixed);
+        AnnualRatios last = last(summary.calculated().annual());
 
-        assertThat(fy26.revenueGrowthYoyPercent().available()).isFalse();
-        assertThat(fy26.revenueGrowthYoyPercent().unavailableReason()).contains("different units");
+        assertThat(last.revenueGrowthYoyPercent().available()).isFalse();
+        assertThat(last.revenueGrowthYoyPercent().statusReason()).contains("different units")
+                .contains("never converted");
+        assertThat(summary.dataQualityIssues()).anySatisfy(issue -> {
+            assertThat(issue.type()).isEqualTo(DataQualityIssue.Type.DATA_QUALITY_WARNING);
+            assertThat(issue.message()).contains("different currencies").contains("never converts");
+        });
+    }
+
+    @Test
+    void neverComparesTtmWithQuartersReportedInAnotherCurrency() {
+        // The Infosys shape: headline in USD, quarterly charts in INR. Labelling both USD produced a
+        // spurious 98.9% "conflict"; now the figures are simply never compared.
+        ReportingPeriod ttm = CALENDAR.trailingTwelveMonths(LATEST_QUARTER_END);
+        var usdHeadline = consistentReported().headline().map(p -> p.metric().equals("revenue")
+                ? FinancialDataPoint.reported("revenue", new BigDecimal("20298999808"), ProviderUnit.WHOLE_CURRENCY_UNITS,
+                        new BigDecimal("20299.00"), Unit.USD_MILLION, ttm, SOURCE.withField("financialData.totalRevenue"))
+                : p);
+
+        FinancialSummary summary = service.summarize(reported(usdHeadline, hdfcQuarters(), List.of(),
+                CALENDAR.quarter(LATEST_QUARTER_END)));
+
+        assertThat(summary.dataQualityIssues()).noneMatch(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT);
+        assertThat(summary.dataQualityIssues()).anySatisfy(issue ->
+                assertThat(issue.message()).contains("headline (TTM) figures in USD").contains("quarterly figures in INR"));
+        assertThat(summary.calculated().netProfitMarginTtmPercent().statusReason()).contains("different units");
     }
 
     private static <T> T last(List<T> list) {

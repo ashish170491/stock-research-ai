@@ -14,6 +14,8 @@ import java.util.List;
  * @param recentQuarters          reported quarters, oldest first; future or unpublished quarters
  *                                are excluded by validation
  * @param annualHistory           fiscal years, oldest first
+ * @param annualCrossCheckFigures the same fiscal years' revenue and net profit from a second provider
+ *                                feed, used only to detect conflicts with {@code annualHistory}
  * @param dataGaps                what the provider could not supply, and why
  */
 public record ReportedFinancials(
@@ -26,7 +28,18 @@ public record ReportedFinancials(
         HeadlineFinancials headline,
         List<QuarterlyResult> recentQuarters,
         List<AnnualFinancials> annualHistory,
+        List<AnnualCrossCheckFigures> annualCrossCheckFigures,
         List<DataGap> dataGaps,
         DataProvenance provenance
 ) {
+
+    public ReportedFinancials {
+        annualCrossCheckFigures = annualCrossCheckFigures == null ? List.of() : List.copyOf(annualCrossCheckFigures);
+    }
+
+    public ReportedFinancials withFigures(HeadlineFinancials newHeadline, List<QuarterlyResult> quarters,
+                                          List<AnnualFinancials> annual) {
+        return new ReportedFinancials(symbol, exchange, companyName, reportingCurrency, latestReportedQuarter,
+                latestFiscalYear, newHeadline, quarters, annual, annualCrossCheckFigures, dataGaps, provenance);
+    }
 }

@@ -40,7 +40,8 @@ class ResearchReportRendererTest {
 
         assertThat(md).contains("Latest reported quarter: **Q1 FY27** (period ended 2026-06-30)");
         assertThat(md).contains("| revenue | ₹2.95 lakh crore (₹2,94,964 crore) [DATA_CONFLICT] | TTM to Q1 FY27 (ending 2026-06-30) "
-                + "| REPORTED | 2949644300000.00 (WHOLE_CURRENCY_UNITS) | financialData.totalRevenue |");
+                + "| DATA_CONFLICT | 2949644300000.00 (WHOLE_CURRENCY_UNITS) | financialData.totalRevenue |");
+        assertThat(md).contains("| netProfit | ₹79,012.77 crore | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED |");
         assertThat(md).contains("| Q1 FY27 | 2026-06-30 |");
         assertThat(md).contains("2026 (YTD, partial)");
     }
@@ -67,8 +68,15 @@ class ResearchReportRendererTest {
 
         assertThat(md.indexOf("DATA CONFLICT - read before the figures below")).isPositive()
                 .isLessThan(md.indexOf("## 1. FACTS"));
-        assertThat(md).contains("Withheld because they depend on fields in a DATA_CONFLICT:")
-                .contains("~~Revenue rose 4.73% (FY26 vs the prior fiscal year).~~");
+        assertThat(md).contains("Not generated - the metric is in a DATA_CONFLICT")
+                .contains("- Revenue (FY26 vs the prior fiscal year): **DATA_CONFLICT** - YoY revenue growth not calculated")
+                .doesNotContain("Revenue rose 4.73%");
+        // The calculated table shows only why there is no value - never a value computed from disputed inputs.
+        assertThat(md).contains("| FY26 | DATA_CONFLICT | 4.65% | DATA_CONFLICT | n/a | 8.90% | 1.40% | 0.81x |");
+        // The interpretation section says which conclusions were withheld, before any model text.
+        String interpretation = md.substring(md.indexOf("## 4. INTERPRETATION"), md.indexOf("## 5. SOURCES"));
+        assertThat(interpretation).contains("**Conclusions withheld.**").contains("revenue growth")
+                .contains("net profit margin");
     }
 
     @Test

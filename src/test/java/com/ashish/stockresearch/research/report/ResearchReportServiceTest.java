@@ -92,10 +92,13 @@ class ResearchReportServiceTest {
     void withholdsEveryObservationThatDependsOnAConflictingField() {
         StockResearchReport report = hdfcReport(validator);
 
-        assertThat(report.withheldObservations()).extracting(Observation::statement).contains(
-                "Revenue rose 4.73% (FY26 vs the prior fiscal year).",
-                "Revenue grew at a compound annual rate of 16.90% over FY23 to FY26 (3 years).",
-                "Revenue quarter-on-quarter rose 0.16% (Q1 FY27 vs Q4 FY26, not year-on-year).");
+        assertThat(report.withheldObservations()).extracting(WithheldObservation::subject).contains(
+                "Revenue (FY26 vs the prior fiscal year)",
+                "Revenue CAGR (FY23 to FY26 (3 years))",
+                "Revenue quarter-on-quarter (Q1 FY27 vs Q4 FY26, not year-on-year)");
+        assertThat(report.withheldObservations()).allSatisfy(w -> assertThat(w.reason())
+                .isIn(WithheldObservation.Reason.DATA_CONFLICT, WithheldObservation.Reason.SECTOR_CONTEXT));
+        assertThat(report.withheldTopics()).contains("revenue growth");
         assertThat(report.observations()).allSatisfy(o -> assertThat(o.inputFields())
                 .doesNotContainAnyElementsOf(report.conflictedFields()));
         assertThat(report.conflictedFields()).contains("financialData.totalRevenue",
