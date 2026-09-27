@@ -1,12 +1,28 @@
 spring:
   application:
     name: stock-research-ai
+  web:
+    error:
+      # The reasons this application gives (e.g. "Could not reach Ollama...") are
+      # written for the user; show them in error responses and in the UI.
+      include-message: always
   threads:
     virtual:
       # Request handling and blocking Yahoo calls run on virtual threads, so a
       # thread waiting on Yahoo or on the throttle costs almost nothing.
       enabled: true
   ai:
+    retry:
+      # Spring AI's defaults (10 attempts, waits growing 5x from 2s) suit a
+      # rate-limited hosted API. Ollama is local: a refused connection means it
+      # is not running, and the defaults kept a request waiting 20+ minutes
+      # before the "Could not reach Ollama" answer. One quick retry covers a
+      # restart; after that the user is told at once.
+      max-attempts: 2
+      backoff:
+        initial-interval: 1s
+        multiplier: 2
+        max-interval: 2s
     ollama:
       base-url: http://localhost:11434
       chat:

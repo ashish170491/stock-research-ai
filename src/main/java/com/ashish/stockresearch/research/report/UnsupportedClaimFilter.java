@@ -58,15 +58,18 @@ public class UnsupportedClaimFilter {
     private static final Pattern NEVER_SUPPORTED = Pattern.compile(
             "\\b(accelerat\\w*|decelerat\\w*|momentum|"
                     // leverage labels - no leverage criteria exist in the data
-                    + "(?:high|low|elevated|excessive|significant|heavy|substantial|moderate|minimal|modest|conservative)"
-                    + " (?:leverage|gearing|indebtedness)|(?:highly|over|under|lowly|heavily)[- ]?(?:leveraged|geared)|"
+                    + "(?:high|low|elevated|excessive|significant|heavy|substantial|moderate|minimal|modest|conservative|"
+                    + "balanced|reasonable|manageable|comfortable)"
+                    // "a moderate level of leverage" as well as "moderate leverage"
+                    + "(?: (?:level|degree|amount) of)? (?:leverage|gearing|indebtedness)|(?:highly|over|under|lowly|heavily)[- ]?(?:leveraged|geared)|"
                     + "conservative (?:capital structure|balance sheet|financing)|"
                     + "(?:debt[- ]to[- ]equity|leverage|gearing|debt levels?|indebtedness)\\b[^.]{0,40}?\\b(?:low|high|"
                     + "elevated|manageable|comfortable|concerning|excessive|limited|minimal)|"
                     // evaluative labels - the data supplies no criteria for any of them
                     + "financially (?:healthy|sound|strong|stable|robust)|"
                     + "steadily|steady (?:growth|performance|profitability)|resilien\\w*|remained stable|"
-                    + "(?:stable|sound|prudent|healthy|comfortable) (?:capital structure|balance sheet|financial position)|"
+                    + "(?:stable|sound|prudent|healthy|comfortable|balanced|reasonable) (?:capital structure|balance sheet|"
+                    + "financial position)|"
                     + "strong(?:er|est|ly)?|weak(?:er|est|ness)?|(?:un)?healthy|poor(?:er|ly)?|excellent|attractive|"
                     + "robust|solid|impressive|(?:in)?efficient(?:ly)?|efficiency gains|high[- ]quality|"
                     + "modest profitability|superior|inferior|"

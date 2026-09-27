@@ -2,6 +2,7 @@ package com.ashish.stockresearch.service;
 
 import com.ashish.stockresearch.agent.Intent;
 import com.ashish.stockresearch.agent.RequestRouter;
+import com.ashish.stockresearch.agent.ResearchSessions;
 import com.ashish.stockresearch.agent.RoutedRequest;
 import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
@@ -23,6 +24,9 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
@@ -45,6 +49,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -114,15 +119,20 @@ class AiServiceRoutingTest {
             new MockStockResearchProvider(), new MockStockResearchProvider(), new UnsupportedShareholdingProvider(),
             new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService());
 
+    private static final String CONVERSATION = "c1";
+    private final ChatMemory chatMemory = MessageWindowChatMemory.builder()
+            .chatMemoryRepository(new InMemoryChatMemoryRepository()).maxMessages(20).build();
+    private final ResearchSessions sessions = new ResearchSessions(chatMemory);
+
     private AiService service(ChatModel model) {
         StockResearchTools tools = new StockResearchTools(research, new ResearchReportRenderer(), new SectorClassifier());
         return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools, new PassThrough(),
                 reportWriter, quotes, new UnsupportedClaimFilter(), new NumericClaimVerifier(),
-                new OllamaCalls("qwen3:8b", "http://localhost:11434"));
+                new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions);
     }
 
     private void routes(String message, Intent intent, String... companies) {
-        when(router.route(message)).thenReturn(new RoutedRequest(intent, List.of(companies)));
+        when(router.route(eq(message), any())).thenReturn(new RoutedRequest(intent, List.of(companies)));
     }
 
     private static AssistantMessage text(String content) {
@@ -138,7 +148,7 @@ class AiServiceRoutingTest {
         routes("Fundamental Overview of ICICI Bank", Intent.FULL_RESEARCH, "ICICIBANK");
         when(reportWriter.write("ICICIBANK")).thenReturn("# Research report: ICICI Bank Limited (ICICIBANK)");
 
-        assertThat(service(UNUSED).chat("Fundamental Overview of ICICI Bank"))
+        assertThat(service(UNUSED).chat(CONVERSATION, "Fundamental Overview of ICICI Bank").text())
                 .isEqualTo("# Research report: ICICI Bank Limited (ICICIBANK)");
     }
 
@@ -149,7 +159,7 @@ class AiServiceRoutingTest {
                 new BigDecimal("1520.40"), "INR", Instant.parse("2026-09-25T10:00:00Z"), false, "Yahoo Finance")));
         when(quotes.getQuote("TCS")).thenReturn(StockQuoteResult.error("Market data is currently unavailable"));
 
-        String answer = service(UNUSED).chat("Price of Infosys and TCS");
+        String answer = service(UNUSED).chat(CONVERSATION, "Price of Infosys and TCS").text();
 
         assertThat(answer).isEqualTo("""
                 **INFY** (NSE): 1520.40 INR as of 2026-09-25 15:30 IST. Source: Yahoo Finance.
@@ -163,7 +173,7 @@ class AiServiceRoutingTest {
         when(reportWriter.write("HDFCBANK")).thenReturn("# HDFC report");
         when(reportWriter.write("ICICIBANK")).thenReturn("# ICICI report");
 
-        assertThat(service(UNUSED).chat("Compare HDFC Bank and ICICI Bank"))
+        assertThat(service(UNUSED).chat(CONVERSATION, "Compare HDFC Bank and ICICI Bank").text())
                 .isEqualTo("# HDFC report\n\n---\n\n# ICICI report");
     }
 
@@ -181,7 +191,7 @@ class AiServiceRoutingTest {
             return text("Revenue was " + (figure.find() ? figure.group() : "none") + ". Net profit was ₹12,345.67 crore.");
         });
 
-        String answer = service(model).chat(question);
+        String answer = service(model).chat(CONVERSATION, question).text();
 
         assertThat(model.toolsOffered()).contains("getFinancialSummary", "getCompanyProfile", "getStockQuote")
                 .doesNotContain("getStockResearchReport");
@@ -201,10 +211,126 @@ class AiServiceRoutingTest {
         routes("Explain Spring AI in two sentences", Intent.NOT_STOCK_RELATED);
         ScriptedModel model = new ScriptedModel(messages -> text("<think>easy</think>Spring AI is a framework."));
 
-        String answer = service(model).chat("Explain Spring AI in two sentences");
+        String answer = service(model).chat(CONVERSATION, "Explain Spring AI in two sentences").text();
 
         assertThat(answer).isEqualTo("Spring AI is a framework.");
         assertThat(model.toolsOffered()).isEmpty();
         verify(quotes, never()).getQuote(any());
+    }
+
+    // --- Conversations --------------------------------------------------------------------------
+
+    /** Answers the first question with a figure from getFinancialSummary, and records it. */
+    private static AssistantMessage revenueFromTools(List<Message> messages, StringBuilder revenue) {
+        Message last = messages.get(messages.size() - 1);
+        if (!(last instanceof ToolResponseMessage response)) {
+            return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall(
+                    "1", "function", "getFinancialSummary", "{\"symbol\":\"ICICIBANK\"}"))).build();
+        }
+        Matcher figure = CRORE_FIGURE.matcher(response.getResponses().get(0).responseData());
+        revenue.append(figure.find() ? figure.group() : "none");
+        return text("Revenue was " + revenue + ". Net profit was ₹12,345.67 crore.");
+    }
+
+    @Test
+    void aFollowUpSeesTheConversationAndCanRepeatAnEarlierFigureButNotInventOne() {
+        String first = "What was ICICI Bank's revenue?";
+        String followUp = "And how does that compare with a year earlier?";
+        routes(first, Intent.SPECIFIC_QUESTION);
+        routes(followUp, Intent.SPECIFIC_QUESTION, "ICICIBANK");
+        StringBuilder revenue = new StringBuilder();
+        ScriptedModel model = new ScriptedModel(messages -> {
+            boolean isFollowUp = messages.stream().anyMatch(m -> m.getText() != null && m.getText().startsWith(followUp));
+            // The follow-up is answered from memory, without calling a tool.
+            return isFollowUp ? text("Revenue was " + revenue + ". A year earlier it was ₹99,999.99 crore.")
+                    : revenueFromTools(messages, revenue);
+        });
+        AiService service = service(model);
+
+        AiService.ChatAnswer answer1 = service.chat(CONVERSATION, first);
+        AiService.ChatAnswer answer2 = service.chat(CONVERSATION, followUp);
+
+        assertThat(answer1.companies()).containsExactly("ICICIBANK");
+        // The earlier figure is still checkable against the earlier turn's tool output; the invented one is not.
+        assertThat(answer2.text()).startsWith("Revenue was " + revenue + ".").doesNotContain("₹99,999.99 crore")
+                .contains("Removed 1 statement(s)");
+        String followUpPrompt = model.prompts.get(model.prompts.size() - 1).getContents();
+        assertThat(followUpPrompt).contains(first).contains("Revenue was " + revenue)
+                .contains("(This question is about: ICICIBANK.)");
+    }
+
+    @Test
+    void remembersTheScreenedAnswerNeverTheModelsDraft() {
+        String question = "What was ICICI Bank's revenue?";
+        routes(question, Intent.SPECIFIC_QUESTION);
+        StringBuilder revenue = new StringBuilder();
+
+        service(new ScriptedModel(messages -> revenueFromTools(messages, revenue))).chat(CONVERSATION, question);
+
+        List<Message> remembered = chatMemory.get(CONVERSATION);
+        assertThat(remembered).hasSize(2);
+        assertThat(remembered.get(0).getText()).isEqualTo(question);
+        assertThat(remembered.get(1).getText()).contains("Revenue was " + revenue)
+                .doesNotContain("Net profit was ₹12,345.67 crore");
+    }
+
+    @Test
+    void remembersAReportAsANoteAndCarriesItsCompanyToTheNextTurn() {
+        routes("Research ICICI Bank", Intent.FULL_RESEARCH, "ICICIBANK");
+        when(reportWriter.write("ICICIBANK")).thenReturn("# Research report: ICICI Bank Limited (ICICIBANK)");
+
+        AiService.ChatAnswer answer = service(UNUSED).chat(CONVERSATION, "Research ICICI Bank");
+
+        assertThat(answer.intent()).isEqualTo(Intent.FULL_RESEARCH);
+        assertThat(sessions.get(CONVERSATION).companies()).containsExactly("ICICIBANK");
+        assertThat(chatMemory.get(CONVERSATION).get(1).getText())
+                .isEqualTo("[The full research report on ICICIBANK was shown to the user.]");
+    }
+
+    @Test
+    void screensAnAnswerGivenWithoutAnyToolOrEarlierEvidence() {
+        routes("Is ICICI Bank profitable?", Intent.SPECIFIC_QUESTION);
+        ScriptedModel model = new ScriptedModel(messages -> text("Net profit was ₹12,345.67 crore. I need more data."));
+
+        String answer = service(model).chat(CONVERSATION, "Is ICICI Bank profitable?").text();
+
+        assertThat(answer).startsWith("I need more data.").doesNotContain("₹12,345.67");
+    }
+
+    @Test
+    void keepsConversationsApart() {
+        routes("Explain Spring AI in two sentences", Intent.NOT_STOCK_RELATED);
+        ScriptedModel model = new ScriptedModel(messages -> text("Spring AI is a framework."));
+        AiService service = service(model);
+
+        service.chat("first", "Explain Spring AI in two sentences");
+        service.chat("second", "Explain Spring AI in two sentences");
+
+        assertThat(model.prompts.get(1).getInstructions())
+                .noneMatch(m -> "Spring AI is a framework.".equals(m.getText()));
+        assertThat(chatMemory.get("first")).hasSize(2);
+        assertThat(chatMemory.get("second")).hasSize(2);
+    }
+
+    @Test
+    void asksWhichCompanyInsteadOfGuessingWhenAFollowUpHasNothingToReferTo() {
+        routes("And its debt?", Intent.SPECIFIC_QUESTION);
+
+        AiService.ChatAnswer answer = service(UNUSED).chat("fresh", "And its debt?");
+
+        assertThat(answer.text()).isEqualTo(AiService.NAME_THE_COMPANY);
+        assertThat(answer.companies()).isEmpty();
+        // Remembered, so the reply "Infosys" is understood as the answer to the question.
+        assertThat(chatMemory.get("fresh")).hasSize(2);
+    }
+
+    @Test
+    void answersAGeneralQuestionThatSaysItWithoutAskingForACompany() {
+        routes("How is it calculated?", Intent.SPECIFIC_QUESTION);
+        ScriptedModel model = new ScriptedModel(messages -> text("It is price divided by earnings per share."));
+
+        String answer = service(model).chat("fresh", "How is it calculated?").text();
+
+        assertThat(answer).isEqualTo("It is price divided by earnings per share.");
     }
 }

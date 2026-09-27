@@ -209,4 +209,106 @@ class RequestRouterTest {
         assertThat(routed.intent()).isEqualTo(Intent.NOT_STOCK_RELATED);
         assertThat(model.prompts).hasSize(1);
     }
+
+    // --- Follow-ups within a conversation --------------------------------------------------------
+
+    private static ResearchSession about(String... companies) {
+        ResearchSession session = new ResearchSession();
+        session.rememberCompanies(List.of(companies));
+        return session;
+    }
+
+    @Test
+    void aFollowUpThatNamesNoCompanyIsAboutTheOneDiscussedEarlier() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[]}");
+
+        RoutedRequest routed = router(model).route("what about its debt?", about("TCS"));
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.SPECIFIC_QUESTION, List.of("TCS")));
+        assertThat(model.prompts.get(0).getContents()).contains("Company discussed earlier: TCS")
+                .contains("Message: what about its debt?");
+    }
+
+    @Test
+    void researchItIsLeftToTheModelAndResolvedToTheEarlierCompany() {
+        StubModel model = new StubModel("{\"intent\":\"FULL_RESEARCH\",\"companies\":[]}");
+
+        RoutedRequest routed = router(model).route("Research it", about("INFY"));
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.FULL_RESEARCH, List.of("INFY")));
+    }
+
+    @Test
+    void compareItWithAnotherCompanyComparesTheEarlierOneWithIt() {
+        StubModel model = new StubModel("{\"intent\":\"COMPARE\",\"companies\":[\"TCS\"]}");
+
+        RoutedRequest routed = router(model).route("compare it with TCS", about("INFY"));
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.COMPARE, List.of("INFY", "TCS")));
+    }
+
+    @Test
+    void aNewCompanyNamedInTheMessageWins() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"Wipro\"]}");
+
+        RoutedRequest routed = router(model).route("and what about Wipro's margins?", about("INFY"));
+
+        assertThat(routed.companies()).containsExactly("Wipro");
+    }
+
+    @Test
+    void aMessageThatDoesNotReferBackGetsNoEarlierCompany() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[]}");
+
+        RoutedRequest routed = router(model).route("What is a P/E ratio?", about("INFY"));
+
+        assertThat(routed.companies()).isEmpty();
+        assertThat(model.prompts.get(0).getContents()).doesNotContain("Company discussed earlier");
+    }
+
+    @Test
+    void aQuestionNotAboutStocksStaysThatWay() {
+        StubModel model = new StubModel("{\"intent\":\"NOT_STOCK_RELATED\",\"companies\":[]}");
+
+        RoutedRequest routed = router(model).route("Explain it in simpler words", about("INFY"));
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.NOT_STOCK_RELATED, List.of()));
+    }
+
+    @Test
+    void anUnreachableModelStillRoutesAFollowUpToTheEarlierCompany() {
+        StubModel model = new StubModel(null, new RuntimeException("connection refused"));
+
+        RoutedRequest routed = router(model).route("how has it performed?", about("INFY"));
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.SPECIFIC_QUESTION, List.of("INFY")));
+    }
+
+    @Test
+    void dropsACompanyTheModelAddedThatTheMessageDoesNotName() {
+        // Seen live: asked with nothing to refer to, the model answered with a company of its own.
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"Reliance Industries Ltd\"]}");
+
+        RoutedRequest routed = router(model).route("And its debt?", new ResearchSession());
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.SPECIFIC_QUESTION, List.of()));
+    }
+
+    @Test
+    void keepsACompanyNamedByADistinctiveWordOfItsName() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"Reliance Industries Ltd\"]}");
+
+        RoutedRequest routed = router(model).route("What is Reliance's debt?", new ResearchSession());
+
+        assertThat(routed.companies()).containsExactly("Reliance Industries Ltd");
+    }
+
+    @Test
+    void aGenericWordAloneDoesNotCountAsNamingACompany() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"HDFC Bank\"]}");
+
+        RoutedRequest routed = router(model).route("What about the bank's deposits?", new ResearchSession());
+
+        assertThat(routed.companies()).isEmpty();
+    }
 }

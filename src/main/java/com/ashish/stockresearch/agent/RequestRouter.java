@@ -28,6 +28,11 @@ import java.util.regex.Pattern;
  *       {@link RoutedRequest}.</li>
  * </ol>
  *
+ * A follow-up such as "what about its debt?" names no company. When the conversation has discussed
+ * one ({@link ResearchSession#companies()}), the routing model is told which, and a message that
+ * refers back to it ("it", "its", "the company", "and ...") gets it even if the model leaves it out.
+ * Only the company is passed on, never the chat history, so routing stays one short call.
+ *
  * Any failure - an unreachable model, malformed JSON, a missing intent, a company-specific intent
  * with no company - falls back to {@link Intent#SPECIFIC_QUESTION}, whose tool loop can handle
  * any question. Routing never fails a request.
@@ -47,6 +52,8 @@ public class RequestRouter {
               ownership, performance over time, what the company does).
             - NOT_STOCK_RELATED: anything not about companies, stocks or markets.
             Name only companies in the message; never add one. Use an empty list when none is named.
+            The one exception: when the message refers to a company only as "it", "its", "they" or
+            similar, and a company discussed earlier is given, list that company.
             """;
 
     private static final Pattern COMPARE = Pattern.compile(
@@ -64,7 +71,14 @@ public class RequestRouter {
             "what", "whats", "what's", "is", "s", "tell", "about", "full", "detailed", "complete", "company",
             "stock", "stocks", "share", "shares", "today", "now", "current", "currently", "latest", "live",
             "price", "quote", "trading", "at", "fundamental", "fundamentals", "overview", "analysis", "analyse",
-            "analyze", "research", "deep", "dive", "report");
+            "analyze", "research", "deep", "dive", "report",
+            // pronouns: "research it" names no company, so it is left to the model and the conversation
+            "it", "its", "it's", "they", "their", "them", "this", "that", "these", "those", "same", "and", "how");
+    /** A message that points back at a company named earlier in the conversation. */
+    private static final Pattern REFERS_BACK = Pattern.compile(
+            "\\b(?:it|its|it's|itself|they|their|them|this|that|these|those|same|the (?:company|stock|shares?|"
+                    + "bank|business|firm|group))\\b|^\\s*(?:and|what about|how about)\\b",
+            Pattern.CASE_INSENSITIVE);
 
     private final ChatClient routingClient;
     private final NseSymbolDirectory directory;
@@ -82,9 +96,34 @@ public class RequestRouter {
         this.directory = directory;
     }
 
+    /**
+     * Strictly a follow-up about a company - "and its debt?", "what about their margins?" - as
+     * opposed to a general question that happens to say "it" ("how is it calculated?").
+     */
+    private static final Pattern ABOUT_AN_UNNAMED_COMPANY = Pattern.compile(
+            "\\b(?:its|their)\\b|\\bthe (?:company|stock|bank|firm)\\b|^\\s*(?:and|what about|how about)\\b",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * True when a message is about a company it does not name and the conversation has not named
+     * one either. Answering it would mean guessing a company, so the user is asked instead.
+     */
+    public static boolean needsACompany(String message, RoutedRequest routed, ResearchSession session) {
+        return routed.intent() == Intent.SPECIFIC_QUESTION && routed.companies().isEmpty()
+                && (session == null || session.companies().isEmpty())
+                && message != null && ABOUT_AN_UNNAMED_COMPANY.matcher(message).find();
+    }
+
     public RoutedRequest route(String message) {
-        RoutedRequest routed = byKeywords(message).orElseGet(() -> byModel(message));
-        log.info("Routed '{}' -> {} {}", message, routed.intent(), routed.companies());
+        return route(message, null);
+    }
+
+    /** @param session the conversation so far, or null for a request with no conversation */
+    public RoutedRequest route(String message, ResearchSession session) {
+        List<String> earlier = session == null ? List.of() : session.companies();
+        RoutedRequest routed = byKeywords(message).orElseGet(() -> byModel(message, earlier));
+        log.info("Routed '{}' -> {} {}{}", message, routed.intent(), routed.companies(),
+                earlier.isEmpty() ? "" : " (earlier: " + earlier + ")");
         return routed;
     }
 
@@ -121,15 +160,76 @@ public class RequestRouter {
     }
 
     RoutedRequest byModel(String message) {
+        return byModel(message, List.of());
+    }
+
+    RoutedRequest byModel(String message, List<String> earlier) {
+        boolean refersBack = !earlier.isEmpty() && message != null && REFERS_BACK.matcher(message).find();
+        String prompt = refersBack
+                ? "Company discussed earlier: " + String.join(", ", earlier) + "\n\nMessage: " + message
+                : message;
         RoutedRequest routed;
         try {
-            routed = routingClient.prompt().user(message).call().entity(RoutedRequest.class);
+            routed = routingClient.prompt().user(prompt).call().entity(RoutedRequest.class);
         } catch (RuntimeException ex) {
             log.warn("Routing model gave no usable answer for '{}' ({}); treating it as a specific question",
                     message, ex.getMessage());
-            return RoutedRequest.specificQuestion();
+            routed = RoutedRequest.specificQuestion();
         }
-        return validated(routed);
+        routed = onlyCompaniesInTheMessage(routed, message, earlier);
+        return validated(refersBack ? withEarlierCompanies(routed, earlier) : routed);
+    }
+
+    /** Words in a company name that say nothing about which company it is. */
+    private static final Set<String> GENERIC_NAME_WORDS = Set.of("ltd", "limited", "inc", "corp", "corporation", "co",
+            "company", "the", "and", "of", "india", "indian", "bank", "industries", "services", "finance",
+            "financial", "technologies", "technology", "motors", "group", "enterprises", "holdings");
+
+    /**
+     * Drops a company the model added that the message does not name - asked "and its debt?" with
+     * nothing to refer to, a model has answered "Reliance Industries Ltd". A company is kept when a
+     * distinctive word of its name appears in the message, or the conversation discussed it.
+     */
+    static RoutedRequest onlyCompaniesInTheMessage(RoutedRequest routed, String message, List<String> earlier) {
+        if (routed == null || routed.intent() == null || routed.companies().isEmpty() || message == null) {
+            return routed;
+        }
+        Set<String> messageWords = Set.copyOf(Arrays.asList(message.toLowerCase(Locale.ROOT).split("[^\\p{Alnum}&]+")));
+        List<String> named = routed.companies().stream()
+                .filter(company -> earlier.contains(company) || Arrays.stream(
+                                company.toLowerCase(Locale.ROOT).split("[^\\p{Alnum}&]+"))
+                        .filter(word -> !word.isBlank() && !GENERIC_NAME_WORDS.contains(word))
+                        .anyMatch(messageWords::contains))
+                .toList();
+        if (named.size() < routed.companies().size()) {
+            log.warn("Routing model named companies the message does not: {} -> kept {}", routed.companies(), named);
+        }
+        return new RoutedRequest(routed.intent(), named);
+    }
+
+    /**
+     * Fills in the company a follow-up refers back to, when the model left it out: "and its debt?"
+     * about the last company, "compare it with TCS" as the last company and TCS.
+     */
+    static RoutedRequest withEarlierCompanies(RoutedRequest routed, List<String> earlier) {
+        if (routed == null || routed.intent() == null) {
+            return new RoutedRequest(Intent.SPECIFIC_QUESTION, earlier);
+        }
+        List<String> named = routed.companies();
+        return switch (routed.intent()) {
+            case FULL_RESEARCH, QUOTE, SPECIFIC_QUESTION ->
+                    named.isEmpty() ? new RoutedRequest(routed.intent(), earlier) : routed;
+            case COMPARE -> {
+                if (named.size() >= 2) {
+                    yield routed;
+                }
+                List<String> companies = new java.util.ArrayList<>(earlier.stream()
+                        .filter(company -> !named.contains(company)).toList());
+                companies.addAll(named);
+                yield new RoutedRequest(Intent.COMPARE, companies);
+            }
+            case NOT_STOCK_RELATED -> routed;
+        };
     }
 
     /** A company-specific intent needs its companies; anything unusable becomes a specific question. */
