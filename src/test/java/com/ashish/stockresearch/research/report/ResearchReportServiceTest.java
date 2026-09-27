@@ -7,6 +7,7 @@ import com.ashish.stockresearch.research.StockResearchService;
 import com.ashish.stockresearch.research.calc.FinancialDataValidator;
 import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.DataFreshness;
+import com.ashish.stockresearch.research.model.DataGap;
 import com.ashish.stockresearch.research.model.DataProvenance;
 import com.ashish.stockresearch.research.model.DataQualityIssue;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
@@ -16,6 +17,8 @@ import com.ashish.stockresearch.research.model.PricePoint;
 import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
 import com.ashish.stockresearch.research.model.SourceType;
+import com.ashish.stockresearch.research.provider.UnsupportedShareholdingProvider;
+import com.ashish.stockresearch.research.provider.mock.MockStockResearchProvider;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
 import org.junit.jupiter.api.Test;
@@ -26,9 +29,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ResearchReportServiceTest {
 
@@ -122,6 +130,59 @@ class ResearchReportServiceTest {
             assertThat(gap.reason()).isEqualTo("Yahoo was down");
         });
         assertThat(report.companyName()).isEqualTo("HDFC Bank Limited");
+    }
+
+    @Test
+    void buildStillProducesAReportWhenOneCapabilityFails() {
+        MockStockResearchProvider provider = new MockStockResearchProvider();
+        StockResearchService research = new StockResearchService(provider,
+                symbol -> {
+                    throw new IllegalStateException("financials provider crashed");
+                },
+                new UnsupportedShareholdingProvider(), provider,
+                new FinancialMetricsService(), new HistoricalPerformanceService());
+
+        StockResearchReport report = new ResearchReportService(research, validator, new SectorClassifier()).build("INFY");
+
+        assertThat(report.financials().success()).isFalse();
+        assertThat(report.dataGaps()).anySatisfy(gap -> assertThat(gap.area()).isEqualTo("Financials"));
+        assertThat(report.companyProfile().success()).isTrue();
+        assertThat(report.historicalPerformance().success()).isTrue();
+    }
+
+    @Test
+    void fetchesTheFourSectionsConcurrently() {
+        // Each fetch waits until all four have started: run one after another, the first would time out.
+        CountDownLatch allStarted = new CountDownLatch(4);
+        StockResearchService research = mock(StockResearchService.class);
+        when(research.getCompanyProfile(anyString())).thenAnswer(call -> {
+            awaitOthers(allStarted);
+            return CompanyProfileResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "down");
+        });
+        when(research.getFinancialSummary(anyString())).thenAnswer(call -> {
+            awaitOthers(allStarted);
+            return FinancialSummaryResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "down");
+        });
+        when(research.getHistoricalPerformance(anyString(), anyInt())).thenAnswer(call -> {
+            awaitOthers(allStarted);
+            return HistoricalPerformanceResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "down");
+        });
+        when(research.getShareholding(anyString())).thenAnswer(call -> {
+            awaitOthers(allStarted);
+            return ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "no source");
+        });
+
+        StockResearchReport report = new ResearchReportService(research, validator, new SectorClassifier()).build("INFY");
+
+        assertThat(report.dataGaps()).extracting(DataGap::area)
+                .contains("Company", "Financials", "Share price history", "Shareholding");
+    }
+
+    private static void awaitOthers(CountDownLatch allStarted) throws InterruptedException {
+        allStarted.countDown();
+        if (!allStarted.await(5, TimeUnit.SECONDS)) {
+            throw new AssertionError("the four sections were not fetched concurrently");
+        }
     }
 
     @Test

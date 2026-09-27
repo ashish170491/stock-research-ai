@@ -8,11 +8,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                  then exchanged for the "crumb" token that the fundamentals
  *                  ({@code quoteSummary}) endpoints require. It is a different host from
  *                  {@code baseUrl}, hence its own property.
+ * @param requestsPerSecond the most requests per second sent to Yahoo, across all threads;
+ *                  zero or less sends them unthrottled.
  */
 public record YahooFinanceProperties(
         String baseUrl,
         String cookieUrl,
         String userAgent,
-        long timeoutMs
+        long timeoutMs,
+        double requestsPerSecond
 ) {
 }

@@ -13,7 +13,10 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.ollama.api.ThinkOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +41,12 @@ class RequestRouterTest {
         StubModel(String reply, RuntimeException failure) {
             this.reply = reply;
             this.failure = failure;
+        }
+
+        /** Ollama's own options, as the real model has, so per-client options are merged as they are there. */
+        @Override
+        public ChatOptions getOptions() {
+            return OllamaChatOptions.builder().model("qwen3:8b").temperature(0.3).numCtx(16384).build();
         }
 
         @Override
@@ -90,6 +99,19 @@ class RequestRouterTest {
         assertThat(model.prompts).hasSize(1);
         // The model is asked for JSON matching RoutedRequest, with no tools to call.
         assertThat(model.prompts.get(0).getContents()).contains("FULL_RESEARCH").contains("companies");
+    }
+
+    @Test
+    void asksTheModelWithoutThinkingAtZeroTemperatureAndASmallContext() {
+        StubModel model = new StubModel("{\"intent\":\"NOT_STOCK_RELATED\",\"companies\":[]}");
+
+        router(model).route("Explain Spring AI in two sentences");
+
+        assertThat(model.prompts.get(0).getOptions()).isInstanceOfSatisfying(OllamaChatOptions.class, options -> {
+            assertThat(options.getThinkOption()).isEqualTo(ThinkOption.ThinkBoolean.DISABLED);
+            assertThat(options.getTemperature()).isEqualTo(0.0);
+            assertThat(options.getNumCtx()).isEqualTo(4096);
+        });
     }
 
     @Test

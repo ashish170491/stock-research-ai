@@ -12,14 +12,10 @@ import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -78,6 +74,7 @@ public class AiService {
 	private final StockMarketDataService stockMarketDataService;
 	private final UnsupportedClaimFilter claimFilter;
 	private final NumericClaimVerifier numericVerifier;
+	private final OllamaCalls ollama;
 
 	public AiService(ChatClient.Builder chatClientBuilder,
 			RequestRouter router,
@@ -87,7 +84,8 @@ public class AiService {
 			ResearchReportWriter researchReportWriter,
 			StockMarketDataService stockMarketDataService,
 			UnsupportedClaimFilter claimFilter,
-			NumericClaimVerifier numericVerifier) {
+			NumericClaimVerifier numericVerifier,
+			OllamaCalls ollama) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -104,6 +102,7 @@ public class AiService {
 		this.stockMarketDataService = stockMarketDataService;
 		this.claimFilter = claimFilter;
 		this.numericVerifier = numericVerifier;
+		this.ollama = ollama;
 	}
 
 	/**
@@ -126,7 +125,7 @@ public class AiService {
 			case COMPARE -> request.companies().stream().map(researchReportWriter::write)
 					.collect(Collectors.joining("\n\n---\n\n"));
 			case SPECIFIC_QUESTION -> answerWithTools(message);
-			case NOT_STOCK_RELATED -> callOllama(() -> ResearchReportWriter.stripThinking(
+			case NOT_STOCK_RELATED -> ollama.call(() -> ResearchReportWriter.stripThinking(
 					generalClient.prompt().user(message).call().content()));
 		};
 	}
@@ -138,7 +137,7 @@ public class AiService {
 
 	private String answerWithTools(String message) {
 		ToolUsage usage = new ToolUsage();
-		String answer = callOllama(() -> ResearchReportWriter.stripThinking(toolClient.prompt()
+		String answer = ollama.call(() -> ResearchReportWriter.stripThinking(toolClient.prompt()
 				.user(message)
 				.toolContext(usage.asToolContext())
 				.call()
@@ -180,15 +179,5 @@ public class AiService {
 					.formatted(claims.removedSentences().size(), String.join(" | ", claims.removedSentences())));
 		}
 		return text.toString();
-	}
-
-	private String callOllama(Supplier<String> call) {
-		try {
-			return call.get();
-		} catch (ResourceAccessException ex) {
-			throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-					"Could not reach Ollama. Make sure it is running (ollama run qwen3:8b) at http://localhost:11434",
-					ex);
-		}
 	}
 }

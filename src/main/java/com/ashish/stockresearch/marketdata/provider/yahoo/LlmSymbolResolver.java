@@ -4,6 +4,7 @@ import com.ashish.stockresearch.service.ResearchReportWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -30,7 +31,10 @@ class LlmSymbolResolver {
     private final ChatClient chatClient;
 
     LlmSymbolResolver(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
+        // A one-word answer: no thinking, no sampling variety, a small context.
+        this.chatClient = chatClientBuilder.clone()
+                .defaultOptions(OllamaChatOptions.builder().disableThinking().temperature(0.0).numCtx(2048))
+                .build();
     }
 
     Optional<String> resolveTickerGuess(String companyName) {

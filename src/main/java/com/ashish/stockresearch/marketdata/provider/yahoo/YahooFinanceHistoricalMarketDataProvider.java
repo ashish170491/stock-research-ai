@@ -10,6 +10,7 @@ import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.SourceType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -56,6 +57,7 @@ class YahooFinanceHistoricalMarketDataProvider implements HistoricalMarketDataPr
     }
 
     @Override
+    @Cacheable(cacheNames = YahooCacheConfiguration.PRICE_HISTORY, keyGenerator = YahooCacheConfiguration.SYMBOL_KEY)
     public PriceHistory getPriceHistory(String symbolOrName, int years) {
         YahooSymbolResolver.Resolution resolution = symbolResolver.resolve(symbolOrName)
                 .orElseThrow(() -> new ResearchDataUnavailableException(ResearchStatus.SYMBOL_NOT_FOUND,

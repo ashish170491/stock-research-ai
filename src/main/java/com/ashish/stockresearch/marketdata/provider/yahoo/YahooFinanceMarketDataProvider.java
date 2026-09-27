@@ -5,6 +5,7 @@ import com.ashish.stockresearch.marketdata.MarketDataUnavailableException;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -37,8 +38,9 @@ public class YahooFinanceMarketDataProvider implements MarketDataProvider {
     }
 
     @Override
+    @Cacheable(cacheNames = YahooCacheConfiguration.QUOTES, keyGenerator = YahooCacheConfiguration.SYMBOL_KEY)
     public StockQuote getQuote(String symbolOrName) {
-        YahooSymbolResolver.Resolution resolution = symbolResolver.resolve(symbolOrName)
+        YahooSymbolResolver.Resolution resolution = symbolResolver.resolveWithLatestQuote(symbolOrName)
                 .orElseThrow(() -> new MarketDataUnavailableException(
                         "No NSE or BSE listed stock found matching '" + symbolOrName + "'"));
 

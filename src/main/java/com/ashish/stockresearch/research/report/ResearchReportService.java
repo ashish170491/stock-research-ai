@@ -28,6 +28,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Assembles a {@link StockResearchReport} from the four research
@@ -61,12 +64,24 @@ public class ResearchReportService {
         this.sectorClassifier = sectorClassifier;
     }
 
+    /**
+     * Fetches the four sections at once, each on its own virtual thread; they are independent
+     * provider calls, so the report waits for the slowest rather than for their sum. Each section
+     * still fails on its own: {@link StockResearchService} turns a provider failure into a failed
+     * result, which becomes a data gap rather than failing the report.
+     */
     public StockResearchReport build(String symbol) {
-        CompanyProfileResult profile = research.getCompanyProfile(symbol);
-        FinancialSummaryResult financials = research.getFinancialSummary(symbol);
-        HistoricalPerformanceResult history = research.getHistoricalPerformance(symbol, HISTORY_YEARS);
-        ShareholdingResult shareholding = research.getShareholding(symbol);
-        return assemble(symbol, profile, financials, history, shareholding);
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<CompanyProfileResult> profile =
+                    CompletableFuture.supplyAsync(() -> research.getCompanyProfile(symbol), executor);
+            CompletableFuture<FinancialSummaryResult> financials =
+                    CompletableFuture.supplyAsync(() -> research.getFinancialSummary(symbol), executor);
+            CompletableFuture<HistoricalPerformanceResult> history =
+                    CompletableFuture.supplyAsync(() -> research.getHistoricalPerformance(symbol, HISTORY_YEARS), executor);
+            CompletableFuture<ShareholdingResult> shareholding =
+                    CompletableFuture.supplyAsync(() -> research.getShareholding(symbol), executor);
+            return assemble(symbol, profile.join(), financials.join(), history.join(), shareholding.join());
+        }
     }
 
     StockResearchReport assemble(String requested, CompanyProfileResult profile, FinancialSummaryResult financials,

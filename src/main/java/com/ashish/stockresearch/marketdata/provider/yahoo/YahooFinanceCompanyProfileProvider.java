@@ -18,6 +18,7 @@ import com.ashish.stockresearch.research.model.SourceType;
 import com.ashish.stockresearch.research.model.Unit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -61,6 +62,7 @@ class YahooFinanceCompanyProfileProvider implements CompanyProfileProvider {
     }
 
     @Override
+    @Cacheable(cacheNames = YahooCacheConfiguration.COMPANY_PROFILES, keyGenerator = YahooCacheConfiguration.SYMBOL_KEY)
     public CompanyProfile getCompanyProfile(String symbolOrName) {
         YahooSymbolResolver.Resolution resolution = symbolResolver.resolve(symbolOrName)
                 .orElseThrow(() -> new ResearchDataUnavailableException(ResearchStatus.SYMBOL_NOT_FOUND,

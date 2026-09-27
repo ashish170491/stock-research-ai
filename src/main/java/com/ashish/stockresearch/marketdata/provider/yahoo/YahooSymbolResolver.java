@@ -3,6 +3,7 @@ package com.ashish.stockresearch.marketdata.provider.yahoo;
 import com.ashish.stockresearch.marketdata.NseSymbolDirectory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -84,7 +85,24 @@ class YahooSymbolResolver {
     record Resolution(String providerSymbol, String symbol, String exchange, YahooChartResponse.Meta meta) {
     }
 
-    Optional<Resolution> resolve(String symbolOrName) {
+    /**
+     * The listing a symbol or company name refers to, cached for a week: listings rarely change,
+     * and the lookup can cost several Yahoo calls and a model call. The {@link Resolution#meta()}
+     * is from the first lookup, so read names from it, never prices; a quote uses
+     * {@link #resolveWithLatestQuote}. A name that resolves to nothing is not cached.
+     */
+    @Cacheable(cacheNames = YahooCacheConfiguration.SYMBOL_RESOLUTION, keyGenerator = YahooCacheConfiguration.SYMBOL_KEY,
+            unless = "#result == null")
+    public Optional<Resolution> resolve(String symbolOrName) {
+        return lookup(symbolOrName);
+    }
+
+    /** The same lookup, uncached, so the chart metadata carries the latest price. */
+    public Optional<Resolution> resolveWithLatestQuote(String symbolOrName) {
+        return lookup(symbolOrName);
+    }
+
+    private Optional<Resolution> lookup(String symbolOrName) {
         return tryDirectory(symbolOrName)
                 .or(() -> tryDirectGuess(symbolOrName))
                 .or(() -> trySearch(symbolOrName))
