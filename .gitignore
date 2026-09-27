@@ -34,3 +34,6 @@ build/
 
 ### Application logs ###
 logs/
+
+### Local review bundle ###
+REVIEW_BUNDLE.md

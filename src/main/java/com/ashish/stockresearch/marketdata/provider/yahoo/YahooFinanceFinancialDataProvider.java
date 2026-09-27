@@ -24,6 +24,7 @@ import com.ashish.stockresearch.research.model.SourceType;
 import com.ashish.stockresearch.research.model.Unit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -127,6 +128,9 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
     }
 
     @Override
+    // Not when the annual statements failed to load: that gap is transient and should not last a day.
+    @Cacheable(cacheNames = YahooCacheConfiguration.FINANCIALS, keyGenerator = YahooCacheConfiguration.SYMBOL_KEY,
+            unless = "#result.dataGaps().?[item() == 'annualHistory'].size() > 0")
     public ReportedFinancials getReportedFinancials(String symbolOrName) {
         YahooSymbolResolver.Resolution resolution = symbolResolver.resolve(symbolOrName)
                 .orElseThrow(() -> new ResearchDataUnavailableException(ResearchStatus.SYMBOL_NOT_FOUND,

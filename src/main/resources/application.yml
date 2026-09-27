@@ -1,6 +1,11 @@
 spring:
   application:
     name: stock-research-ai
+  threads:
+    virtual:
+      # Request handling and blocking Yahoo calls run on virtual threads, so a
+      # thread waiting on Yahoo or on the throttle costs almost nothing.
+      enabled: true
   ai:
     ollama:
       base-url: http://localhost:11434
@@ -30,6 +35,19 @@ app:
       # Fundamentals payloads are larger and slower than a quote, and a single
       # question can fan out to several of them.
       timeout-ms: 10000
+      # Yahoo's endpoints are unofficial and refuse clients that call too
+      # often. A report's parallel fetches, and any future screen over many
+      # stocks, are spaced to at most this many requests per second.
+      requests-per-second: 2
+
+  research:
+    interpretation:
+      # Whether the model reasons before writing a report's INTERPRETATION.
+      # Measured 2026-09-27 on INFY, HDFCBANK and TCS (2 runs each): thinking
+      # tripled the time (~105s vs ~40s) without being more accurate - the
+      # verifiers removed about as many unsupported sentences either way
+      # (18 vs 13), and both modes let some through. Off unless that changes.
+      thinking: false
 
   trace:
     # Logs how a question flows through the model and the tools. Development

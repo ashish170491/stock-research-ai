@@ -324,6 +324,35 @@ class YahooFinanceFinancialDataProviderTest {
     }
 
     @Test
+    void answersARepeatedRequestFromTheCacheWithoutCallingYahoo() {
+        YahooFinanceFinancialDataProvider cached =
+                YahooCacheConfigurationTest.cached(YahooFinanceFinancialDataProvider.class, provider);
+        respond(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, HDFC_EARNINGS));
+
+        ReportedFinancials first = cached.getReportedFinancials("HDFC Bank");
+        ReportedFinancials second = cached.getReportedFinancials("hdfc bank");
+
+        assertThat(second).isSameAs(first);
+        server.verify(); // exactly one quoteSummary and one timeseries call
+    }
+
+    @Test
+    void doesNotCacheAnAnswerWhoseAnnualHistoryFailedToLoad() {
+        YahooFinanceFinancialDataProvider cached =
+                YahooCacheConfigurationTest.cached(YahooFinanceFinancialDataProvider.class, provider);
+        server.expect(requestTo(containsString("/v10/finance/quoteSummary/HDFCBANK.NS")))
+                .andRespond(withSuccess(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, HDFC_EARNINGS),
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/ws/fundamentals-timeseries")))
+                .andRespond(withServerError());
+        respond(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, HDFC_EARNINGS));
+
+        assertThat(cached.getReportedFinancials("HDFC Bank").annualHistory()).isEmpty();
+        assertThat(cached.getReportedFinancials("HDFC Bank").annualHistory()).isNotEmpty();
+        server.verify();
+    }
+
+    @Test
     void fallsBackToMostRecentQuarterWhenThereAreNoDatedQuarterlyResults() {
         respond(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, "null"));
 

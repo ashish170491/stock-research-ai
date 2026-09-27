@@ -7,10 +7,9 @@ import com.ashish.stockresearch.research.report.StockResearchReport;
 import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.http.HttpStatus;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Writes a complete research report: FACTS, OBSERVATIONS, DATA GAPS and
@@ -40,36 +39,37 @@ public class ResearchReportWriter {
 	private final ResearchReportRenderer renderer;
 	private final UnsupportedClaimFilter claimFilter;
 	private final NumericClaimVerifier numericVerifier;
+	private final OllamaCalls ollama;
 
 	public ResearchReportWriter(ChatClient.Builder chatClientBuilder,
 			Advisor conversationTraceAdvisor,
 			ResearchReportService researchReportService,
 			ResearchReportRenderer renderer,
 			UnsupportedClaimFilter claimFilter,
-			NumericClaimVerifier numericVerifier) {
+			NumericClaimVerifier numericVerifier,
+			OllamaCalls ollama,
+			@Value("${app.research.interpretation.thinking:false}") boolean thinking) {
 		// No tools: interpretation must see only the evidence it is handed,
-		// with no way to fetch or invent more.
+		// with no way to fetch or invent more. Whether the model reasons before
+		// writing is a setting: it costs time, and may or may not improve the text.
+		OllamaChatOptions.Builder options = OllamaChatOptions.builder();
 		this.interpretationClient = chatClientBuilder.clone()
 				.defaultSystem(INTERPRETATION_PROMPT)
+				.defaultOptions(thinking ? options.enableThinking() : options.disableThinking())
 				.defaultAdvisors(conversationTraceAdvisor)
 				.build();
 		this.researchReportService = researchReportService;
 		this.renderer = renderer;
 		this.claimFilter = claimFilter;
 		this.numericVerifier = numericVerifier;
+		this.ollama = ollama;
 	}
 
 	public String write(String symbol) {
 		StockResearchReport report = researchReportService.build(symbol);
 		String evidence = renderer.renderEvidence(report);
-		String interpretation;
-		try {
-			interpretation = stripThinking(interpretationClient.prompt().user(evidence).call().content());
-		} catch (ResourceAccessException ex) {
-			throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-					"Could not reach Ollama. Make sure it is running (ollama run qwen3:8b) at http://localhost:11434",
-					ex);
-		}
+		String interpretation = ollama.call(
+				() -> stripThinking(interpretationClient.prompt().user(evidence).call().content()));
 		NumericClaimVerifier.Result figures = numericVerifier.verify(interpretation, evidence);
 		UnsupportedClaimFilter.Result screened = claimFilter.filter(figures.text(), evidence, report.withheldTopics());
 		String text = screened.text();

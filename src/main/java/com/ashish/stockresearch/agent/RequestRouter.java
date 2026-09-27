@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -70,9 +71,12 @@ public class RequestRouter {
 
     public RequestRouter(ChatClient.Builder chatClientBuilder, NseSymbolDirectory directory,
                          Advisor conversationTraceAdvisor) {
-        // No tools: routing only classifies, it never fetches.
+        // No tools: routing only classifies, it never fetches. No thinking either: a classification
+        // needs no reasoning trace, and generating one is most of the latency of a routed request.
+        // The prompt is short, so a small context keeps the KV cache small.
         this.routingClient = chatClientBuilder.clone()
                 .defaultSystem(ROUTING_PROMPT)
+                .defaultOptions(OllamaChatOptions.builder().disableThinking().temperature(0.0).numCtx(4096))
                 .defaultAdvisors(conversationTraceAdvisor)
                 .build();
         this.directory = directory;

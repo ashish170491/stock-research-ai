@@ -117,7 +117,8 @@ class AiServiceRoutingTest {
     private AiService service(ChatModel model) {
         StockResearchTools tools = new StockResearchTools(research, new ResearchReportRenderer(), new SectorClassifier());
         return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools, new PassThrough(),
-                reportWriter, quotes, new UnsupportedClaimFilter(), new NumericClaimVerifier());
+                reportWriter, quotes, new UnsupportedClaimFilter(), new NumericClaimVerifier(),
+                new OllamaCalls("qwen3:8b", "http://localhost:11434"));
     }
 
     private void routes(String message, Intent intent, String... companies) {

@@ -55,19 +55,26 @@ public class NumericClaimVerifier {
         List<String> removed = new ArrayList<>();
         LinkedHashSet<String> ungrounded = new LinkedHashSet<>();
         StringBuilder kept = new StringBuilder();
+        boolean afterRemoval = false;
         for (String line : answer.split("\n", -1)) {
             StringBuilder keptLine = new StringBuilder();
             for (String sentence : SENTENCE_END.split(line)) {
                 List<String> missing = ungroundedFigures(sentence, known);
-                if (missing.isEmpty()) {
-                    if (!keptLine.isEmpty()) {
-                        keptLine.append(' ');
-                    }
-                    keptLine.append(sentence);
-                } else {
+                if (!missing.isEmpty()) {
                     removed.add(sentence.strip());
                     ungrounded.addAll(missing);
+                    afterRemoval = true;
+                    continue;
                 }
+                // "However, ..." after a removed statement would contrast with nothing.
+                if (afterRemoval && !sentence.isBlank()) {
+                    sentence = SentenceContinuity.detached(sentence);
+                    afterRemoval = false;
+                }
+                if (!keptLine.isEmpty()) {
+                    keptLine.append(' ');
+                }
+                keptLine.append(sentence);
             }
             String result = keptLine.toString();
             // Drop a bullet or table row whose only content was removed, rather than leaving a stub.

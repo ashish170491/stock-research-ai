@@ -1,0 +1,167 @@
+# Research report: HDFC Bank Limited (HDFCBANK)
+
+Generated 2026-09-27. Latest reported quarter: **Q1 FY27** (period ended 2026-06-30).
+
+> **DATA CONFLICT - read before the figures below.** The application has not chosen between the conflicting values and draws no conclusions from them; values that depend on them are tagged [DATA_CONFLICT].
+>
+> - TTM revenue (₹2.95 lakh crore (₹2,94,964 crore), financialData.totalRevenue) and the sum of the four reported quarters Q2 FY26 to Q1 FY27 (₹1.84 lakh crore (₹1,84,406 crore), earnings.financialsChart.quarterly.revenue) cover the same period but differ by 59.95%. Yahoo Finance uses different definitions for these fields. Neither is chosen, and no conclusion should be drawn from either. Fields: financialData.totalRevenue, earnings.financialsChart.quarterly.revenue
+>
+> - TTM revenue (₹2.95 lakh crore (₹2,94,964 crore), TTM to Q1 FY27 (ending 2026-06-30), financialData.totalRevenue) and FY26 annual revenue (₹1.93 lakh crore (₹1,92,567 crore), fundamentals-timeseries.annualTotalRevenue) differ by 53.18%, more than one quarter's growth could explain. Yahoo Finance uses different revenue definitions for these fields. Neither is chosen; do not compare them or derive growth between them. Fields: financialData.totalRevenue, fundamentals-timeseries.annualTotalRevenue
+
+## 1. FACTS
+
+_Values supplied by the stated source (REPORTED) or computed by the application from them (CALCULATED). Amounts are normalised to crore by the application only after the source's own format confirmed the raw unit._
+
+### Company
+
+| Item | Value | Status | Raw value (provider unit) | As of | Source field |
+|---|---|---|---|---|---|
+| Exchange | NSE | REPORTED | - | - |  |
+| Sector | Financial Services | REPORTED | - | - | assetProfile.sector |
+| Industry | Banks - Regional | REPORTED | - | - | assetProfile.industry |
+| Employees | 212958 | REPORTED | - | - | assetProfile.fullTimeEmployees |
+| Market capitalisation | ₹11.34 lakh crore (₹11,34,183 crore) | REPORTED | 11341831077888 (WHOLE_CURRENCY_UNITS) | 2026-09-25 | price.marketCap |
+| Shares outstanding | 15,41,84,77,012 shares | REPORTED | 15418477012 (SHARE_COUNT) | UNKNOWN | defaultKeyStatistics.sharesOutstanding |
+
+Business summary (Yahoo Finance text): HDFC Bank Limited provides banking and financial products and services to individuals and businesses in India, Bahrain, Hong Kong, Singapore, and Dubai. The company operates through Treasury, Retail Banking, Wholesale Banking, Other Banking Business, Insurance Business, and Other segments. It offers savings, salary, current, rural, public provident fund, pension, and demat accounts; fixed and recurring deposits; and safe deposit lockers, as well as offshore accounts and deposits, and overdrafts against fixed deposits. The company also provides personal, home, car and pre owned car, marriage, two-wheeler, business, doctor, educational, gold, consumer, and rural loans; loans against properties, securities, mutual funds, and car; loans for professionals; government sponsored programs; and loans on credit card, as well as working capital, term loans, supply chain management, project finance, export finance, commercial vehicle / equipment finance, tractor finance, infrastructure, and agriculture finance. In addition, it offers credit, debit, prepaid, forex, and kisan gold cards; payment and collection, export, import, remittance, bank guarantee, letter of credit, trade, hedging, and merchant and cash management services; and insurance and investment products. Further, the company provides short term finance, bill discounting, structured finance, export credit, loan repayment, custodial, and documents collection services; online, mobile, and phone banking services; unified payment interface, immediate payment, national electronic funds transfer, and real time gross settlement services; channel financing, vendor financing, money market, derivatives, employee trusts, cash surplus corporates, tax payment, and bankers to rights/public issue services; and financial solutions for supply chain partners and agricultural customers. It operates branches and automated teller machines in various cities/towns. The company was incorporated in 1994 and is headquartered in Mumbai, India.
+
+### Sector context
+
+_Industry group derived by the application from the classification below; the metric guidance is application-supplied context, not data about this company._
+
+- Industry group: **BANK** (Yahoo Finance classification: sector 'Financial Services', industry 'Banks - Regional')
+- Deposits and borrowings are a bank's raw material, so debt and cash-flow measures do not describe leverage or liquidity as they do for non-financial companies.
+- Less meaningful for this group: EBITDA, operating margin, debt-to-equity, free cash flow
+- Sector metrics NOT SUPPORTED BY CURRENT DATA SOURCE: net interest margin, gross and net NPA, CASA ratio, capital adequacy ratio, credit cost, loan and deposit growth
+
+### Financials - headline figures (reporting currency: INR)
+
+| Metric | Value | Period | Status | Raw value (provider unit) | Source field |
+|---|---|---|---|---|---|
+| revenue | ₹2.95 lakh crore (₹2,94,964 crore) [DATA_CONFLICT] | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED | 2949644288000 (WHOLE_CURRENCY_UNITS) | financialData.totalRevenue |
+| netProfit | ₹79,012.77 crore | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED | 790127706112 (WHOLE_CURRENCY_UNITS) | defaultKeyStatistics.netIncomeToCommon |
+| netProfitMarginTtmPercent | 26.79% [DATA_CONFLICT] | TTM to Q1 FY27 (ending 2026-06-30) | CALCULATED | - | defaultKeyStatistics.netIncomeToCommon, financialData.totalRevenue |
+| netProfitMarginPercent | 26.79% | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED | 0.26787 (FRACTION) | financialData.profitMargins |
+| operatingMarginPercent | 33.29% | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED | 0.33291999 (FRACTION) | financialData.operatingMargins |
+| returnOnEquityPercent | 13.84% | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED | 0.13838 (FRACTION) | financialData.returnOnEquity |
+| returnOnAssetsPercent | 1.75% | TTM to Q1 FY27 (ending 2026-06-30) | REPORTED | 0.0175 (FRACTION) | financialData.returnOnAssets |
+| ebitda | UNAVAILABLE - Yahoo Finance did not publish financialData.ebitda | TTM to Q1 FY27 (ending 2026-06-30) | UNAVAILABLE | - | financialData.ebitda |
+| freeCashFlow | UNAVAILABLE - Yahoo Finance did not publish financialData.freeCashflow | TTM to Q1 FY27 (ending 2026-06-30) | UNAVAILABLE | - | financialData.freeCashflow |
+| totalDebt | ₹5.66 lakh crore (₹5,65,871 crore) | As of 2026-06-30 | REPORTED | 5658713784320 (WHOLE_CURRENCY_UNITS) | financialData.totalDebt |
+| totalCash | ₹2.38 lakh crore (₹2,37,767 crore) | As of 2026-06-30 | REPORTED | 2377666265088 (WHOLE_CURRENCY_UNITS) | financialData.totalCash |
+| debtToEquityPercent | UNAVAILABLE - Yahoo Finance did not publish financialData.debtToEquity | As of 2026-06-30 | UNAVAILABLE | - | financialData.debtToEquity |
+| quarterlyRevenueGrowthYoyPercent | 16.60% | Q1 FY27 | REPORTED | 0.166 (FRACTION) | financialData.revenueGrowth |
+| quarterlyEarningsGrowthYoyPercent | 18.10% | Q1 FY27 | REPORTED | 0.181 (FRACTION) | financialData.earningsGrowth |
+| returnOnCapitalEmployedPercent | UNAVAILABLE - Yahoo Finance publishes no capital-employed figure, so ROCE is not available from this source | TTM to Q1 FY27 (ending 2026-06-30) | UNAVAILABLE | - |  |
+
+### Reported quarters (source fields: earnings.financialsChart / earnings.earningsChart)
+
+| Quarter | Period end | Results published | Revenue | Net profit | EPS |
+|---|---|---|---|---|---|
+| Q2 FY26 | 2025-09-30 | 2025-10-18 | ₹45,901.52 crore [DATA_CONFLICT] | ₹18,641.28 crore | ₹12.09 per share |
+| Q3 FY26 | 2025-12-31 | 2026-01-17 | ₹45,868.84 crore [DATA_CONFLICT] | ₹18,653.75 crore | ₹12.08 per share |
+| Q4 FY26 | 2026-03-31 | 2026-04-18 | ₹46,280.45 crore [DATA_CONFLICT] | ₹19,221.05 crore | ₹12.45 per share |
+| Q1 FY27 | 2026-06-30 | 2026-07-18 | ₹46,355.55 crore [DATA_CONFLICT] | ₹19,059.72 crore | ₹12.35 per share |
+
+### Fiscal years (source fields: fundamentals-timeseries)
+
+| Fiscal year | Period end | Revenue | Net profit | Shareholders' equity | Total assets | Total debt |
+|---|---|---|---|---|---|---|
+| FY23 | 2023-03-31 | ₹1.21 lakh crore (₹1,20,538 crore) [DATA_CONFLICT] | ₹49,544.69 crore | ₹2.91 lakh crore (₹2,91,220 crore) | ₹25.76 lakh crore (₹25,75,562 crore) | ₹3.15 lakh crore (₹3,15,179 crore) |
+| FY24 | 2024-03-31 | ₹1.61 lakh crore (₹1,60,497 crore) [DATA_CONFLICT] | ₹62,265.66 crore | ₹6.95 lakh crore (₹6,94,733 crore) | ₹44.12 lakh crore (₹44,11,857 crore) | ₹8.09 lakh crore (₹8,09,355 crore) |
+| FY25 | 2025-03-31 | ₹1.84 lakh crore (₹1,83,864 crore) [DATA_CONFLICT] | ₹67,350.83 crore | ₹7.68 lakh crore (₹7,67,689 crore) | ₹48.19 lakh crore (₹48,18,767 crore) | ₹7.33 lakh crore (₹7,32,611 crore) |
+| FY26 | 2026-03-31 | ₹1.93 lakh crore (₹1,92,567 crore) [DATA_CONFLICT] | ₹70,479.34 crore | ₹8.17 lakh crore (₹8,16,740 crore) | ₹52.62 lakh crore (₹52,62,119 crore) | ₹6.64 lakh crore (₹6,64,364 crore) |
+
+### Calculated per fiscal year (CALCULATED by the application)
+
+| Fiscal year | Revenue YoY | Net profit YoY | Net margin | Operating margin | ROE | ROA | Debt / equity |
+|---|---|---|---|---|---|---|---|
+| FY23 | n/a | n/a | 41.10% [DATA_CONFLICT] | n/a | 17.01% | 1.92% | 1.08x |
+| FY24 | 33.15% [DATA_CONFLICT] | 25.68% | 38.80% [DATA_CONFLICT] | n/a | 12.63% | 1.78% | 1.16x |
+| FY25 | 14.56% [DATA_CONFLICT] | 8.17% | 36.63% [DATA_CONFLICT] | n/a | 9.21% | 1.46% | 0.95x |
+| FY26 | 4.73% [DATA_CONFLICT] | 4.65% | 36.60% [DATA_CONFLICT] | n/a | 8.90% | 1.40% | 0.81x |
+
+ROE and ROA use average opening and closing balances where the prior year is available. Debt / equity is a multiple (x), not a percentage.
+
+### Multi-year growth (CALCULATED)
+
+| Metric | Value | Period | Calculation | Input fields |
+|---|---|---|---|---|
+| revenueCagrPercent | 16.90% [DATA_CONFLICT] | FY23 to FY26 (3 years) | ((FY26 revenue / FY23 revenue)^(1/3) - 1) x 100 | fundamentals-timeseries.annualTotalRevenue |
+| netProfitCagrPercent | 12.47% | FY23 to FY26 (3 years) | ((FY26 net profit / FY23 net profit)^(1/3) - 1) x 100 | fundamentals-timeseries.annualNetIncome |
+
+### Share-price history
+
+Window: 2021-09-27 to 2026-09-25 (requested 5 years, covered 4.99 years). Basis: Daily closing prices adjusted for stock splits and dividends (if the market is open, the final point is the latest traded price rather than a close).
+
+| Metric | Value | Date / period | Status |
+|---|---|---|---|
+| startPrice | ₹760.38 per share | As of 2021-09-27 | REPORTED |
+| endPrice | ₹735.60 per share | As of 2026-09-25 | REPORTED |
+| totalReturnPercent | -3.26% | 2021-09-27 to 2026-09-25 | CALCULATED |
+| priceCagrPercent | -0.66% | 2021-09-27 to 2026-09-25 | CALCULATED |
+| periodHigh | ₹996.42 per share | As of 2025-07-30 | CALCULATED |
+| periodLow | ₹606.49 per share | As of 2022-06-16 | CALCULATED |
+| maxDrawdownPercent | -31.04% | 2021-09-27 to 2026-09-25 | CALCULATED |
+
+Maximum drawdown peak 2025-07-30, trough 2026-09-09.
+
+| Year | From | To | Close | Return |
+|---|---|---|---|---|
+| 2021 | - | 2021-12-31 | 692.21 | n/a (no prior year-end in window) |
+| 2022 | 2021-12-31 | 2022-12-30 | 770.67 | 11.33% |
+| 2023 | 2022-12-30 | 2023-12-29 | 818.33 | 6.19% |
+| 2024 | 2023-12-29 | 2024-12-31 | 860.37 | 5.14% |
+| 2025 | 2024-12-31 | 2025-12-31 | 975.07 | 13.33% |
+| 2026 (YTD, partial) | 2025-12-31 | 2026-09-25 | 735.60 | -24.56% |
+
+### Shareholding
+
+Shareholding data was not available from the configured provider.
+
+## 2. OBSERVATIONS
+
+_Patterns directly visible in the facts, stated by the application. They describe what the data shows, not why._
+
+- Net profit rose 4.65% (FY26 vs the prior fiscal year).
+- Return on equity for FY26 was 8.90%.
+- Return on assets for FY26 was 1.40%.
+- Total debt was 0.81x shareholders' equity at the end of FY26.
+- Net profit grew at a compound annual rate of 12.47% over FY23 to FY26 (3 years).
+- The share price changed at a compound annual rate of -0.66% from 2021-09-27 to 2026-09-25 (4.99 years); total return -3.26%.
+- The largest peak-to-trough fall in the window was -31.04% (peak 2025-07-30, trough 2026-09-09).
+- Across full calendar years in the window, annual price returns ranged from 5.14% (2024) to 13.33% (2025).
+- 2026 year-to-date (to 2026-09-25, a partial year) the price return was -24.56%.
+
+Withheld because they depend on fields in a DATA_CONFLICT:
+- ~~Revenue rose 4.73% (FY26 vs the prior fiscal year).~~
+- ~~Net profit margin was 41.10% in FY23 and 36.60% in FY26.~~
+- ~~Revenue grew at a compound annual rate of 16.90% over FY23 to FY26 (3 years).~~
+- ~~Revenue quarter-on-quarter rose 0.16% (Q1 FY27 vs Q4 FY26, not year-on-year).~~
+
+## 3. RISKS / DATA GAPS
+
+- **DATA_CONFLICT:** TTM revenue (₹2.95 lakh crore (₹2,94,964 crore), financialData.totalRevenue) and the sum of the four reported quarters Q2 FY26 to Q1 FY27 (₹1.84 lakh crore (₹1,84,406 crore), earnings.financialsChart.quarterly.revenue) cover the same period but differ by 59.95%. Yahoo Finance uses different definitions for these fields. Neither is chosen, and no conclusion should be drawn from either. Fields: financialData.totalRevenue, earnings.financialsChart.quarterly.revenue
+- **DATA_CONFLICT:** TTM revenue (₹2.95 lakh crore (₹2,94,964 crore), TTM to Q1 FY27 (ending 2026-06-30), financialData.totalRevenue) and FY26 annual revenue (₹1.93 lakh crore (₹1,92,567 crore), fundamentals-timeseries.annualTotalRevenue) differ by 53.18%, more than one quarter's growth could explain. Yahoo Finance uses different revenue definitions for these fields. Neither is chosen; do not compare them or derive growth between them. Fields: financialData.totalRevenue, fundamentals-timeseries.annualTotalRevenue
+- **Financials (reported) / ebitda:** Yahoo Finance did not publish financialData.ebitda
+- **Financials (reported) / freeCashFlow:** Yahoo Finance did not publish financialData.freeCashflow
+- **Financials (reported) / debtToEquityPercent:** Yahoo Finance did not publish financialData.debtToEquity
+- **Financials (reported) / returnOnCapitalEmployedPercent:** Yahoo Finance publishes no capital-employed figure, so ROCE is not available from this source
+- **Shareholding / promoter / FII / DII / public split:** Shareholding data was not available from the configured provider. (CAPABILITY_NOT_SUPPORTED)
+
+## 4. INTERPRETATION
+
+_What the available evidence may suggest, generated by the language model from the sections above. This is interpretation, not fact, and not investment advice._
+
+The available evidence suggests HDFC Bank Limited reported a 4.65% year-over-year increase in net profit for FY26, with a return on equity (ROE) of 8.90% and return on assets (ROA) of 1.40% for the same period. Total debt stood at 0.81x shareholders’ equity as of FY26, indicating a relatively stable capital structure. Net profit grew at a 12.47% compound annual rate from FY23 to FY26, while the share price declined by 0.66% annually over 4.99 years, resulting in a total return of -3.26% since 2021. However, the data conflicts surrounding revenue metrics—such as the 59.95% discrepancy between TTM revenue figures—limit confidence in financial performance comparisons. The share price also experienced a peak-to-trough drawdown of -31.04% between 2025 and 2026, highlighting volatility in equity valuation.
+
+The data gaps and conflicts significantly affect confidence in key financial metrics. Revenue figures from different sources differ by over 50%, and critical metrics like EBITDA, free cash flow, debt-to-equity, and ROCE are unavailable, limiting analysis of profitability and leverage. Sector-specific context notes that traditional metrics like EBITDA and ROA are less meaningful for banks, but their absence still reduces the depth of financial insight. The lack of shareholding data further restricts understanding of ownership structure and potential investor influence.
+
+A reader should verify the reconciliation of conflicting revenue definitions (financialData.totalRevenue vs. earnings.financialsChart.quarterly.revenue) and explore alternative data sources for EBITDA, free cash flow, and debt-to-equity ratios. Cross-referencing FY26 financials with filings or other platforms may help resolve discrepancies. Additionally, analyzing recent quarterly results and sector-specific benchmarks could provide further context for the bank’s performance and risk profile.
+
+## 5. SOURCES
+
+- Yahoo Finance [MARKET_DATA_PROVIDER] - Company profile and market capitalisation; as of 2026-09-25
+- Yahoo Finance [MARKET_DATA_PROVIDER] - Financial statements, quarterly results and ratios; period end 2026-06-30; results published 2026-07-18; as of 2026-06-30
+- Yahoo Finance [MARKET_DATA_PROVIDER] - Historical share prices; as of 2026-09-25
+

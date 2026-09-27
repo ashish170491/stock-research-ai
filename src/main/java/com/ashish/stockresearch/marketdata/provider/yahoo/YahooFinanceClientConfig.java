@@ -11,9 +11,16 @@ import org.springframework.web.client.RestClient;
 @Profile("!mock")
 public class YahooFinanceClientConfig {
 
+    /** One throttle for both clients: the limit is on what this application sends Yahoo in total. */
     @Bean
-    public RestClient yahooFinanceRestClient(RestClient.Builder builder, YahooFinanceProperties properties) {
-        return yahooClient(builder, properties, properties.baseUrl());
+    YahooRequestThrottle yahooRequestThrottle(YahooFinanceProperties properties) {
+        return new YahooRequestThrottle(properties.requestsPerSecond());
+    }
+
+    @Bean
+    public RestClient yahooFinanceRestClient(RestClient.Builder builder, YahooFinanceProperties properties,
+                                             YahooRequestThrottle throttle) {
+        return yahooClient(builder, properties, properties.baseUrl(), throttle);
     }
 
     /**
@@ -21,11 +28,13 @@ public class YahooFinanceClientConfig {
      * the session cookie is not the host that serves the API.
      */
     @Bean
-    public RestClient yahooCookieRestClient(RestClient.Builder builder, YahooFinanceProperties properties) {
-        return yahooClient(builder, properties, properties.cookieUrl());
+    public RestClient yahooCookieRestClient(RestClient.Builder builder, YahooFinanceProperties properties,
+                                            YahooRequestThrottle throttle) {
+        return yahooClient(builder, properties, properties.cookieUrl(), throttle);
     }
 
-    private RestClient yahooClient(RestClient.Builder builder, YahooFinanceProperties properties, String baseUrl) {
+    private RestClient yahooClient(RestClient.Builder builder, YahooFinanceProperties properties, String baseUrl,
+                                   YahooRequestThrottle throttle) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         int timeoutMs = (int) properties.timeoutMs();
         requestFactory.setConnectTimeout(timeoutMs);
@@ -35,6 +44,7 @@ public class YahooFinanceClientConfig {
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.USER_AGENT, properties.userAgent())
                 .requestFactory(requestFactory)
+                .requestInterceptor(throttle)
                 .build();
     }
 }
