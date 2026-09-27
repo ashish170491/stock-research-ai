@@ -28,13 +28,27 @@ enough to hold five tool schemas, their JSON results and the model's reasoning a
 once; at the default, a question that calls several tools silently loses the
 earliest results.
 
-## How to test the endpoint
+## How to try it
+
+Open http://localhost:8080 for the chat UI. It shows how each message was
+routed, which companies the answer is about, how long it took, and anything
+the verifiers removed. The Report tab builds a full research report for one
+company.
+
+The same chat over HTTP. Reuse the returned `conversationId` to continue a
+conversation; follow-ups such as "and its debt?" are answered about the
+company discussed earlier:
 
 ```bash
-curl "http://localhost:8080/api/ai/chat?message=Explain%20Spring%20AI%20in%20two%20sentences"
+curl -s localhost:8080/api/ai/chat -H 'Content-Type: application/json' \
+  -d '{"conversationId": "demo-1", "message": "Research Infosys"}'
+curl -s localhost:8080/api/ai/chat -H 'Content-Type: application/json' \
+  -d '{"conversationId": "demo-1", "message": "And its debt?"}'
 ```
 
-If Ollama isn't running, the endpoint returns HTTP 503 with an explanatory message instead of a stack trace.
+The reply is JSON: `conversationId`, `intent`, `companies`, `answer` (Markdown)
+and `elapsedMillis`. If Ollama isn't running, the endpoint returns HTTP 503
+with an explanatory message instead of a stack trace.
 
 ## Research tools
 

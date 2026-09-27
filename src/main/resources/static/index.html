@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Research</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1c2129; --muted: #5d6673; --line: #e2e5ea;
+    --accent: #2458d6; --accent-soft: #e8eefc; --user: #2458d6; --user-text: #ffffff;
+    --warn-bg: #fff6e0; --warn-line: #e8b93a; --warn-text: #6b4e00;
+    --err-bg: #fdecec; --err-text: #9b1c1c; --code: #f1f3f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #1a1e24; --text: #e6e9ee; --muted: #9aa3af; --line: #2c323b;
+      --accent: #7aa2ff; --accent-soft: #1f2a44; --user: #3b63d6; --user-text: #ffffff;
+      --warn-bg: #2e2612; --warn-line: #a07c1c; --warn-text: #f0d68a;
+      --err-bg: #3a1a1a; --err-text: #f4b4b4; --code: #232830;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  .tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 8px; padding: 3px; }
+  .tabs button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+  .tabs button[aria-selected="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .spacer { flex: 1; }
+  .conv { color: var(--muted); font-size: 13px; }
+  .conv code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  button.secondary {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    padding: 6px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 14px;
+  }
+  button.secondary:hover { border-color: var(--accent); }
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .view { flex: 1; min-height: 0; display: none; flex-direction: column; }
+  .view.active { display: flex; }
+  .scroll { flex: 1; overflow-y: auto; padding: 20px 16px; }
+  .column { max-width: 920px; margin: 0 auto; }
+  .empty { color: var(--muted); text-align: center; margin-top: 12vh; }
+  .empty h2 { color: var(--text); font-size: 18px; margin-bottom: 6px; }
+  .msg { margin: 0 0 18px; display: flex; flex-direction: column; }
+  .msg.user { align-items: flex-end; }
+  .bubble { max-width: 100%; border-radius: 12px; padding: 10px 14px; overflow-wrap: anywhere; }
+  .user .bubble { background: var(--user); color: var(--user-text); max-width: 80%; white-space: pre-wrap; }
+  .assistant .bubble { background: var(--panel); border: 1px solid var(--line); width: 100%; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; font-size: 12px; color: var(--muted); align-items: center; }
+  .chip { background: var(--accent-soft); color: var(--accent); padding: 1px 8px; border-radius: 999px; font-weight: 600; letter-spacing: .02em; }
+  .chip.plain { background: var(--code); color: var(--muted); font-weight: 500; }
+  .error .bubble { background: var(--err-bg); color: var(--err-text); border-color: transparent; }
+  .pending { color: var(--muted); font-style: italic; }
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md h1 { font-size: 20px; } .md h2 { font-size: 17px; margin-top: 22px; } .md h3 { font-size: 15px; }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; font-size: 13px; margin: 10px 0; }
+  .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  .md th { background: var(--code); }
+  .md code { background: var(--code); padding: 1px 4px; border-radius: 4px; font-size: 13px; }
+  .md pre { background: var(--code); padding: 10px; border-radius: 8px; overflow-x: auto; }
+  .md blockquote { margin: 10px 0; padding: 6px 12px; border-left: 3px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-text); border-radius: 0 8px 8px 0; }
+  .md a { color: var(--accent); }
+  /* What the verifiers removed: made visible so it can be checked, not hidden in italics. */
+  .md em.verifier { display: block; font-style: normal; background: var(--warn-bg); color: var(--warn-text);
+    border-left: 3px solid var(--warn-line); padding: 6px 10px; border-radius: 0 8px 8px 0; margin: 8px 0; }
+  .md em.verifier::before { content: "Verifier: "; font-weight: 700; }
+  .composer { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px; }
+  .suggestions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .suggestions button { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 999px;
+    padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .suggestions button:hover { border-color: var(--accent); color: var(--accent); }
+  form.row { display: flex; gap: 8px; }
+  textarea, input[type=text] {
+    flex: 1; resize: none; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-width: 0;
+  }
+  textarea:focus, input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button.primary { border: 0; background: var(--accent); color: #fff; border-radius: 10px; padding: 0 18px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .report-bar { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  @media (max-width: 600px) { .user .bubble { max-width: 92%; } header { gap: 8px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stock Research</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-view="chat">Chat</button>
+    <button role="tab" aria-selected="false" data-view="report">Report</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="conv">Conversation <code id="conv-id"></code></span>
+  <button class="secondary" id="new-conv" title="Start a conversation with no memory">New conversation</button>
+</header>
+
+<main>
+  <section class="view active" id="view-chat">
+    <div class="scroll" id="chat-scroll">
+      <div class="column" id="messages"></div>
+    </div>
+    <div class="composer">
+      <div class="column">
+        <div class="suggestions" id="suggestions"></div>
+        <form class="row" id="chat-form">
+          <textarea id="chat-input" rows="2" placeholder="Ask about an NSE/BSE company…"></textarea>
+          <button class="primary" id="send" type="submit">Send</button>
+        </form>
+        <div class="hint">Enter sends · Shift+Enter adds a line · answers are checked against the data before they are shown</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-report">
+    <div class="report-bar">
+      <form class="row column" id="report-form">
+        <input type="text" id="report-symbol" placeholder="Symbol or company, e.g. INFY or HDFC Bank">
+        <button class="primary" type="submit">Build report</button>
+      </form>
+    </div>
+    <div class="scroll"><div class="column" id="report-out">
+      <div class="empty"><h2>Full research report</h2>Facts, observations, data gaps and sources built in Java, plus a verified interpretation.</div>
+    </div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const STORE_KEY = 'stock-research-chat';
+  const SUGGESTIONS = ['Research Infosys', 'How has it performed over 5 years?', 'And its debt?',
+                       'Price of TCS', 'Compare it with Wipro'];
+  const $ = id => document.getElementById(id);
+  const messagesEl = $('messages'), scrollEl = $('chat-scroll'), input = $('chat-input'), sendBtn = $('send');
+
+  // --- state: the conversation id and the transcript survive a page refresh (per tab) ---
+  let state = load() || fresh();
+  function fresh() { return { conversationId: newId(), messages: [] }; }
+  function newId() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)); }
+  function load() { try { return JSON.parse(sessionStorage.getItem(STORE_KEY)); } catch { return null; } }
+  function save() { try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } }
+
+  // --- rendering ---
+  function markdown(text) {
+    if (window.marked && window.DOMPurify) {
+      const html = DOMPurify.sanitize(marked.parse(text || '', { gfm: true, breaks: false }));
+      const box = document.createElement('div');
+      box.className = 'md';
+      box.innerHTML = html;
+      box.querySelectorAll('em').forEach(em => {
+        if (/\b(removed|Removed)\b/.test(em.textContent) && /(sentence|statement)\(s\)/.test(em.textContent)) {
+          em.classList.add('verifier');
+        }
+      });
+      return box;
+    }
+    const pre = document.createElement('div');
+    pre.className = 'md';
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.textContent = text || '';
+    return pre;
+  }
+
+  function chip(text, plain) {
+    const c = document.createElement('span');
+    c.className = plain ? 'chip plain' : 'chip';
+    c.textContent = text;
+    return c;
+  }
+
+  function renderMessage(m) {
+    const row = document.createElement('div');
+    row.className = 'msg ' + m.role + (m.error ? ' error' : '');
+    if (m.role === 'assistant' && !m.error && m.intent) {
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.append(chip(m.intent.replace(/_/g, ' ')));
+      (m.companies || []).forEach(c => meta.append(chip(c, true)));
+      meta.append(document.createTextNode((m.elapsedMillis / 1000).toFixed(m.elapsedMillis < 10000 ? 2 : 1) + 's'));
+      row.append(meta);
+    }
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    if (m.role === 'assistant' && !m.error) bubble.append(markdown(m.text));
+    else bubble.textContent = m.text;
+    row.append(bubble);
+    return row;
+  }
+
+  function renderAll() {
+    $('conv-id').textContent = state.conversationId.slice(0, 8);
+    $('conv-id').title = state.conversationId;
+    messagesEl.replaceChildren();
+    if (!state.messages.length) {
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.innerHTML = '<h2>Ask about a listed company</h2>Try the suggestions below in order: the follow-ups name no company, so they show whether the conversation is remembered.';
+      messagesEl.append(e);
+    }
+    state.messages.forEach(m => messagesEl.append(renderMessage(m)));
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+
+  // --- sending ---
+  async function send(text) {
+    text = text.trim();
+    if (!text || sendBtn.disabled) return;
+    state.messages.push({ role: 'user', text });
+    save(); renderAll();
+    input.value = '';
+    sendBtn.disabled = true;
+
+    const pending = document.createElement('div');
+    pending.className = 'msg assistant';
+    pending.innerHTML = '<div class="bubble pending">Working… <span>0</span>s</div>';
+    messagesEl.append(pending);
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+    const started = Date.now();
+    const timer = setInterval(() => pending.querySelector('span').textContent = Math.round((Date.now() - started) / 1000), 1000);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: state.conversationId, message: text })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || body.error || ('HTTP ' + res.status));
+      state.messages.push({ role: 'assistant', text: body.answer, intent: body.intent,
+                            companies: body.companies, elapsedMillis: body.elapsedMillis });
+    } catch (err) {
+      state.messages.push({ role: 'assistant', error: true, text: 'Request failed: ' + err.message });
+    } finally {
+      clearInterval(timer);
+      sendBtn.disabled = false;
+      save(); renderAll();
+      input.focus();
+    }
+  }
+
+  $('chat-form').addEventListener('submit', e => { e.preventDefault(); send(input.value); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(input.value); }
+  });
+  SUGGESTIONS.forEach(s => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = s;
+    b.addEventListener('click', () => send(s));
+    $('suggestions').append(b);
+  });
+  $('new-conv').addEventListener('click', () => { state = fresh(); save(); renderAll(); input.focus(); });
+
+  // --- tabs ---
+  document.querySelectorAll('.tabs button').forEach(tab => tab.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach(t => t.setAttribute('aria-selected', String(t === tab)));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab.dataset.view));
+  }));
+
+  // --- report view ---
+  $('report-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const symbol = $('report-symbol').value.trim();
+    if (!symbol) return;
+    const out = $('report-out');
+    const started = Date.now();
+    out.innerHTML = '<p class="pending">Building the report for ' + symbol.replace(/[<>&]/g, '') + '… <span>0</span>s</p>';
+    const timer = setInterval(() => { const s = out.querySelector('.pending span'); if (s) s.textContent = Math.round((Date.now() - started) / 1000); }, 1000);
+    try {
+      const res = await fetch('/api/research/report?symbol=' + encodeURIComponent(symbol));
+      const text = await res.text();
+      if (!res.ok) { let msg = text; try { msg = JSON.parse(text).message || msg; } catch {} throw new Error(msg); }
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.append(chip('REPORT'), document.createTextNode(((Date.now() - started) / 1000).toFixed(1) + 's'));
+      out.replaceChildren(meta, markdown(text));
+    } catch (err) {
+      out.innerHTML = '';
+      const e2 = document.createElement('div');
+      e2.className = 'msg error'; e2.innerHTML = '<div class="bubble"></div>';
+      e2.firstChild.textContent = 'Request failed: ' + err.message;
+      out.append(e2);
+    } finally { clearInterval(timer); }
+  });
+
+  renderAll();
+  input.focus();
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,11 @@
 spring:
   application:
     name: stock-research-ai
+  web:
+    error:
+      # The reasons this application gives (e.g. "Could not reach Ollama...") are
+      # written for the user; show them in error responses and in the UI.
+      include-message: always
   threads:
     virtual:
       # Request handling and blocking Yahoo calls run on virtual threads, so a

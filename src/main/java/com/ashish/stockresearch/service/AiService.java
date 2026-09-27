@@ -1,6 +1,9 @@
 package com.ashish.stockresearch.service;
 
+import com.ashish.stockresearch.agent.Intent;
 import com.ashish.stockresearch.agent.RequestRouter;
+import com.ashish.stockresearch.agent.ResearchSession;
+import com.ashish.stockresearch.agent.ResearchSessions;
 import com.ashish.stockresearch.agent.RoutedRequest;
 import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
@@ -12,10 +15,15 @@ import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
@@ -75,6 +83,17 @@ public class AiService {
 	private final UnsupportedClaimFilter claimFilter;
 	private final NumericClaimVerifier numericVerifier;
 	private final OllamaCalls ollama;
+	private final ChatMemory chatMemory;
+	private final ResearchSessions sessions;
+
+	/**
+	 * What a chat turn produced.
+	 *
+	 * @param companies the companies the answer is about: those routed to, or else those the tools
+	 *                  were called for; empty when none
+	 */
+	public record ChatAnswer(Intent intent, List<String> companies, String text) {
+	}
 
 	public AiService(ChatClient.Builder chatClientBuilder,
 			RequestRouter router,
@@ -85,7 +104,9 @@ public class AiService {
 			StockMarketDataService stockMarketDataService,
 			UnsupportedClaimFilter claimFilter,
 			NumericClaimVerifier numericVerifier,
-			OllamaCalls ollama) {
+			OllamaCalls ollama,
+			ChatMemory chatMemory,
+			ResearchSessions sessions) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -103,6 +124,8 @@ public class AiService {
 		this.claimFilter = claimFilter;
 		this.numericVerifier = numericVerifier;
 		this.ollama = ollama;
+		this.chatMemory = chatMemory;
+		this.sessions = sessions;
 	}
 
 	/**
@@ -116,18 +139,55 @@ public class AiService {
 	 *       what the tools returned;</li>
 	 *   <li>NOT_STOCK_RELATED - a plain answer without tools.</li>
 	 * </ul>
+	 *
+	 * The conversation's history is passed to the two model paths. What is remembered is what the
+	 * user was shown - the screened answer, never the model's draft, so a removed claim cannot come
+	 * back from memory. A Java-rendered report is remembered as a one-line note rather than in full:
+	 * it would fill the context, and the model should fetch figures, not recall them.
 	 */
-	public String chat(String message) {
-		RoutedRequest request = router.route(message);
-		return switch (request.intent()) {
-			case FULL_RESEARCH -> researchReportWriter.write(request.companies().get(0));
-			case QUOTE -> request.companies().stream().map(this::quote).collect(Collectors.joining("\n\n"));
-			case COMPARE -> request.companies().stream().map(researchReportWriter::write)
-					.collect(Collectors.joining("\n\n---\n\n"));
-			case SPECIFIC_QUESTION -> answerWithTools(message);
-			case NOT_STOCK_RELATED -> ollama.call(() -> ResearchReportWriter.stripThinking(
-					generalClient.prompt().user(message).call().content()));
-		};
+	public ChatAnswer chat(String conversationId, String message) {
+		ResearchSession session = sessions.get(conversationId);
+		RoutedRequest request = router.route(message, session);
+		List<String> companies = request.companies();
+		String answer;
+		switch (request.intent()) {
+			case FULL_RESEARCH -> {
+				answer = researchReportWriter.write(companies.get(0));
+				remember(conversationId, message, "[The full research report on " + companies.get(0)
+						+ " was shown to the user.]");
+			}
+			case QUOTE -> {
+				answer = companies.stream().map(this::quote).collect(Collectors.joining("\n\n"));
+				session.addEvidence(answer);
+				remember(conversationId, message, answer);
+			}
+			case COMPARE -> {
+				answer = companies.stream().map(researchReportWriter::write).collect(Collectors.joining("\n\n---\n\n"));
+				remember(conversationId, message, "[Full research reports on " + String.join(" and ", companies)
+						+ " were shown to the user.]");
+			}
+			case SPECIFIC_QUESTION -> {
+				ToolUsage usage = new ToolUsage();
+				answer = answerWithTools(conversationId, message, companies, usage, session);
+				if (companies.isEmpty()) {
+					companies = usage.calls().stream().map(ToolUsage.Call::symbol)
+							.filter(symbol -> symbol != null && !symbol.isBlank()).distinct().toList();
+				}
+			}
+			case NOT_STOCK_RELATED -> {
+				List<Message> history = chatMemory.get(conversationId);
+				answer = ollama.call(() -> ResearchReportWriter.stripThinking(
+						generalClient.prompt().messages(history).user(message).call().content()));
+				remember(conversationId, message, answer);
+			}
+			default -> throw new IllegalStateException("Unhandled intent " + request.intent());
+		}
+		session.rememberCompanies(companies);
+		return new ChatAnswer(request.intent(), companies, answer);
+	}
+
+	private void remember(String conversationId, String question, String shown) {
+		chatMemory.add(conversationId, List.of(new UserMessage(question), new AssistantMessage(shown)));
 	}
 
 	/** The same report the chat returns for a research request, for callers who already know the company. */
@@ -135,14 +195,27 @@ public class AiService {
 		return researchReportWriter.write(symbol);
 	}
 
-	private String answerWithTools(String message) {
-		ToolUsage usage = new ToolUsage();
-		String answer = ollama.call(() -> ResearchReportWriter.stripThinking(toolClient.prompt()
-				.user(message)
+	/**
+	 * The tool loop. Every answer is screened - also one given without calling a tool, which
+	 * could otherwise repeat a figure from memory unchecked - against what the tools returned in
+	 * this turn and in the conversation's earlier turns. A figure found in neither is removed.
+	 */
+	private String answerWithTools(String conversationId, String message, List<String> companies, ToolUsage usage,
+			ResearchSession session) {
+		List<Message> history = chatMemory.get(conversationId);
+		// A follow-up such as "and its debt?" names no company; say which one the router resolved.
+		String prompt = companies.isEmpty() ? message
+				: message + "\n\n(This question is about: " + String.join(", ", companies) + ".)";
+		String draft = ollama.call(() -> ResearchReportWriter.stripThinking(toolClient.prompt()
+				.messages(history)
+				.user(prompt)
 				.toolContext(usage.asToolContext())
 				.call()
 				.content()));
-		return usage.calls().isEmpty() ? answer : screened(answer, usage.evidence());
+		String answer = screened(draft, usage.evidence() + "\n" + session.earlierEvidence());
+		session.addEvidence(usage.evidence());
+		remember(conversationId, message, answer);
+		return answer;
 	}
 
 	private String quote(String company) {
