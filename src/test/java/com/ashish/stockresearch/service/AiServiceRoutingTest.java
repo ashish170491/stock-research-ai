@@ -311,4 +311,26 @@ class AiServiceRoutingTest {
         assertThat(chatMemory.get("first")).hasSize(2);
         assertThat(chatMemory.get("second")).hasSize(2);
     }
+
+    @Test
+    void asksWhichCompanyInsteadOfGuessingWhenAFollowUpHasNothingToReferTo() {
+        routes("And its debt?", Intent.SPECIFIC_QUESTION);
+
+        AiService.ChatAnswer answer = service(UNUSED).chat("fresh", "And its debt?");
+
+        assertThat(answer.text()).isEqualTo(AiService.NAME_THE_COMPANY);
+        assertThat(answer.companies()).isEmpty();
+        // Remembered, so the reply "Infosys" is understood as the answer to the question.
+        assertThat(chatMemory.get("fresh")).hasSize(2);
+    }
+
+    @Test
+    void answersAGeneralQuestionThatSaysItWithoutAskingForACompany() {
+        routes("How is it calculated?", Intent.SPECIFIC_QUESTION);
+        ScriptedModel model = new ScriptedModel(messages -> text("It is price divided by earnings per share."));
+
+        String answer = service(model).chat("fresh", "How is it calculated?").text();
+
+        assertThat(answer).isEqualTo("It is price divided by earnings per share.");
+    }
 }

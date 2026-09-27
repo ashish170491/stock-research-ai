@@ -96,6 +96,24 @@ public class RequestRouter {
         this.directory = directory;
     }
 
+    /**
+     * Strictly a follow-up about a company - "and its debt?", "what about their margins?" - as
+     * opposed to a general question that happens to say "it" ("how is it calculated?").
+     */
+    private static final Pattern ABOUT_AN_UNNAMED_COMPANY = Pattern.compile(
+            "\\b(?:its|their)\\b|\\bthe (?:company|stock|bank|firm)\\b|^\\s*(?:and|what about|how about)\\b",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * True when a message is about a company it does not name and the conversation has not named
+     * one either. Answering it would mean guessing a company, so the user is asked instead.
+     */
+    public static boolean needsACompany(String message, RoutedRequest routed, ResearchSession session) {
+        return routed.intent() == Intent.SPECIFIC_QUESTION && routed.companies().isEmpty()
+                && (session == null || session.companies().isEmpty())
+                && message != null && ABOUT_AN_UNNAMED_COMPANY.matcher(message).find();
+    }
+
     public RoutedRequest route(String message) {
         return route(message, null);
     }
@@ -158,7 +176,35 @@ public class RequestRouter {
                     message, ex.getMessage());
             routed = RoutedRequest.specificQuestion();
         }
+        routed = onlyCompaniesInTheMessage(routed, message, earlier);
         return validated(refersBack ? withEarlierCompanies(routed, earlier) : routed);
+    }
+
+    /** Words in a company name that say nothing about which company it is. */
+    private static final Set<String> GENERIC_NAME_WORDS = Set.of("ltd", "limited", "inc", "corp", "corporation", "co",
+            "company", "the", "and", "of", "india", "indian", "bank", "industries", "services", "finance",
+            "financial", "technologies", "technology", "motors", "group", "enterprises", "holdings");
+
+    /**
+     * Drops a company the model added that the message does not name - asked "and its debt?" with
+     * nothing to refer to, a model has answered "Reliance Industries Ltd". A company is kept when a
+     * distinctive word of its name appears in the message, or the conversation discussed it.
+     */
+    static RoutedRequest onlyCompaniesInTheMessage(RoutedRequest routed, String message, List<String> earlier) {
+        if (routed == null || routed.intent() == null || routed.companies().isEmpty() || message == null) {
+            return routed;
+        }
+        Set<String> messageWords = Set.copyOf(Arrays.asList(message.toLowerCase(Locale.ROOT).split("[^\\p{Alnum}&]+")));
+        List<String> named = routed.companies().stream()
+                .filter(company -> earlier.contains(company) || Arrays.stream(
+                                company.toLowerCase(Locale.ROOT).split("[^\\p{Alnum}&]+"))
+                        .filter(word -> !word.isBlank() && !GENERIC_NAME_WORDS.contains(word))
+                        .anyMatch(messageWords::contains))
+                .toList();
+        if (named.size() < routed.companies().size()) {
+            log.warn("Routing model named companies the message does not: {} -> kept {}", routed.companies(), named);
+        }
+        return new RoutedRequest(routed.intent(), named);
     }
 
     /**

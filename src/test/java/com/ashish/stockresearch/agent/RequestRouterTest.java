@@ -283,4 +283,32 @@ class RequestRouterTest {
 
         assertThat(routed).isEqualTo(new RoutedRequest(Intent.SPECIFIC_QUESTION, List.of("INFY")));
     }
+
+    @Test
+    void dropsACompanyTheModelAddedThatTheMessageDoesNotName() {
+        // Seen live: asked with nothing to refer to, the model answered with a company of its own.
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"Reliance Industries Ltd\"]}");
+
+        RoutedRequest routed = router(model).route("And its debt?", new ResearchSession());
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.SPECIFIC_QUESTION, List.of()));
+    }
+
+    @Test
+    void keepsACompanyNamedByADistinctiveWordOfItsName() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"Reliance Industries Ltd\"]}");
+
+        RoutedRequest routed = router(model).route("What is Reliance's debt?", new ResearchSession());
+
+        assertThat(routed.companies()).containsExactly("Reliance Industries Ltd");
+    }
+
+    @Test
+    void aGenericWordAloneDoesNotCountAsNamingACompany() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"HDFC Bank\"]}");
+
+        RoutedRequest routed = router(model).route("What about the bank's deposits?", new ResearchSession());
+
+        assertThat(routed.companies()).isEmpty();
+    }
 }

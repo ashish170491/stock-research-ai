@@ -154,7 +154,11 @@ class UnsupportedClaimFilterTest {
             "The share price, however, fell 37.54% over five years, with a peak-to-trough decline of 53.39%, "
                     + "suggesting market pressures or sector-specific challenges.",
             "The quarter-on-quarter revenue growth of 2.23% in Q1 FY27 contrasts with the slower net profit growth, "
-                    + "raising questions about cost management or pricing pressures."})
+                    + "raising questions about cost management or pricing pressures.",
+            // Reliance Industries answer seen in the UI test, 2026-09-27:
+            "The debt-to-equity ratio is 36.65%, indicating a moderate level of leverage.",
+            "These figures suggest the company maintains a balanced capital structure, though the presence of "
+                    + "DATA_CONFLICTs in other financial metrics highlights potential inconsistencies in the data sources."})
     void removesQualitativeLabelsForWhichNoCriteriaExist(String sentence) {
         UnsupportedClaimFilter.Result result = filter.filter("The reported ROE was 16.89% for FY26. " + sentence, EVIDENCE);
 

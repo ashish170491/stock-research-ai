@@ -72,6 +72,9 @@ public class AiService {
 			prices; the research features of this application provide those.
 			""";
 
+	static final String NAME_THE_COMPANY = "Which company do you mean? This conversation has not discussed one yet. "
+			+ "Name it and ask again, for example \"What is Infosys's debt?\"";
+
 	private static final DateTimeFormatter QUOTE_TIME =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z").withZone(ZoneId.of("Asia/Kolkata"));
 
@@ -167,6 +170,12 @@ public class AiService {
 						+ " were shown to the user.]");
 			}
 			case SPECIFIC_QUESTION -> {
+				if (RequestRouter.needsACompany(message, request, session)) {
+					// Never let the model pick a company the user did not name.
+					answer = NAME_THE_COMPANY;
+					remember(conversationId, message, answer);
+					break;
+				}
 				ToolUsage usage = new ToolUsage();
 				answer = answerWithTools(conversationId, message, companies, usage, session);
 				if (companies.isEmpty()) {

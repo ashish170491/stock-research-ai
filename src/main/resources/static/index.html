@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stock Research</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232458d6'/%3E%3Cpath d='M3 11l3-3 2 2 5-5' stroke='white' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <style>
@@ -11,14 +12,14 @@
     --bg: #f6f7f9; --panel: #ffffff; --text: #1c2129; --muted: #5d6673; --line: #e2e5ea;
     --accent: #2458d6; --accent-soft: #e8eefc; --user: #2458d6; --user-text: #ffffff;
     --warn-bg: #fff6e0; --warn-line: #e8b93a; --warn-text: #6b4e00;
-    --err-bg: #fdecec; --err-text: #9b1c1c; --code: #f1f3f6;
+    --err-bg: #fdecec; --err-text: #9b1c1c; --code: #f1f3f6; --on-accent: #ffffff;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #111418; --panel: #1a1e24; --text: #e6e9ee; --muted: #9aa3af; --line: #2c323b;
       --accent: #7aa2ff; --accent-soft: #1f2a44; --user: #3b63d6; --user-text: #ffffff;
       --warn-bg: #2e2612; --warn-line: #a07c1c; --warn-text: #f0d68a;
-      --err-bg: #3a1a1a; --err-text: #f4b4b4; --code: #232830;
+      --err-bg: #3a1a1a; --err-text: #f4b4b4; --code: #232830; --on-accent: #0b1430;
     }
   }
   * { box-sizing: border-box; }
@@ -85,7 +86,7 @@
     border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-width: 0;
   }
   textarea:focus, input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button.primary { border: 0; background: var(--accent); color: #fff; border-radius: 10px; padding: 0 18px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 10px; padding: 0 18px; font: inherit; font-weight: 600; cursor: pointer; }
   button.primary:disabled { opacity: .5; cursor: default; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   .report-bar { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
