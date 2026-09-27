@@ -58,4 +58,13 @@ class NumericClaimVerifierTest {
     void readsIndianDigitGrouping() {
         assertThat(verifier.verify("Market cap: ₹11,34,183 crore.", EVIDENCE).removedStatements()).isEmpty();
     }
+
+    @Test
+    void dropsTheConnectiveThatTiedAKeptSentenceToARemovedStatement() {
+        NumericClaimVerifier.Result result = verifier.verify(
+                "Revenue was ₹99,999.99 crore in FY26. However, shareholding data is unavailable.", EVIDENCE);
+
+        assertThat(result.text()).isEqualTo("Shareholding data is unavailable.");
+        assertThat(result.removedStatements()).hasSize(1);
+    }
 }
