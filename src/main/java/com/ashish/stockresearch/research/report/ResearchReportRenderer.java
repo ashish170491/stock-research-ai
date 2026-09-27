@@ -2,32 +2,46 @@ package com.ashish.stockresearch.research.report;
 
 import com.ashish.stockresearch.research.model.AnnualFinancials;
 import com.ashish.stockresearch.research.model.AnnualRatios;
+import com.ashish.stockresearch.research.model.CalculationInput;
+import com.ashish.stockresearch.research.model.CalculationStatus;
 import com.ashish.stockresearch.research.model.CalendarYearReturn;
 import com.ashish.stockresearch.research.model.CompanyProfile;
+import com.ashish.stockresearch.research.model.CompanyProfileResult;
+import com.ashish.stockresearch.research.model.CurrencyInfo;
 import com.ashish.stockresearch.research.model.DataGap;
 import com.ashish.stockresearch.research.model.DataQualityIssue;
+import com.ashish.stockresearch.research.model.DataStatus;
 import com.ashish.stockresearch.research.model.FinancialDataPoint;
 import com.ashish.stockresearch.research.model.FinancialSummary;
+import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HeadlineFinancials;
 import com.ashish.stockresearch.research.model.HistoricalPerformance;
+import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.QuarterlyResult;
 import com.ashish.stockresearch.research.model.ReportedFinancials;
+import com.ashish.stockresearch.research.model.ShareholdingResult;
 import com.ashish.stockresearch.research.sector.SectorContext;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
- * Renders a {@link StockResearchReport} as Markdown, deterministically.
- * FACTS, OBSERVATIONS, DATA GAPS and SOURCES are produced here from the
- * structured data, so the model never re-types a number; only the
+ * Renders research data as Markdown, deterministically - both the full
+ * {@link StockResearchReport} and the compact per-tool evidence the chat
+ * model reads. The model never re-types a number from JSON; only a report's
  * INTERPRETATION section comes from the model, and it is labelled as
  * analysis.
  *
- * Every financial value is shown with its period, calculation status, raw
- * provider value and unit, and source field. Values that depend on a field
- * in a DATA_CONFLICT are tagged so no reader mistakes them for settled.
+ * Every financial value is shown with its period, status, raw provider value
+ * and unit, and source field. A value that is not VALID is never shown as a
+ * usable result: a CALCULATED metric in DATA_CONFLICT or INVALID shows only
+ * its status; a REPORTED value in DATA_CONFLICT is tagged for the reader and
+ * withheld from the model.
  */
 @Component
 public class ResearchReportRenderer {
@@ -39,13 +53,16 @@ public class ResearchReportRenderer {
     private record Mask(Set<String> fields, boolean forModel) {
 
         boolean covers(FinancialDataPoint p) {
-            return p.dependsOnFields().stream().anyMatch(fields::contains);
+            return p.status() == DataStatus.DATA_CONFLICT || p.dependsOnFields().stream().anyMatch(fields::contains);
         }
     }
 
     static final String CONFLICT_TAG = " [DATA_CONFLICT]";
     /** What the model sees in place of a value that depends on a conflicting field. */
     static final String WITHHELD_FOR_MODEL = "WITHHELD - depends on a field in a DATA_CONFLICT";
+    static final String CALCULATION_NOTE = "CALCULATED values were computed by the application from the inputs shown "
+            + "in its calculation audit and verified against the source values before display. Quote them as given; "
+            + "never recalculate them, derive new figures from them, or convert their units or currency.";
 
     public String render(StockResearchReport report, String interpretation) {
         Mask conflicted = new Mask(report.conflictedFields(), false);
@@ -58,42 +75,39 @@ public class ResearchReportRenderer {
             md.append(" (period ended ").append(report.latestReportedQuarter().end()).append(")");
         }
         md.append(".\n\n");
-        renderConflicts(md, report);
+        renderConflicts(md, report.dataQualityIssues());
 
         md.append("## 1. FACTS\n\n_Values supplied by the stated source (REPORTED) or computed by the application "
                 + "from them (CALCULATED). Amounts are normalised to crore by the application only after the "
-                + "source's own format confirmed the raw unit._\n\n");
+                + "source's own format confirmed the raw unit; currencies are never converted._\n\n");
         renderFacts(md, report, conflicted);
 
-        md.append("## 2. OBSERVATIONS\n\n_Patterns directly visible in the facts, stated by the application. "
-                + "They describe what the data shows, not why._\n\n");
+        md.append("## 2. OBSERVATIONS\n\n_Patterns directly visible in the facts, stated by the application from "
+                + "VALID values only. They describe what the data shows, not why._\n\n");
         if (report.observations().isEmpty()) {
             md.append("- No observations could be derived from the available data.\n");
         }
         report.observations().forEach(o -> md.append("- ").append(o.statement()).append("\n"));
-        if (!report.withheldObservations().isEmpty()) {
-            md.append("\nWithheld because they depend on fields in a DATA_CONFLICT:\n");
-            report.withheldObservations().forEach(o -> md.append("- ~~").append(o.statement()).append("~~\n"));
-        }
+        renderWithheld(md, report.withheldObservations());
         md.append("\n");
 
         md.append("## 3. RISKS / DATA GAPS\n\n");
         if (report.dataQualityIssues().isEmpty() && report.dataGaps().isEmpty()) {
             md.append("- No data gaps were recorded.\n");
         }
-        for (DataQualityIssue issue : report.dataQualityIssues()) {
-            md.append("- **").append(issue.type()).append(":** ").append(issue.message())
-                    .append(" Fields: ").append(String.join(", ", issue.affectedFields())).append("\n");
-        }
-        for (DataGap gap : report.dataGaps()) {
-            md.append("- **").append(gap.area()).append(" / ").append(gap.item()).append(":** ")
-                    .append(gap.reason()).append("\n");
-        }
+        renderIssuesAndGaps(md, report.dataQualityIssues(), report.dataGaps());
         md.append("\n");
 
         md.append("## 4. INTERPRETATION\n\n_What the available evidence may suggest, generated by the language model "
-                        + "from the sections above. This is interpretation, not fact, and not investment advice._\n\n")
-                .append(interpretation == null || interpretation.isBlank()
+                + "from the sections above. This is interpretation, not fact, and not investment advice._\n\n");
+        List<String> withheldTopics = report.withheldTopics();
+        if (!withheldTopics.isEmpty()) {
+            md.append("**Conclusions withheld.** No interpretation was generated about: ")
+                    .append(String.join(", ", withheldTopics))
+                    .append(". The values these would rest on are in a DATA_CONFLICT, failed verification, or are not "
+                            + "primary indicators for this industry group (see OBSERVATIONS).\n\n");
+        }
+        md.append(interpretation == null || interpretation.isBlank()
                         ? "_No interpretation was generated._" : interpretation.strip())
                 .append("\n\n");
 
@@ -112,22 +126,34 @@ public class ResearchReportRenderer {
             }
             md.append("\n");
         }
+
+        if (report.financials().success() || report.historicalPerformance().success()) {
+            md.append("\n## Appendix - calculation audit\n\n_Every calculated metric with the exact inputs it used, its "
+                    + "formula, result and status. VALID results were reproduced independently from these inputs and "
+                    + "the inputs matched the source values._\n\n");
+            renderAudit(md, calculatedPoints(report));
+        }
         return md.toString();
     }
 
-    /** What the model is given to interpret: conflicts first, then facts, observations and gaps. */
+    /** What the model is given to interpret: conflicts first, then facts, observations, withheld topics and gaps. */
     public String renderEvidence(StockResearchReport report) {
         Mask conflicted = new Mask(report.conflictedFields(), true);
         StringBuilder md = new StringBuilder();
         md.append("Company: ").append(report.companyName()).append(" (").append(report.symbol()).append(")\n");
         md.append("Today: ").append(report.generatedOn()).append("; latest reported quarter: ")
                 .append(report.latestReportedQuarter().label()).append("\n\n");
-        renderConflicts(md, report);
+        renderConflicts(md, report.dataQualityIssues());
         // Conflicting values are left out entirely: the model reports the conflict but gets nothing to
         // draw a conclusion from, and is never asked to reconcile the two sides.
         renderFacts(md, report, conflicted);
         md.append("OBSERVATIONS\n");
         report.observations().forEach(o -> md.append("- ").append(o.statement()).append("\n"));
+        if (!report.withheldTopics().isEmpty()) {
+            md.append("\nNOT GENERATED - write no interpretation, trend or conclusion about: ")
+                    .append(String.join(", ", report.withheldTopics()))
+                    .append(". Say only that conclusions on these were withheld and why.\n");
+        }
         md.append("\nDATA GAPS AND DATA-QUALITY ISSUES\n");
         report.dataQualityIssues().forEach(i -> md.append("- ").append(i.type()).append(": ").append(i.message()).append("\n"));
         report.dataGaps().forEach(g -> md.append("- ").append(g.area()).append(" / ").append(g.item())
@@ -135,15 +161,106 @@ public class ResearchReportRenderer {
         return md.toString();
     }
 
-    private void renderConflicts(StringBuilder md, StockResearchReport report) {
-        List<DataQualityIssue> conflicts = report.dataQualityIssues().stream()
+    // --- Compact per-tool evidence for the chat model --------------------------------------------
+
+    public String renderCompanyProfileTool(CompanyProfileResult result, SectorContext sector) {
+        StringBuilder md = toolHeader("getCompanyProfile", result.success(), result.status(), result.message());
+        if (!result.success()) {
+            return md.toString();
+        }
+        CompanyProfile p = result.companyProfile();
+        md.append("Company: ").append(p.companyName()).append(" (").append(p.symbol()).append(", ")
+                .append(p.exchange()).append(")\n\n");
+        renderConflicts(md, p.dataQualityIssues());
+        renderCompany(md, p, new Mask(conflictedFields(p.dataQualityIssues()), true));
+        renderSector(md, sector);
+        md.append("This tool returns no revenue, profit, growth, return, leverage, share-price history or shareholding "
+                + "data. A fundamental overview needs getFinancialSummary, getHistoricalPerformance and "
+                + "getShareholding as well.\n\n");
+        renderIssuesAndGaps(md, p.dataQualityIssues(), List.of());
+        md.append(p.provenance().note()).append("\n");
+        return md.toString();
+    }
+
+    public String renderFinancialSummaryTool(FinancialSummaryResult result) {
+        StringBuilder md = toolHeader("getFinancialSummary", result.success(), result.status(), result.message());
+        if (!result.success()) {
+            return md.toString();
+        }
+        FinancialSummary summary = result.financialSummary();
+        ReportedFinancials reported = summary.reported();
+        md.append("Company: ").append(reported.companyName()).append(" (").append(reported.symbol()).append(")\n")
+                .append("Latest reported quarter: ").append(reported.latestReportedQuarter().label())
+                .append(" - never describe a later quarter as reported.\n\n");
+        renderConflicts(md, summary.dataQualityIssues());
+        renderFinancials(md, summary, new Mask(conflictedFields(summary.dataQualityIssues()), true));
+        md.append(CALCULATION_NOTE).append("\n\n");
+        List<FinancialDataPoint> notUsable = summary.calculated().points().stream()
+                .filter(p -> p.status() == DataStatus.DATA_CONFLICT || p.status() == DataStatus.INVALID).toList();
+        if (!notUsable.isEmpty()) {
+            md.append("NOT CALCULATED - no value exists for these; draw no observation or conclusion from them:\n");
+            notUsable.forEach(p -> md.append("- ").append(p.metric()).append(" (").append(p.period().label())
+                    .append("): ").append(p.status()).append("\n"));
+            md.append("\n");
+        }
+        renderIssuesAndGaps(md, summary.dataQualityIssues(), summary.dataGaps());
+        md.append("\n").append(reported.provenance().note()).append("\n");
+        return md.toString();
+    }
+
+    public String renderHistoricalPerformanceTool(HistoricalPerformanceResult result) {
+        StringBuilder md = toolHeader("getHistoricalPerformance", result.success(), result.status(), result.message());
+        if (!result.success()) {
+            return md.toString();
+        }
+        HistoricalPerformance p = result.historicalPerformance();
+        md.append("Symbol: ").append(p.symbol()).append(" (").append(p.exchange()).append(")\n")
+                .append("This is price HISTORY; endPrice is the last close in the window, not a live quote.\n\n");
+        renderHistory(md, p, new Mask(Set.of(), true));
+        md.append(CALCULATION_NOTE).append("\n\n");
+        md.append(p.provenance().note()).append("\n");
+        return md.toString();
+    }
+
+    public String renderShareholdingTool(ShareholdingResult result) {
+        StringBuilder md = toolHeader("getShareholding", result.success(), result.status(), result.message());
+        if (result.success()) {
+            md.append("Shareholding data retrieved from ").append(result.shareholding().provenance().source())
+                    .append(".\n");
+        } else {
+            md.append("CAPABILITY GAP: the promoter / FII / DII / public shareholding split is UNKNOWN. Report it as "
+                    + "not available; never fill it with zero, an estimate or a remembered figure.\n");
+        }
+        return md.toString();
+    }
+
+    private StringBuilder toolHeader(String tool, boolean success, Object status, String message) {
+        StringBuilder md = new StringBuilder();
+        md.append("TOOL RESULT: ").append(tool).append(" - status ").append(status).append("\n");
+        if (!success) {
+            md.append("No data: ").append(message).append("\n");
+        }
+        return md;
+    }
+
+    // --- Shared sections ---------------------------------------------------------------------
+
+    private static Set<String> conflictedFields(List<DataQualityIssue> issues) {
+        Set<String> fields = new LinkedHashSet<>();
+        issues.stream().filter(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT)
+                .forEach(i -> fields.addAll(i.affectedFields()));
+        return fields;
+    }
+
+    private void renderConflicts(StringBuilder md, List<DataQualityIssue> issues) {
+        List<DataQualityIssue> conflicts = issues.stream()
                 .filter(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT).toList();
         if (conflicts.isEmpty()) {
             return;
         }
         md.append("> **DATA CONFLICT - read before the figures below.** The application has not chosen between the "
-                + "conflicting values and draws no conclusions from them; values that depend on them are tagged"
-                + CONFLICT_TAG + ".\n");
+                + "conflicting values. Nothing is calculated from them, and no observation or interpretation is "
+                + "generated from them; values that depend on them are tagged" + CONFLICT_TAG + " or withheld.\n");
         for (DataQualityIssue conflict : conflicts) {
             md.append(">\n> - ").append(conflict.message()).append(" Fields: ")
                     .append(String.join(", ", conflict.affectedFields())).append("\n");
@@ -151,41 +268,36 @@ public class ResearchReportRenderer {
         md.append("\n");
     }
 
+    private void renderWithheld(StringBuilder md, List<WithheldObservation> withheld) {
+        if (withheld.isEmpty()) {
+            return;
+        }
+        md.append("\nNot generated - the metric is in a DATA_CONFLICT, failed verification (INVALID), or is not a "
+                + "primary indicator for this industry group (SECTOR_CONTEXT):\n");
+        withheld.forEach(w -> md.append("- ").append(w.subject()).append(": **").append(w.reason()).append("** - ")
+                .append(w.detail()).append("\n"));
+    }
+
+    private void renderIssuesAndGaps(StringBuilder md, List<DataQualityIssue> issues, List<DataGap> gaps) {
+        for (DataQualityIssue issue : issues) {
+            md.append("- **").append(issue.type()).append(":** ").append(issue.message())
+                    .append(" Fields: ").append(String.join(", ", issue.affectedFields())).append("\n");
+        }
+        for (DataGap gap : gaps) {
+            md.append("- **").append(gap.area()).append(" / ").append(gap.item()).append(":** ")
+                    .append(gap.reason()).append("\n");
+        }
+    }
+
     private void renderFacts(StringBuilder md, StockResearchReport report, Mask conflicted) {
         md.append("### Company\n\n");
         if (report.companyProfile().success()) {
-            CompanyProfile p = report.companyProfile().companyProfile();
-            md.append("| Item | Value | Status | Raw value (provider unit) | As of | Source field |\n")
-                    .append("|---|---|---|---|---|---|\n");
-            text(md, "Exchange", p.exchange(), "");
-            text(md, "Sector", p.sector(), "assetProfile.sector");
-            text(md, "Industry", p.industry(), "assetProfile.industry");
-            text(md, "Employees", p.fullTimeEmployees() == null ? null : String.valueOf(p.fullTimeEmployees()),
-                    "assetProfile.fullTimeEmployees");
-            companyPoint(md, "Market capitalisation", p.marketCap(), conflicted);
-            companyPoint(md, "Shares outstanding", p.sharesOutstanding(), conflicted);
-            md.append("\n");
-            if (p.businessSummary() != null) {
-                md.append("Business summary (Yahoo Finance text): ").append(p.businessSummary()).append("\n\n");
-            }
+            renderCompany(md, report.companyProfile().companyProfile(), conflicted);
         } else {
             md.append("Company profile unavailable: ").append(report.companyProfile().message()).append("\n\n");
         }
 
-        SectorContext sector = report.sectorContext();
-        md.append("### Sector context\n\n_Industry group derived by the application from the classification below; the "
-                + "metric guidance is application-supplied context, not data about this company._\n\n");
-        md.append("- Industry group: **").append(sector.group()).append("** (").append(sector.basis()).append(")\n");
-        md.append("- ").append(sector.note()).append("\n");
-        if (!sector.lessMeaningfulMetrics().isEmpty()) {
-            md.append("- Less meaningful for this group: ").append(String.join(", ", sector.lessMeaningfulMetrics()))
-                    .append("\n");
-        }
-        if (!sector.sectorMetricsNotAvailable().isEmpty()) {
-            md.append("- Sector metrics NOT SUPPORTED BY CURRENT DATA SOURCE: ")
-                    .append(String.join(", ", sector.sectorMetricsNotAvailable())).append("\n");
-        }
-        md.append("\n");
+        renderSector(md, report.sectorContext());
 
         if (report.financials().success()) {
             renderFinancials(md, report.financials().financialSummary(), conflicted);
@@ -208,6 +320,44 @@ public class ResearchReportRenderer {
         }
     }
 
+    private void renderCompany(StringBuilder md, CompanyProfile p, Mask conflicted) {
+        md.append("| Item | Value | Status | Raw value (provider unit) | As of | Source field |\n")
+                .append("|---|---|---|---|---|---|\n");
+        text(md, "Exchange", p.exchange(), "");
+        text(md, "Sector", p.sector(), "assetProfile.sector");
+        text(md, "Industry", p.industry(), "assetProfile.industry");
+        text(md, "Employees", p.fullTimeEmployees() == null ? null : String.valueOf(p.fullTimeEmployees()),
+                "assetProfile.fullTimeEmployees");
+        companyPoint(md, "Market capitalisation", p.marketCap(), conflicted);
+        companyPoint(md, "Shares outstanding", p.sharesOutstanding(), conflicted);
+        md.append("\n");
+        currencyLine(md, List.of(p.marketCap()));
+        if (p.businessSummary() != null) {
+            md.append("Business summary (Yahoo Finance text): ").append(p.businessSummary()).append("\n\n");
+        }
+    }
+
+    private void renderSector(StringBuilder md, SectorContext sector) {
+        md.append("### Sector context\n\n_Industry group derived by the application from the classification below; the "
+                + "metric guidance is application-supplied context, not data about this company, and it supplies no "
+                + "benchmarks._\n\n");
+        md.append("- Industry group: **").append(sector.group()).append("** (").append(sector.basis()).append(")\n");
+        md.append("- ").append(sector.note()).append("\n");
+        if (!sector.primaryMetrics().isEmpty()) {
+            md.append("- Primary metrics for this group, where the data supplies them: ")
+                    .append(String.join(", ", sector.primaryMetrics())).append("\n");
+        }
+        if (!sector.lessMeaningfulMetrics().isEmpty()) {
+            md.append("- NOT primary indicators of financial health for this group - no observation or conclusion is "
+                    + "drawn from them: ").append(String.join(", ", sector.lessMeaningfulMetrics())).append("\n");
+        }
+        if (!sector.sectorMetricsNotAvailable().isEmpty()) {
+            md.append("- Sector metrics NOT SUPPORTED BY CURRENT DATA SOURCE: ")
+                    .append(String.join(", ", sector.sectorMetricsNotAvailable())).append("\n");
+        }
+        md.append("\n");
+    }
+
     private void renderFinancials(StringBuilder md, FinancialSummary summary, Mask conflicted) {
         ReportedFinancials reported = summary.reported();
         HeadlineFinancials h = reported.headline();
@@ -225,6 +375,7 @@ public class ResearchReportRenderer {
                     .append(raw(point, conflicted)).append(" | ").append(fields(point)).append(" |\n");
         }
         md.append("\n");
+        currencyLine(md, h.points());
 
         if (!reported.recentQuarters().isEmpty()) {
             md.append("### Reported quarters (source fields: earnings.financialsChart / earnings.earningsChart)\n\n")
@@ -239,6 +390,7 @@ public class ResearchReportRenderer {
                         .append(value(q.earningsPerShare(), conflicted)).append(" |\n");
             }
             md.append("\n");
+            currencyLine(md, reported.recentQuarters().stream().flatMap(q -> q.points().stream()).toList());
         }
 
         List<AnnualFinancials> annual = reported.annualHistory();
@@ -254,28 +406,28 @@ public class ResearchReportRenderer {
                         .append(value(year.totalAssets(), conflicted)).append(" | ")
                         .append(value(year.totalDebt(), conflicted)).append(" |\n");
             }
-            md.append("\n### Calculated per fiscal year (CALCULATED by the application)\n\n")
+            md.append("\n");
+            currencyLine(md, annual.stream().flatMap(y -> y.points().stream()).toList());
+            md.append("### Calculated per fiscal year (CALCULATED by the application)\n\n")
                     .append("| Fiscal year | Revenue YoY | Net profit YoY | Net margin | Operating margin | ROE | ROA | Debt / equity |\n")
                     .append("|---|---|---|---|---|---|---|---|\n");
             for (AnnualRatios r : summary.calculated().annual()) {
                 md.append("| ").append(r.period().label());
-                for (FinancialDataPoint p : List.of(r.revenueGrowthYoyPercent(), r.netProfitGrowthYoyPercent(),
-                        r.netProfitMarginPercent(), r.operatingMarginPercent(), r.returnOnEquityPercent(),
-                        r.returnOnAssetsPercent(), r.debtToEquityMultiple())) {
-                    md.append(" | ").append(p.available() ? value(p, conflicted) : "n/a");
+                for (FinancialDataPoint p : r.points()) {
+                    md.append(" | ").append(cell(p));
                 }
                 md.append(" |\n");
             }
             md.append("\nROE and ROA use average opening and closing balances where the prior year is available. "
-                    + "Debt / equity is a multiple (x), not a percentage.\n\n");
-            md.append("### Multi-year growth (CALCULATED)\n\n| Metric | Value | Period | Calculation | Input fields |\n")
+                    + "Debt / equity is a multiple (x), not a percentage. DATA_CONFLICT and INVALID mean the metric was "
+                    + "not calculated or failed verification; n/a means an input is unavailable.\n\n");
+            md.append("### Multi-year growth (CALCULATED)\n\n| Metric | Value | Period | Status | Calculation |\n")
                     .append("|---|---|---|---|---|\n");
             for (FinancialDataPoint p : List.of(summary.calculated().revenueCagrPercent(),
                     summary.calculated().netProfitCagrPercent())) {
-                md.append("| ").append(p.metric()).append(" | ").append(value(p, conflicted)).append(" | ")
-                        .append(p.period().label()).append(" | ")
-                        .append(p.calculation() == null ? "" : p.calculation()).append(" | ")
-                        .append(fields(p)).append(" |\n");
+                md.append("| ").append(p.metric()).append(" | ").append(cell(p)).append(" | ")
+                        .append(p.period().label()).append(" | ").append(status(p)).append(" | ")
+                        .append(p.calculation() == null ? "" : p.calculation()).append(" |\n");
             }
             md.append("\n");
         }
@@ -284,7 +436,8 @@ public class ResearchReportRenderer {
     private void renderHistory(StringBuilder md, HistoricalPerformance p, Mask conflicted) {
         md.append("Window: ").append(p.window().start()).append(" to ").append(p.window().end())
                 .append(" (requested ").append(p.requestedYears()).append(" years, covered ")
-                .append(p.actualYears().display()).append("). Basis: ").append(p.basis()).append(".\n\n");
+                .append(p.actualYears().display()).append("). Basis: ").append(p.basis())
+                .append(". Prices in INR per share.\n\n");
         md.append("| Metric | Value | Date / period | Status |\n|---|---|---|---|\n");
         for (FinancialDataPoint point : List.of(p.startPrice(), p.endPrice(), p.totalReturnPercent(), p.cagrPercent(),
                 p.periodHigh(), p.periodLow(), p.maxDrawdownPercent())) {
@@ -305,6 +458,54 @@ public class ResearchReportRenderer {
         md.append("\n");
     }
 
+    private void renderAudit(StringBuilder md, List<FinancialDataPoint> points) {
+        md.append("| Metric | Period | Inputs | Formula | Result | Status |\n|---|---|---|---|---|---|\n");
+        for (FinancialDataPoint p : points) {
+            String inputs = p.inputs() != null
+                    ? String.join("; ", p.inputs().stream().map(ResearchReportRenderer::auditInput).toList())
+                    : p.inputFields() != null ? "fields: " + String.join(", ", p.inputFields()) : "-";
+            md.append("| ").append(p.metric()).append(" | ").append(p.period().label()).append(" | ").append(inputs)
+                    .append(" | ").append(p.calculation() == null ? "-" : p.calculation()).append(" | ")
+                    .append(p.available() ? p.display() : "not produced").append(" | ").append(p.status())
+                    .append(p.available() ? "" : " - " + p.statusReason()).append(" |\n");
+        }
+        md.append("\n");
+    }
+
+    private static String auditInput(CalculationInput input) {
+        return input.name() + " = " + input.value().toPlainString() + (input.unit() == null ? "" : " " + input.unit())
+                + (input.sourceField() == null ? "" : " (" + input.sourceField() + ")");
+    }
+
+    private List<FinancialDataPoint> calculatedPoints(StockResearchReport report) {
+        List<FinancialDataPoint> points = new ArrayList<>();
+        if (report.financials().success()) {
+            report.financials().financialSummary().calculated().points().stream()
+                    .filter(p -> p.calculationStatus() == CalculationStatus.CALCULATED).forEach(points::add);
+        }
+        if (report.historicalPerformance().success()) {
+            HistoricalPerformance h = report.historicalPerformance().historicalPerformance();
+            Stream.of(h.totalReturnPercent(), h.cagrPercent(), h.maxDrawdownPercent())
+                    .filter(p -> p.calculationStatus() == CalculationStatus.CALCULATED).forEach(points::add);
+        }
+        return points;
+    }
+
+    /** One line stating the original and normalised currency of the amounts just shown, and how they were normalised. */
+    private void currencyLine(StringBuilder md, List<FinancialDataPoint> points) {
+        List<String> currencies = points.stream().map(FinancialDataPoint::currency).filter(Objects::nonNull)
+                .map(ResearchReportRenderer::describe).distinct().toList();
+        if (!currencies.isEmpty()) {
+            md.append("Currency: ").append(String.join("; ", currencies)).append(".\n\n");
+        }
+    }
+
+    private static String describe(CurrencyInfo currency) {
+        return "source %s, shown in %s (%s)".formatted(currency.originalCurrency(), currency.normalizedCurrency(),
+                currency.conversion() == CurrencyInfo.Conversion.NONE ? "as reported"
+                        : "scaled only - no currency conversion");
+    }
+
     private void companyPoint(StringBuilder md, String label, FinancialDataPoint p, Mask conflicted) {
         md.append("| ").append(label).append(" | ").append(value(p, conflicted)).append(" | ").append(status(p))
                 .append(" | ").append(raw(p, conflicted)).append(" | ")
@@ -318,11 +519,26 @@ public class ResearchReportRenderer {
     }
 
     private String value(FinancialDataPoint p, Mask conflicted) {
-        String shown = p.available() ? p.display() : "UNAVAILABLE - " + p.unavailableReason();
         if (!conflicted.covers(p)) {
-            return shown;
+            return switch (p.status()) {
+                case VALID -> p.display();
+                case UNAVAILABLE -> "UNAVAILABLE - " + p.statusReason();
+                case DATA_CONFLICT, INVALID -> p.status().name();
+            };
         }
-        return conflicted.forModel() ? WITHHELD_FOR_MODEL : shown + CONFLICT_TAG;
+        if (conflicted.forModel()) {
+            return WITHHELD_FOR_MODEL;
+        }
+        return p.value() != null ? p.display() + CONFLICT_TAG : "DATA_CONFLICT";
+    }
+
+    /** A calculated table cell: the result if VALID, otherwise only why there is none. */
+    private String cell(FinancialDataPoint p) {
+        return switch (p.status()) {
+            case VALID -> p.display();
+            case UNAVAILABLE -> "n/a";
+            case DATA_CONFLICT, INVALID -> p.status().name();
+        };
     }
 
     private String raw(FinancialDataPoint p, Mask conflicted) {
@@ -330,7 +546,7 @@ public class ResearchReportRenderer {
     }
 
     private String status(FinancialDataPoint p) {
-        return p.available() ? p.calculationStatus().name() : p.availability().name();
+        return p.available() ? p.calculationStatus().name() : p.status().name();
     }
 
     private String raw(FinancialDataPoint p) {

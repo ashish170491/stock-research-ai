@@ -1,5 +1,8 @@
 package com.ashish.stockresearch.research.model;
 
+import java.util.List;
+import java.util.function.UnaryOperator;
+
 /**
  * Headline figures as published by the provider, normalised to canonical
  * units. Each point states its own period: flow figures are trailing twelve
@@ -25,4 +28,18 @@ public record HeadlineFinancials(
         FinancialDataPoint quarterlyEarningsGrowthYoyPercent,
         FinancialDataPoint returnOnCapitalEmployedPercent
 ) {
+
+    public List<FinancialDataPoint> points() {
+        return List.of(revenue, netProfit, ebitda, freeCashFlow, totalDebt, totalCash, operatingMarginPercent,
+                netProfitMarginPercent, returnOnEquityPercent, returnOnAssetsPercent, debtToEquityPercent,
+                quarterlyRevenueGrowthYoyPercent, quarterlyEarningsGrowthYoyPercent, returnOnCapitalEmployedPercent);
+    }
+
+    public HeadlineFinancials map(UnaryOperator<FinancialDataPoint> f) {
+        return new HeadlineFinancials(f.apply(revenue), f.apply(netProfit), f.apply(ebitda), f.apply(freeCashFlow),
+                f.apply(totalDebt), f.apply(totalCash), f.apply(operatingMarginPercent), f.apply(netProfitMarginPercent),
+                f.apply(returnOnEquityPercent), f.apply(returnOnAssetsPercent), f.apply(debtToEquityPercent),
+                f.apply(quarterlyRevenueGrowthYoyPercent), f.apply(quarterlyEarningsGrowthYoyPercent),
+                f.apply(returnOnCapitalEmployedPercent));
+    }
 }

@@ -60,7 +60,7 @@ class FinancialDataValidatorTest {
 
         assertThat(guarded.available()).isFalse();
         assertThat(guarded.value()).isNull();
-        assertThat(guarded.unavailableReason()).contains("Q3 FY27");
+        assertThat(guarded.statusReason()).contains("Q3 FY27");
     }
 
     @Test

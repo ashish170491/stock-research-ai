@@ -18,6 +18,7 @@ import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.report.ResearchReportService;
 import com.ashish.stockresearch.research.report.StockResearchReport;
 import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
+import com.ashish.stockresearch.research.report.WithheldObservation;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -249,8 +250,8 @@ class ResearchPipelineRegressionTest {
         StockResearchReport report = report(symbol);
         String observations = section(renderer.render(report, "x"), "## 2. OBSERVATIONS", "## 3.");
 
-        assertThat(Stream.concat(report.observations().stream(), report.withheldObservations().stream()))
-                .extracting(Observation::statement)
+        assertThat(Stream.concat(report.observations().stream().map(Observation::statement),
+                        report.withheldObservations().stream().map(WithheldObservation::subject)))
                 .allSatisfy(s -> assertThat(s).doesNotContainIgnoringCase("accelerat")
                         .doesNotContainIgnoringCase("decelerat").doesNotContainIgnoringCase("momentum"));
         assertThat(observations).doesNotContainIgnoringCase("accelerat");
@@ -290,8 +291,8 @@ class ResearchPipelineRegressionTest {
         // No conclusion is drawn from any conflicting field.
         assertThat(report.observations()).allSatisfy(o ->
                 assertThat(o.inputFields()).doesNotContainAnyElementsOf(report.conflictedFields()));
-        assertThat(report.withheldObservations()).extracting(Observation::statement)
-                .anySatisfy(s -> assertThat(s).startsWith("Revenue grew at a compound annual rate"));
+        assertThat(report.withheldObservations()).extracting(WithheldObservation::subject)
+                .anySatisfy(s -> assertThat(s).startsWith("Revenue CAGR"));
 
         String markdown = renderer.render(report, "x");
         assertThat(markdown.indexOf("DATA CONFLICT - read before the figures below"))
@@ -308,9 +309,11 @@ class ResearchPipelineRegressionTest {
         // The reader still sees them (tagged); the model sees only that they are withheld.
         assertThat(facts).doesNotContain("16.90%").doesNotContain("36.60%").doesNotContain("[DATA_CONFLICT]")
                 .contains("WITHHELD - depends on a field in a DATA_CONFLICT");
-        assertThat(renderer.render(report, "x")).contains("16.90% [DATA_CONFLICT]");
+        // Nor is anything calculated from them: the reader sees the status where a value would be.
+        assertThat(renderer.render(report, "x")).doesNotContain("16.90%")
+                .contains("| revenueCagrPercent | DATA_CONFLICT |");
         // Non-conflicting facts are still given to the model.
-        assertThat(facts).contains("8.90%");
+        assertThat(facts).contains("₹11.34 lakh crore").contains("-31.04%");
     }
 
     @Test
@@ -369,5 +372,118 @@ class ResearchPipelineRegressionTest {
     @ValueSource(strings = {"TECHM", "HDFCBANK"})
     void identifiesQ1Fy27AsTheLatestReportedQuarter(String symbol) {
         assertThat(report(symbol).latestReportedQuarter().label()).isEqualTo("Q1 FY27");
+    }
+
+    // --- Cross-company regressions (September 2026 testing) -----------------------------------
+
+    private static String answer(String file) {
+        try {
+            return new ClassPathResource("fixtures/model-answers/" + file).getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    /** What the chat model is handed when it calls the profile and financial tools for this company. */
+    private String chatEvidence(StockResearchReport report) {
+        return renderer.renderCompanyProfileTool(report.companyProfile(), report.sectorContext())
+                + renderer.renderFinancialSummaryTool(report.financials());
+    }
+
+    @Test
+    void hdfcBankRevenueConflictsAreDetectedInEveryComparison() {
+        List<DataQualityIssue> conflicts = financials(report("HDFCBANK")).dataQualityIssues().stream()
+                .filter(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT).toList();
+
+        assertThat(conflicts).extracting(DataQualityIssue::affectedFields).contains(
+                List.of("financialData.totalRevenue", "earnings.financialsChart.quarterly.revenue"),
+                List.of("financialData.totalRevenue", "fundamentals-timeseries.annualTotalRevenue"),
+                List.of("fundamentals-timeseries.annualTotalRevenue", "earnings.financialsChart.yearly.revenue"));
+        // Yahoo's two annual feeds also disagree on net profit for every fiscal year (by 2.8% to 12.3%).
+        assertThat(conflicts).anySatisfy(c -> assertThat(c.message())
+                .contains("different fiscal-year net profit").contains("FY23: ₹49,544.69 crore vs ₹44,108.71 crore"));
+    }
+
+    @Test
+    void hdfcBankConflictedRevenueMetricsAreNeverCalculatedOrUsedForConclusions() {
+        StockResearchReport report = report("HDFCBANK");
+        FinancialSummary f = financials(report);
+        AnnualRatios fy26 = f.calculated().annual().getLast();
+
+        for (FinancialDataPoint metric : List.of(f.calculated().revenueCagrPercent(), fy26.revenueGrowthYoyPercent(),
+                fy26.netProfitMarginPercent(), f.calculated().netProfitMarginTtmPercent(),
+                f.calculated().latestQuarterRevenueGrowthQoqPercent())) {
+            assertThat(metric.status()).as(metric.metric()).isEqualTo(com.ashish.stockresearch.research.model.DataStatus.DATA_CONFLICT);
+            assertThat(metric.value()).as(metric.metric()).isNull();
+        }
+        assertThat(report.observations()).noneSatisfy(o -> assertThat(o.statement()).containsIgnoringCase("revenue"));
+        assertThat(report.withheldObservations())
+                .filteredOn(w -> w.topic().equals("revenue growth"))
+                .extracting(WithheldObservation::reason).containsOnly(WithheldObservation.Reason.DATA_CONFLICT);
+        assertThat(report.withheldTopics()).contains("revenue growth", "net profit margin");
+
+        String markdown = renderer.render(report, "x");
+        assertThat(section(markdown, "## 4. INTERPRETATION", "## 5. SOURCES"))
+                .contains("**Conclusions withheld.** No interpretation was generated about: revenue growth");
+        assertThat(renderer.renderEvidence(report))
+                .contains("NOT GENERATED - write no interpretation, trend or conclusion about: revenue growth");
+    }
+
+    @Test
+    void hdfcBankSectorGuidanceIsRespected() {
+        StockResearchReport report = report("HDFCBANK");
+
+        assertThat(report.sectorContext().group()).isEqualTo(IndustryGroup.BANK);
+        // Debt-to-equity is calculated (0.81x, a fact) but never turned into an observation for a bank.
+        assertThat(financials(report).calculated().annual().getLast().debtToEquityMultiple().display()).isEqualTo("0.81x");
+        assertThat(report.observations()).noneSatisfy(o -> assertThat(o.statement()).contains("shareholders' equity"));
+        assertThat(report.withheldObservations()).anySatisfy(w -> {
+            assertThat(w.topic()).isEqualTo("debt-to-equity");
+            assertThat(w.reason()).isEqualTo(WithheldObservation.Reason.SECTOR_CONTEXT);
+            assertThat(w.detail()).contains("not a primary indicator").contains("BANK");
+        });
+
+        // The interpretation the model actually wrote for HDFC Bank in September 2026, screened again.
+        UnsupportedClaimFilter.Result screened = filter.filter(answer("hdfcbank-interpretation.md"),
+                renderer.renderEvidence(report), report.withheldTopics());
+        assertThat(screened.text())
+                .doesNotContain("stable capital structure")
+                .doesNotContain("4.65% year-over-year increase in net profit")
+                .doesNotContain("12.47% compound annual rate")
+                .contains("limit confidence in financial performance comparisons");
+        assertThat(screened.removedSentences()).anySatisfy(s -> assertThat(s).contains("0.81x"));
+    }
+
+    @Test
+    void techMahindrasYahooFiguresAreInternallyConsistentAndEveryCalculationVerifies() {
+        FinancialSummary f = financials(report("TECHM"));
+
+        assertThat(f.dataQualityIssues()).isEmpty();
+        assertThat(f.calculated().points()).filteredOn(p -> p.status() != com.ashish.stockresearch.research.model.DataStatus.UNAVAILABLE)
+                .allSatisfy(p -> assertThat(p.status()).as(p.metric())
+                        .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.VALID));
+        // FY26 revenue YoY reconciles with the displayed fiscal-year revenues: 56,815.40 / 52,988.30 - 1.
+        AnnualRatios fy26 = f.calculated().annual().getLast();
+        assertThat(fy26.revenueGrowthYoyPercent().display()).isEqualTo("7.22%");
+        assertThat(fy26.revenueGrowthYoyPercent().inputs()).extracting(i -> i.value().toPlainString())
+                .containsExactly("52988.30", "56815.40");
+    }
+
+    @Test
+    void techMahindraChatAnswerWithInconsistentRevenueFiguresIsCaughtAndWithheld() {
+        // The answer the model wrote for "Fundamental Overview of TECHM": revenue figures that are not
+        // Yahoo's (FY23 was 53,290.20 crore, not 38,615.40), and a growth rate it computed itself.
+        StockResearchReport report = report("TECHM");
+        com.ashish.stockresearch.research.report.NumericClaimVerifier.Result checked =
+                new com.ashish.stockresearch.research.report.NumericClaimVerifier()
+                        .verify(answer("techm-fundamental-overview.md"), chatEvidence(report));
+
+        assertThat(checked.ungroundedFigures()).contains("38,615.40", "36,815.40", "37,615.40", "50.7");
+        assertThat(checked.text())
+                .doesNotContain("38,615.40").doesNotContain("36,815.40").doesNotContain("37,615.40")
+                .doesNotContain("50.7%")
+                // Figures that are the application's survive, exactly as displayed.
+                .contains("₹56,815.40 crore (↑7.22% YoY)")
+                .contains("0.07x");
     }
 }

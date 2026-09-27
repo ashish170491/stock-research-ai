@@ -2,7 +2,11 @@ package com.ashish.stockresearch.marketdata.provider.yahoo;
 
 import com.ashish.stockresearch.marketdata.MarketDataUnavailableException;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
+import com.ashish.stockresearch.marketdata.NseSymbolDirectory;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.core.io.ByteArrayResource;
+
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -41,8 +45,28 @@ class YahooFinanceMarketDataProviderTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         server = MockRestServiceServer.bindTo(builder).build();
         llmSymbolResolver = mock(LlmSymbolResolver.class);
+        // An empty directory, so these tests exercise the stages after it.
+        NseSymbolDirectory noListings = new NseSymbolDirectory(new ByteArrayResource(
+                "SYMBOL,NAME OF COMPANY\n".getBytes(StandardCharsets.UTF_8)));
         provider = new YahooFinanceMarketDataProvider(
-                new YahooSymbolResolver(builder.build(), llmSymbolResolver));
+                new YahooSymbolResolver(builder.build(), noListings, llmSymbolResolver));
+    }
+
+    @Test
+    void resolvesCompanyNamesFromTheNseListBeforeGuessingOrSearching() {
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+        MockRestServiceServer strict = MockRestServiceServer.bindTo(builder).build();
+        YahooFinanceMarketDataProvider withDirectory = new YahooFinanceMarketDataProvider(
+                new YahooSymbolResolver(builder.build(), new NseSymbolDirectory(), llmSymbolResolver));
+        // The only request: confirming the directory's answer. No guessed BHARTIAIRTEL, no search, no model.
+        strict.expect(requestTo(containsString("/v8/finance/chart/BHARTIARTL.NS")))
+                .andRespond(withSuccess(chartResponse("1890.10", "INR"), MediaType.APPLICATION_JSON));
+
+        StockQuote quote = withDirectory.getQuote("Bharti Airtel");
+
+        assertThat(quote.symbol()).isEqualTo("BHARTIARTL");
+        strict.verify();
+        org.mockito.Mockito.verifyNoInteractions(llmSymbolResolver);
     }
 
     @Test

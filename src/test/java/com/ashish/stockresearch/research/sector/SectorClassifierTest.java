@@ -41,7 +41,7 @@ class SectorClassifierTest {
     void marksGenericMetricsAsLessMeaningfulForBanksAndNamesTheMissingBankMetrics() {
         SectorContext bank = classifier.classify("Financial Services", "Banks - Regional");
 
-        assertThat(bank.lessMeaningfulMetrics()).contains("EBITDA", "debt-to-equity");
+        assertThat(bank.lessMeaningfulMetrics()).contains("EBITDA", "conventional debt-to-equity");
         assertThat(bank.sectorMetricsNotAvailable()).contains("net interest margin", "gross and net NPA");
         assertThat(bank.basis()).contains("Yahoo Finance").contains("Banks - Regional");
     }

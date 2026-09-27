@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
+import com.ashish.stockresearch.marketdata.NseSymbolDirectory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -22,6 +23,9 @@ import java.util.Set;
  *
  * Resolution is best-effort, each stage cheaper/more reliable than the next:
  * <ol>
+ *   <li>Look the input up in NSE's own equity list ({@link NseSymbolDirectory}): an exact symbol,
+ *       or a deterministic company-name match. Offline, and it resolves names whose ticker is not a
+ *       concatenation of the name (e.g. "Bharti Airtel" -> BHARTIARTL) without a model.</li>
  *   <li>Try the input directly as an NSE symbol, then as a BSE symbol
  *       (/v8/finance/chart). This handles exact trading symbols (e.g. "LT",
  *       "RELIANCE") without depending on Yahoo's fuzzy search at all - which
@@ -59,10 +63,13 @@ class YahooSymbolResolver {
             "AND", "THE", "LIMITED", "LTD", "PVT", "PRIVATE", "COMPANY", "CO", "CORP", "CORPORATION", "INC", "PLC");
 
     private final RestClient restClient;
+    private final NseSymbolDirectory nseSymbolDirectory;
     private final LlmSymbolResolver llmSymbolResolver;
 
-    YahooSymbolResolver(RestClient yahooFinanceRestClient, LlmSymbolResolver llmSymbolResolver) {
+    YahooSymbolResolver(RestClient yahooFinanceRestClient, NseSymbolDirectory nseSymbolDirectory,
+                        LlmSymbolResolver llmSymbolResolver) {
         this.restClient = yahooFinanceRestClient;
+        this.nseSymbolDirectory = nseSymbolDirectory;
         this.llmSymbolResolver = llmSymbolResolver;
     }
 
@@ -78,9 +85,16 @@ class YahooSymbolResolver {
     }
 
     Optional<Resolution> resolve(String symbolOrName) {
-        return tryDirectGuess(symbolOrName)
+        return tryDirectory(symbolOrName)
+                .or(() -> tryDirectGuess(symbolOrName))
                 .or(() -> trySearch(symbolOrName))
                 .or(() -> tryLlmGuess(symbolOrName));
+    }
+
+    /** A directory match is still confirmed on NSE: the bundled list is a snapshot and may be stale. */
+    private Optional<Resolution> tryDirectory(String symbolOrName) {
+        return nseSymbolDirectory.resolve(symbolOrName)
+                .flatMap(listing -> confirm(listing.symbol() + ".NS", "NSE"));
     }
 
     private Optional<Resolution> tryDirectGuess(String symbolOrName) {

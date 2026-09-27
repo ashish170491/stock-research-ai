@@ -6,7 +6,9 @@ import com.ashish.stockresearch.research.calc.FinancialDataValidator;
 import com.ashish.stockresearch.research.calc.FinancialUnits;
 import com.ashish.stockresearch.research.calc.FinancialUnits.ProviderScale;
 import com.ashish.stockresearch.research.calc.FiscalCalendar;
+import com.ashish.stockresearch.research.model.AnnualCrossCheckFigures;
 import com.ashish.stockresearch.research.model.AnnualFinancials;
+import com.ashish.stockresearch.research.model.CurrencyInfo;
 import com.ashish.stockresearch.research.model.DataFreshness;
 import com.ashish.stockresearch.research.model.DataGap;
 import com.ashish.stockresearch.research.model.DataProvenance;
@@ -67,8 +69,17 @@ import java.util.stream.Collectors;
  * time series (it lags the {@code earnings} module by a year or more for
  * Indian listings, so using it would present a stale quarter as the latest).
  *
- * <p>The reporting currency is read from {@code financialCurrency}, never
- * assumed. Yahoo reports some Indian companies' accounts in USD.
+ * <p>Currencies are read from Yahoo, never assumed, and separately for each
+ * feed: {@code financialData.financialCurrency} for the headline figures,
+ * {@code earnings.financialCurrency} for the quarterly charts, and each time
+ * series value's own currency code. Yahoo reports some Indian companies'
+ * headline accounts in USD and their quarterly charts in INR; labelling
+ * both with one currency would mix them. Amounts are scaled within their
+ * currency and never converted between currencies.
+ *
+ * <p>Yahoo derives some of its ratios from its own revenue figure
+ * ({@link #DERIVED_FROM}); those ratios are recorded as depending on it, so a
+ * conflict over revenue also covers them.
  */
 @Component
 @Profile("!mock")
@@ -91,6 +102,17 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
     private static final String DEBT = "annualTotalDebt";
     private static final List<String> ANNUAL_TYPES =
             List.of(REVENUE, NET_INCOME, OPERATING_INCOME, EQUITY, ASSETS, DEBT);
+    private static final String TOTAL_REVENUE = "financialData.totalRevenue";
+    private static final String NET_INCOME_TO_COMMON = "defaultKeyStatistics.netIncomeToCommon";
+    /**
+     * Provider ratios Yahoo calculates from its own figures. profitMargins is netIncomeToCommon /
+     * totalRevenue (it reproduces exactly from those two fields); operatingMargins and revenueGrowth
+     * are measured against the same revenue definition.
+     */
+    static final Map<String, List<String>> DERIVED_FROM = Map.of(
+            "financialData.profitMargins", List.of(TOTAL_REVENUE, NET_INCOME_TO_COMMON),
+            "financialData.operatingMargins", List.of(TOTAL_REVENUE),
+            "financialData.revenueGrowth", List.of(TOTAL_REVENUE));
 
     private final YahooSymbolResolver symbolResolver;
     private final YahooQuoteSummaryClient quoteSummaryClient;
@@ -124,7 +146,7 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
         FiscalCalendar calendar = FiscalCalendar.forFiscalYearEnd(fiscalYearEnd);
         List<DataGap> gaps = new ArrayList<>();
 
-        List<QuarterlyResult> quarters = quarters(result.earnings(), calendar, currency, gaps);
+        List<QuarterlyResult> quarters = quarters(result.earnings(), calendar, gaps);
         ReportingPeriod latestQuarter = latestQuarter(quarters, calendar.quarter(quarterEnd), gaps);
         ReportingPeriod ttm = validPeriod(calendar.trailingTwelveMonths(latestQuarter.end()), gaps, "TTM figures");
         ReportingPeriod balanceDate = latestQuarter.known()
@@ -136,9 +158,9 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
 
         SourceInfo base = new SourceInfo(SOURCE, SourceType.MARKET_DATA_PROVIDER, null, null, latestQuarter.end());
         HeadlineFinancials headline = new HeadlineFinancials(
-                amount("revenue", financials.totalRevenue(), currency, ttm, base, "financialData.totalRevenue"),
+                amount("revenue", financials.totalRevenue(), currency, ttm, base, TOTAL_REVENUE),
                 amount("netProfit", statistics != null ? statistics.netIncomeToCommon() : null, currency, ttm, base,
-                        "defaultKeyStatistics.netIncomeToCommon"),
+                        NET_INCOME_TO_COMMON),
                 amount("ebitda", financials.ebitda(), currency, ttm, base, "financialData.ebitda"),
                 amount("freeCashFlow", financials.freeCashflow(), currency, ttm, base, "financialData.freeCashflow"),
                 amount("totalDebt", financials.totalDebt(), currency, balanceDate, base, "financialData.totalDebt"),
@@ -156,6 +178,7 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
                         "Yahoo Finance publishes no capital-employed figure, so ROCE is not available from this source"));
 
         List<AnnualFinancials> annual = annualHistory(resolution.providerSymbol(), calendar, gaps);
+        List<AnnualCrossCheckFigures> crossCheck = annualCrossCheck(result.earnings(), calendar, fiscalYearEnd);
 
         log.info("Retrieved Yahoo Finance financials for {} (currency={}, latest quarter={}, {} quarter(s), {} fiscal year(s))",
                 resolution.providerSymbol(), currency, latestQuarter.label(), quarters.size(), annual.size());
@@ -170,6 +193,7 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
                 headline,
                 quarters,
                 annual,
+                crossCheck,
                 List.copyOf(gaps),
                 new DataProvenance(SOURCE, SourceType.MARKET_DATA_PROVIDER, DataFreshness.PERIODIC_FINANCIALS,
                         Instant.now(), latestPublishedAt, latestQuarter.end(), latestQuarter.end(),
@@ -183,7 +207,7 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
      * gaps rather than presented as reported.
      */
     private List<QuarterlyResult> quarters(YahooQuoteSummaryResponse.Earnings earnings, FiscalCalendar calendar,
-                                           String currency, List<DataGap> gaps) {
+                                           List<DataGap> gaps) {
         if (earnings == null || earnings.earningsChart() == null || earnings.earningsChart().quarterly() == null) {
             gaps.add(new DataGap("Financials", "recentQuarters", "Yahoo Finance returned no dated quarterly results"));
             return List.of();
@@ -196,6 +220,8 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
                                 .collect(Collectors.toMap(YahooQuoteSummaryResponse.FinancialsQuarter::date,
                                         Function.identity(), (a, b) -> b));
 
+        // The charts' own currency - never the headline currency, which can differ.
+        String currency = earnings.financialCurrency();
         List<QuarterlyResult> quarters = new ArrayList<>();
         for (YahooQuoteSummaryResponse.EarningsQuarter dated : earnings.earningsChart().quarterly()) {
             if (dated == null) {
@@ -225,6 +251,39 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
         }
         quarters.sort(Comparator.comparing(q -> q.period().end()));
         return List.copyOf(quarters);
+    }
+
+    /**
+     * The same fiscal years' revenue and earnings from the earnings module's
+     * yearly chart - a second Yahoo feed, kept only to cross-check the
+     * fundamentals time series. Its years are identified by the calendar year
+     * in which the fiscal year ends, so without a known fiscal-year end they
+     * cannot be placed and none are used.
+     */
+    private List<AnnualCrossCheckFigures> annualCrossCheck(YahooQuoteSummaryResponse.Earnings earnings,
+                                                           FiscalCalendar calendar, LocalDate fiscalYearEnd) {
+        if (earnings == null || earnings.financialsChart() == null || earnings.financialsChart().yearly() == null
+                || fiscalYearEnd == null) {
+            return List.of();
+        }
+        List<AnnualCrossCheckFigures> years = new ArrayList<>();
+        for (YahooQuoteSummaryResponse.FinancialsYear year : earnings.financialsChart().yearly()) {
+            if (year == null || year.date() == null) {
+                continue;
+            }
+            LocalDate end = fiscalYearEnd.withYear(year.date());
+            ReportingPeriod period = calendar.fiscalYear(end);
+            if (validator.periodProblem(period, null).isPresent()) {
+                continue;
+            }
+            SourceInfo source = new SourceInfo(SOURCE, SourceType.MARKET_DATA_PROVIDER, null, null, end);
+            years.add(new AnnualCrossCheckFigures(period,
+                    amount("annualRevenue", year.revenue(), earnings.financialCurrency(), period, source,
+                            "earnings.financialsChart.yearly.revenue"),
+                    amount("annualNetProfit", year.earnings(), earnings.financialCurrency(), period, source,
+                            "earnings.financialsChart.yearly.earnings")));
+        }
+        return List.copyOf(years);
     }
 
     /**
@@ -327,7 +386,7 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
         }
         return FinancialUnits.normalizeAmount(raw.raw(), ProviderScale.ONES, currency)
                 .map(normalized -> FinancialDataPoint.reported(metric, raw.raw(), ProviderUnit.WHOLE_CURRENCY_UNITS,
-                        normalized.value(), normalized.unit(), period, source))
+                        normalized.value(), normalized.unit(), period, source).withCurrency(normalized.currency()))
                 .orElseGet(() -> FinancialDataPoint.unavailable(metric, null, period, source, currency == null
                         ? "The reporting currency is unknown, so this amount cannot be labelled"
                         : "Amount is reported in %s, which this application does not normalise".formatted(currency)));
@@ -354,7 +413,9 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
         BigDecimal percent = meaning.get() == ProviderUnit.FRACTION
                 ? FinancialUnits.fractionToPercent(raw.raw())
                 : raw.raw().setScale(2, RoundingMode.HALF_UP);
-        return FinancialDataPoint.reported(metric, raw.raw(), meaning.get(), percent, Unit.PERCENT, period, source);
+        FinancialDataPoint point = FinancialDataPoint.reported(metric, raw.raw(), meaning.get(), percent, Unit.PERCENT,
+                period, source);
+        return DERIVED_FROM.containsKey(field) ? point.derivedFrom(DERIVED_FROM.get(field)) : point;
     }
 
     private FinancialDataPoint earningsPerShare(YahooValue raw, String currency, ReportingPeriod period, SourceInfo base) {
@@ -365,14 +426,16 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
         }
         if (!"INR".equalsIgnoreCase(currency)) {
             return FinancialDataPoint.unavailable("earningsPerShare", null, period, source,
-                    "EPS currency is ambiguous for accounts not reported in INR");
+                    currency == null ? "Yahoo Finance did not state the currency of its quarterly charts, so EPS cannot be labelled"
+                            : "EPS is published in %s; only rupee EPS is labelled per share".formatted(currency));
         }
         if (YahooFieldSemantics.verify(raw, YahooFieldSemantics.PER_SHARE).isEmpty()) {
             return FinancialDataPoint.semanticsUnverified("earningsPerShare", raw.raw(), period, source,
                     "Yahoo's formatted value %s does not confirm a per-share amount".formatted(quoted(raw)));
         }
         return FinancialDataPoint.reported("earningsPerShare", raw.raw(), ProviderUnit.PER_SHARE,
-                raw.raw().setScale(2, RoundingMode.HALF_UP), Unit.INR_PER_SHARE, period, source);
+                raw.raw().setScale(2, RoundingMode.HALF_UP), Unit.INR_PER_SHARE, period, source)
+                .withCurrency(CurrencyInfo.unchanged("INR"));
     }
 
     private static String quoted(YahooValue value) {

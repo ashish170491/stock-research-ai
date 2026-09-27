@@ -5,9 +5,13 @@ import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
-import com.ashish.stockresearch.service.ResearchReportWriter;
+import com.ashish.stockresearch.research.report.ResearchReportRenderer;
+import com.ashish.stockresearch.research.sector.IndustryGroup;
+import com.ashish.stockresearch.research.sector.SectorClassifier;
+import com.ashish.stockresearch.research.sector.SectorContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -15,138 +19,149 @@ import org.springframework.stereotype.Component;
 /**
  * The fundamental-research half of the toolkit, alongside
  * {@link StockPriceTool}. Each method is a thin adapter: log the call,
- * delegate to {@link StockResearchService}, return the structured result.
- * No HTTP, no parsing, no formatting, and deliberately no prose - the
- * records go to the model as JSON so it can reason over the fields rather
- * than re-read a sentence we already wrote.
+ * delegate to {@link StockResearchService}, and hand the model the result
+ * rendered as compact Markdown by {@link ResearchReportRenderer}.
+ *
+ * Why text rather than the result records as JSON: the full JSON for one
+ * financial summary is ~47 KB. Several of those overflow the model's context,
+ * and the model then silently loses the earliest results - a "fundamental
+ * overview" answered from the company profile alone. The rendered tables
+ * carry the same values, periods, statuses and sources at a fraction of the
+ * size. The structured records remain the source of truth (see
+ * {@code GET /api/research/report/data}).
  *
  * The descriptions below are load-bearing. They are the only thing the
  * model sees when deciding which tool to call, so each states what the tool
- * returns, when to reach for it, and what the symbol argument accepts.
+ * returns, when to reach for it, what it does NOT return, and what the
+ * symbol argument accepts.
  *
- * Every method returns a result object rather than throwing, so one failing
- * lookup never aborts the others when the model calls several tools for a
- * single question.
+ * Broad requests ("fundamental overview of X") never reach these tools: the
+ * request router sends them straight to the Java-built research report. These
+ * tools answer narrower questions.
+ *
+ * Every method returns a result rather than throwing, so one failing lookup
+ * never aborts the others, and records what it returned on the request's
+ * {@link ToolUsage}.
  */
 @Component
 public class StockResearchTools {
 
     private static final Logger log = LoggerFactory.getLogger(StockResearchTools.class);
 
+    static final String PROFILE_TOOL = "getCompanyProfile";
+    static final String FINANCIALS_TOOL = "getFinancialSummary";
+    static final String HISTORY_TOOL = "getHistoricalPerformance";
+    static final String SHAREHOLDING_TOOL = "getShareholding";
+
     private final StockResearchService stockResearchService;
-    private final ResearchReportWriter researchReportWriter;
+    private final ResearchReportRenderer renderer;
+    private final SectorClassifier sectorClassifier;
 
     public StockResearchTools(StockResearchService stockResearchService,
-                              ResearchReportWriter researchReportWriter) {
+                              ResearchReportRenderer renderer,
+                              SectorClassifier sectorClassifier) {
         this.stockResearchService = stockResearchService;
-        this.researchReportWriter = researchReportWriter;
+        this.renderer = renderer;
+        this.sectorClassifier = sectorClassifier;
     }
 
-    /**
-     * The model decides to call this; it does not get to retype the result.
-     * {@code returnDirect} sends the finished report - Java-rendered facts plus
-     * a screened, evidence-only interpretation - straight back to the user,
-     * because a small model transcribing tables drops sections, shifts periods
-     * and adds claims of its own.
-     */
-    @Tool(description = """
-            Produce a complete, verified research report on an Indian listed company: company profile \
-            and market capitalisation, financial statements, reported quarters with their period-end and \
-            publication dates, growth / CAGR / margin / ROE / ROA figures calculated by the application, \
-            five-year share-price performance with calculated CAGR and maximum drawdown, shareholding \
-            availability, observations, data gaps, an interpretation and sources. \
-            Use this for broad requests - "analyse X", "research X", "give me a report on X" - instead of \
-            calling the individual research tools. The report is returned to the user as-is. \
-            Accepts an NSE/BSE trading symbol (e.g. HDFCBANK) or a company name (e.g. "HDFC Bank").""",
-            returnDirect = true, resultConverter = PlainTextResultConverter.class)
-    public String getStockResearchReport(
-            @ToolParam(description = "Indian stock trading symbol (e.g. HDFCBANK, TCS) or company name "
-                    + "(e.g. 'HDFC Bank')")
-            String symbol) {
-        log.info("TOOL CALLED: getStockResearchReport symbol={}", symbol);
-        return researchReportWriter.write(symbol);
-    }
-
-    @Tool(description = """
-            Get a company's business profile: what it actually does, its sector and industry, \
-            business summary, country, website, employee headcount and market capitalisation. \
-            Market cap is already normalised to crore with an as-of date - quote its 'display' field. \
-            The business summary is the only basis for qualitative claims about the company. \
-            Use this for qualitative questions about the company as a business - "tell me about X", \
-            "what does X do", "what sector is X in", "how big is X". \
-            Returns no revenue, profit or valuation ratios - use getFinancialSummary for those, \
-            and getStockQuote for the current share price. \
+    @Tool(name = PROFILE_TOOL, description = """
+            Get a company's business profile: what it does, sector and industry, the application's industry \
+            group with the metrics that matter for it, business summary, employee headcount and market \
+            capitalisation. \
+            Use this for qualitative questions about the company as a business - "what does X do", "what sector \
+            is X in", "how big is X". \
+            A company profile alone is NOT a fundamental overview or analysis: it returns no revenue, profit, \
+            growth, margins, returns, leverage, share-price history or shareholding - use getFinancialSummary, \
+            getHistoricalPerformance and getShareholding for those. \
             Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name \
-            (e.g. "Tata Consultancy Services"); the name is resolved to the correct exchange symbol.""")
-    public CompanyProfileResult getCompanyProfile(
+            (e.g. "Tata Consultancy Services"); the name is resolved to the correct exchange symbol.""",
+            resultConverter = PlainTextResultConverter.class)
+    public String getCompanyProfile(
             @ToolParam(description = "Indian stock trading symbol (e.g. TCS, INFY) or company name "
                     + "(e.g. 'Tata Consultancy Services')")
-            String symbol) {
+            String symbol,
+            ToolContext toolContext) {
         log.info("TOOL CALLED: getCompanyProfile symbol={}", symbol);
-        return stockResearchService.getCompanyProfile(symbol);
+        CompanyProfileResult result = stockResearchService.getCompanyProfile(symbol);
+        SectorContext sector = result.success()
+                ? sectorClassifier.classify(result.companyProfile().sector(), result.companyProfile().industry())
+                : SectorContext.of(IndustryGroup.UNKNOWN, "The company profile could not be retrieved");
+        return recorded(toolContext, PROFILE_TOOL, symbol, result.status().name(),
+                renderer.renderCompanyProfileTool(result, sector));
     }
 
-    @Tool(description = """
+    @Tool(name = FINANCIALS_TOOL, description = """
             Get a company's financials: headline TTM revenue, net profit, margins, returns, debt and cash; \
             recent reported quarters with period-end and results-publication dates; fiscal-year statements; \
-            and YoY growth, CAGR, margins, ROE and ROA calculated by the application. \
-            Use this for questions about financial or fundamental performance, profitability, \
-            margins, growth, leverage or balance-sheet strength. \
-            Every number is a data point with a unit, a period (with a fiscal label computed by the application), \
-            a source and an origin (REPORTED by the source or CALCULATED by the application). \
-            Amounts are already normalised to crore - quote the 'display' field; never convert units and \
-            never recalculate a CALCULATED value. Use period labels exactly as given; \
-            latestReportedQuarter is the latest quarter with results - never describe a later quarter as reported. \
-            These figures describe past reporting periods, NOT live data. Their source is Yahoo Finance. \
-            A data point with availability UNAVAILABLE is unknown, not zero - report it as not available \
-            using its unavailableReason. dataGaps and dataQualityWarnings must be reported. \
-            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""")
-    public FinancialSummaryResult getFinancialSummary(
+            and YoY growth, CAGR, margins, ROE, ROA and debt-to-equity calculated and verified by the application. \
+            Normally needed for any fundamental overview or analysis, and for questions about financial \
+            performance, profitability, margins, growth, leverage or balance sheet. \
+            Every value has a period, status and source. Status VALID values may be quoted exactly as displayed. \
+            DATA_CONFLICT, INVALID and UNAVAILABLE values are not usable: report the status and reason, and draw \
+            no observation, trend or conclusion from them. Never recalculate a CALCULATED value, never compute \
+            a new figure from these values, and never convert units or currency. Use period labels exactly as \
+            given. The figures describe past reporting periods, not live data. Their source is Yahoo Finance. \
+            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""",
+            resultConverter = PlainTextResultConverter.class)
+    public String getFinancialSummary(
             @ToolParam(description = "Indian stock trading symbol (e.g. TCS, INFY) or company name "
                     + "(e.g. 'Tata Consultancy Services')")
-            String symbol) {
+            String symbol,
+            ToolContext toolContext) {
         log.info("TOOL CALLED: getFinancialSummary symbol={}", symbol);
-        return stockResearchService.getFinancialSummary(symbol);
+        FinancialSummaryResult result = stockResearchService.getFinancialSummary(symbol);
+        return recorded(toolContext, FINANCIALS_TOOL, symbol, result.status().name(),
+                renderer.renderFinancialSummaryTool(result));
     }
 
-    @Tool(description = """
-            Get a company's shareholding pattern: the percentage held by the promoter group, \
-            foreign institutional investors (FII), domestic institutional investors (DII) and the public. \
-            Use this for any question about who owns the company, promoter stake, promoter pledging, \
-            or institutional ownership. \
-            Call this tool even though its data source may be unavailable: when it is, the result \
-            explains that the ownership split is UNKNOWN, which you must report as such. Never fill \
-            the gap with zero, an estimate, or a figure you recall - shareholding percentages change \
-            every quarter and a remembered number will be wrong. \
-            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""")
-    public ShareholdingResult getShareholding(
+    @Tool(name = SHAREHOLDING_TOOL, description = """
+            Get a company's shareholding pattern: the percentage held by the promoter group, foreign \
+            institutional investors (FII), domestic institutional investors (DII) and the public. \
+            Consider it for any fundamental overview or analysis, and use it for any question about who owns \
+            the company, promoter stake, promoter pledging or institutional ownership. \
+            Call it even though its data source may be unavailable: the result then states the capability gap, \
+            which you must report - the ownership split is UNKNOWN. Never fill the gap with zero, an estimate, \
+            or a figure you recall. \
+            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""",
+            resultConverter = PlainTextResultConverter.class)
+    public String getShareholding(
             @ToolParam(description = "Indian stock trading symbol (e.g. TCS, INFY) or company name "
                     + "(e.g. 'Tata Consultancy Services')")
-            String symbol) {
+            String symbol,
+            ToolContext toolContext) {
         log.info("TOOL CALLED: getShareholding symbol={}", symbol);
-        return stockResearchService.getShareholding(symbol);
+        ShareholdingResult result = stockResearchService.getShareholding(symbol);
+        return recorded(toolContext, SHAREHOLDING_TOOL, symbol, result.status().name(),
+                renderer.renderShareholdingTool(result));
     }
 
-    @Tool(description = """
-            Get a stock's past share-price performance over a multi-year window: start and end price, \
-            total return, CAGR, period high and low, maximum drawdown, and year-by-year returns. \
-            Use this for questions about how a stock has performed or moved over time - "how has X done \
-            over five years", "long-term returns", "has X been volatile". \
-            This is HISTORY: endPrice is the last close in the window and is not the live price, so use \
-            getStockQuote when the user wants the current price. \
-            Prices are daily closes adjusted for splits and dividends. Returns, CAGR, drawdown (with peak \
-            and trough dates) and calendar-year returns are CALCULATED by the application - quote them as \
-            given and never recalculate them. A yearToDate calendar-year return is partial. \
-            Check actualYears - a recently listed company may have a shorter history than requested. \
-            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""")
-    public HistoricalPerformanceResult getHistoricalPerformance(
+    @Tool(name = HISTORY_TOOL, description = """
+            Get a stock's past share-price performance over a multi-year window: start and end price, total \
+            return, CAGR, period high and low, maximum drawdown, and year-by-year returns. \
+            Normally needed when analysing a stock or giving a fundamental overview, and for questions about how \
+            a stock has performed over time - "how has X done over five years", "long-term returns". \
+            This is HISTORY: endPrice is the last close in the window, not the live price - use getStockQuote \
+            for the current price. Returns, CAGR and drawdown are CALCULATED and verified by the application - \
+            quote them as given and never recalculate them. A yearToDate calendar-year return is partial. \
+            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""",
+            resultConverter = PlainTextResultConverter.class)
+    public String getHistoricalPerformance(
             @ToolParam(description = "Indian stock trading symbol (e.g. TCS, INFY) or company name "
                     + "(e.g. 'Tata Consultancy Services')")
             String symbol,
             @ToolParam(description = "Lookback window in years (e.g. 5 for five-year performance). "
                     + "Defaults to 5 when omitted.", required = false)
-            Integer years) {
+            Integer years,
+            ToolContext toolContext) {
         log.info("TOOL CALLED: getHistoricalPerformance symbol={} years={}", symbol, years);
-        return stockResearchService.getHistoricalPerformance(symbol, years);
+        HistoricalPerformanceResult result = stockResearchService.getHistoricalPerformance(symbol, years);
+        return recorded(toolContext, HISTORY_TOOL, symbol, result.status().name(),
+                renderer.renderHistoricalPerformanceTool(result));
+    }
+
+    private static String recorded(ToolContext context, String tool, String symbol, String status, String text) {
+        ToolUsage.record(context, new ToolUsage.Call(tool, symbol, status, text));
+        return text;
     }
 }

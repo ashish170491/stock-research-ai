@@ -23,7 +23,7 @@ class StockPriceToolTest {
         when(stockMarketDataService.getQuote("RELIANCE")).thenReturn(expected);
 
         StockPriceTool tool = new StockPriceTool(stockMarketDataService);
-        StockQuoteResult result = tool.getStockQuote("RELIANCE");
+        StockQuoteResult result = tool.getStockQuote("RELIANCE", null);
 
         assertThat(result).isEqualTo(expected);
         verify(stockMarketDataService).getQuote("RELIANCE");
@@ -36,6 +36,6 @@ class StockPriceToolTest {
 
         StockPriceTool tool = new StockPriceTool(stockMarketDataService);
 
-        assertThat(tool.getStockQuote("TCS").success()).isFalse();
+        assertThat(tool.getStockQuote("TCS", null).success()).isFalse();
     }
 }

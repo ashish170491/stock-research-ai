@@ -28,6 +28,11 @@ import java.util.regex.Pattern;
  *       advice to go and check filings is allowed). These are removed even if
  *       the words happen to occur in the evidence, e.g. a product named an
  *       "acceleration platform" in a business summary.</li>
+ *   <li><b>Withheld topics</b> - when the application withheld every
+ *       observation on a topic (its values are in a DATA_CONFLICT, failed
+ *       verification, or are not primary indicators for the sector), any
+ *       sentence drawing a trend or conclusion on that topic is removed. A
+ *       sentence reporting the conflict or the withholding itself is kept.</li>
  * </ul>
  */
 @Component
@@ -37,7 +42,7 @@ public class UnsupportedClaimFilter {
             "\\b(dominat\\w*|market[- ]leader\\w*|market[- ]leadership|leading (?:bank|lender|player|company|"
                     + "position|provider|franchise)|largest|biggest|best[- ]in[- ]class|monopol\\w*|unrivall?ed|"
                     + "undisputed|world[- ]class|industry[- ]leading|number one|no\\. ?1|#1|top[- ]tier|"
-                    + "market share|moat)\\b",
+                    + "market share|moat|major player|key player|significant scale|dominant player)\\b",
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern NEVER_SUPPORTED = Pattern.compile(
@@ -49,6 +54,9 @@ public class UnsupportedClaimFilter {
                     + "(?:debt[- ]to[- ]equity|leverage|gearing|debt levels?|indebtedness)\\b[^.]{0,40}?\\b(?:low|high|"
                     + "elevated|manageable|comfortable|concerning|excessive|limited|minimal)|"
                     // evaluative labels - the data supplies no criteria for any of them
+                    + "financially (?:healthy|sound|strong|stable|robust)|"
+                    + "steadily|steady (?:growth|performance|profitability)|resilien\\w*|remained stable|"
+                    + "(?:stable|sound|prudent|healthy|comfortable) (?:capital structure|balance sheet|financial position)|"
                     + "strong(?:er|est|ly)?|weak(?:er|est|ness)?|(?:un)?healthy|poor(?:er|ly)?|excellent|attractive|"
                     + "robust|solid|impressive|(?:in)?efficient(?:ly)?|efficiency gains|high[- ]quality|"
                     + "modest profitability|superior|inferior|"
@@ -82,6 +90,32 @@ public class UnsupportedClaimFilter {
             "\\b(?:verify|check|consult|review|seek|refer to|investigat\\w*|examin\\w*|should|may be necessary)\\b",
             Pattern.CASE_INSENSITIVE);
 
+    /** Words that name a withheld topic in a sentence. */
+    private static final java.util.Map<String, Pattern> TOPIC_TERMS = java.util.Map.of(
+            "revenue growth", Pattern.compile("\\b(?:revenue|sales|top[- ]line)\\b", Pattern.CASE_INSENSITIVE),
+            "net profit growth", Pattern.compile("\\b(?:net profit|profit|earnings|PAT|net income)\\b",
+                    Pattern.CASE_INSENSITIVE),
+            "net profit margin", Pattern.compile("\\b(?:net (?:profit )?margin|profit margin|profitability)\\b",
+                    Pattern.CASE_INSENSITIVE),
+            "operating margin", Pattern.compile("\\b(?:operating margin|EBIT margin)\\b", Pattern.CASE_INSENSITIVE),
+            "return on equity", Pattern.compile("\\b(?:return on equity|ROE)\\b", Pattern.CASE_INSENSITIVE),
+            "return on assets", Pattern.compile("\\b(?:return on assets|ROA)\\b", Pattern.CASE_INSENSITIVE),
+            "debt-to-equity", Pattern.compile("\\b(?:debt[- ]to[- ]equity|leverage|gearing|capital structure|"
+                    + "total debt)\\b", Pattern.CASE_INSENSITIVE));
+    /** A trend, level or conclusion - what may not be said about a withheld topic. */
+    private static final Pattern CONCLUSION = Pattern.compile(
+            "\\d|\\b(?:gr[eo]w\\w*|rose|rise|rising|increas\\w*|decreas\\w*|declin\\w*|fell|fall\\w*|drop\\w*|"
+                    + "improv\\w*|expan\\w*|contract\\w*|stable|steady|consistent|higher|lower|trend\\w*|CAGR|"
+                    + "indicat\\w*|suggest\\w*|reflect\\w*|demonstrat\\w*|signal\\w*|stood at)\\b",
+            Pattern.CASE_INSENSITIVE);
+    /** A sentence about the data problem or the withholding itself, which is always allowed. */
+    private static final Pattern ABOUT_THE_GAP = Pattern.compile(
+            "\\b(?:conflict\\w*|DATA_CONFLICT|discrepan\\w*|differ\\w*|disagree\\w*|withheld|withhold\\w*|"
+                    + "not generated|inconsisten\\w*|unavailable|not calculated|verif\\w*|INVALID|not (?:a )?primary|"
+                    // not "limit\\w*": that would match company names ending in "Limited"
+                    + "cannot|could not|limits?|limiting|limitations?|uncertain\\w*|confidence)\\b",
+            Pattern.CASE_INSENSITIVE);
+
     private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
 
     public record Result(String text, List<String> removedSentences) {
@@ -93,6 +127,14 @@ public class UnsupportedClaimFilter {
      *                 is supported
      */
     public Result filter(String text, String evidence) {
+        return filter(text, evidence, List.of());
+    }
+
+    /**
+     * @param withheldTopics topics the application withheld every observation on; sentences drawing a
+     *                       trend or conclusion about them are removed
+     */
+    public Result filter(String text, String evidence, List<String> withheldTopics) {
         if (text == null || text.isBlank()) {
             return new Result(text, List.of());
         }
@@ -102,7 +144,7 @@ public class UnsupportedClaimFilter {
         for (String line : text.split("\n", -1)) {
             StringBuilder keptLine = new StringBuilder();
             for (String sentence : SENTENCE_END.split(line)) {
-                if (unsupported(sentence, haystack)) {
+                if (unsupported(sentence, haystack) || aboutWithheldTopic(sentence, withheldTopics)) {
                     removed.add(sentence.strip());
                 } else {
                     if (!keptLine.isEmpty()) {
@@ -119,6 +161,14 @@ public class UnsupportedClaimFilter {
             kept.append(result).append('\n');
         }
         return new Result(kept.toString().stripTrailing(), List.copyOf(removed));
+    }
+
+    private boolean aboutWithheldTopic(String sentence, List<String> withheldTopics) {
+        if (ABOUT_THE_GAP.matcher(sentence).find() || !CONCLUSION.matcher(sentence).find()) {
+            return false;
+        }
+        return withheldTopics.stream().map(TOPIC_TERMS::get).filter(java.util.Objects::nonNull)
+                .anyMatch(terms -> terms.matcher(sentence).find());
     }
 
     private boolean unsupported(String sentence, String evidence) {

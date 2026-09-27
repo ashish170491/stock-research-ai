@@ -93,6 +93,7 @@ class YahooFinanceFinancialDataProviderTest {
     /** Q4 FY26 and Q1 FY27 as Yahoo reports them, plus a future Q2 FY27 row that must be rejected. */
     private static final String HDFC_EARNINGS = """
             {
+              "financialCurrency": "INR",
               "earningsChart": { "quarterly": [
                 { "actual": { "raw": 12.45, "fmt": "12.45" }, "fiscalQuarter": "4Q2026", "calendarQuarter": "1Q2026",
                   "periodEndDate": { "raw": 1774915200 }, "reportedDate": { "raw": 1776503754 } },
@@ -261,7 +262,7 @@ class YahooFinanceFinancialDataProviderTest {
 
         ReportedFinancials financials = provider.getReportedFinancials("HDFC Bank");
 
-        assertThat(financials.headline().revenue().unavailableReason()).startsWith("metric semantics could not be verified");
+        assertThat(financials.headline().revenue().statusReason()).startsWith("metric semantics could not be verified");
         assertThat(financials.headline().operatingMarginPercent().available()).isFalse();
     }
 
@@ -294,7 +295,7 @@ class YahooFinanceFinancialDataProviderTest {
 
         assertThat(financials.headline().ebitda().available()).isFalse();
         assertThat(financials.headline().ebitda().value()).isNull();
-        assertThat(financials.headline().ebitda().unavailableReason()).contains("financialData.ebitda");
+        assertThat(financials.headline().ebitda().statusReason()).contains("financialData.ebitda");
         assertThat(financials.headline().returnOnCapitalEmployedPercent().available()).isFalse();
     }
 
@@ -379,7 +380,7 @@ class YahooFinanceFinancialDataProviderTest {
 
         assertThat(revenue.available()).isFalse();
         assertThat(revenue.unit()).isNull();
-        assertThat(revenue.unavailableReason()).contains("currency is unknown");
+        assertThat(revenue.statusReason()).contains("currency is unknown");
     }
 
     @Test
@@ -414,5 +415,81 @@ class YahooFinanceFinancialDataProviderTest {
                 .isInstanceOf(ResearchDataUnavailableException.class)
                 .extracting(ex -> ((ResearchDataUnavailableException) ex).status())
                 .isEqualTo(ResearchStatus.SYMBOL_NOT_FOUND);
+    }
+
+    // --- Currencies, derived ratios and the second annual feed -----------------------------------
+
+    @Test
+    void readsTheQuarterlyChartsInTheirOwnCurrencyNotTheHeadlineCurrency() {
+        // The Infosys shape: financialData in USD, the earnings module's charts in INR.
+        String usdHeadline = HDFC_FINANCIALS.replace("\"financialCurrency\": \"INR\"", "\"financialCurrency\": \"USD\"");
+        respond(quoteSummary(usdHeadline, HDFC_STATISTICS, HDFC_EARNINGS));
+
+        ReportedFinancials financials = provider.getReportedFinancials("HDFC Bank");
+        QuarterlyResult latest = financials.recentQuarters().getLast();
+
+        assertThat(financials.headline().revenue().unit()).isEqualTo(Unit.USD_MILLION);
+        assertThat(financials.headline().revenue().currency().originalCurrency()).isEqualTo("USD");
+        assertThat(latest.revenue().unit()).isEqualTo(Unit.INR_CRORE);
+        assertThat(latest.revenue().value()).isEqualByComparingTo("46355.55");
+        assertThat(latest.revenue().currency().originalCurrency()).isEqualTo("INR");
+        assertThat(latest.earningsPerShare().display()).isEqualTo("₹12.35 per share");
+    }
+
+    @Test
+    void neverLabelsQuarterlyChartsWhoseCurrencyYahooDidNotState() {
+        respond(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS,
+                HDFC_EARNINGS.replace("\"financialCurrency\": \"INR\",", "")));
+
+        QuarterlyResult latest = provider.getReportedFinancials("HDFC Bank").recentQuarters().getLast();
+
+        assertThat(latest.revenue().available()).isFalse();
+        assertThat(latest.revenue().statusReason()).contains("currency is unknown");
+        assertThat(latest.earningsPerShare().available()).isFalse();
+    }
+
+    @Test
+    void recordsTheCurrencyAndItsNormalisationOnEveryAmount() {
+        FinancialDataPoint revenue = hdfc().headline().revenue();
+
+        assertThat(revenue.currency().originalCurrency()).isEqualTo("INR");
+        assertThat(revenue.currency().normalizedCurrency()).isEqualTo("INR");
+        assertThat(revenue.currency().conversion())
+                .isEqualTo(com.ashish.stockresearch.research.model.CurrencyInfo.Conversion.SCALED_SAME_CURRENCY);
+        assertThat(revenue.rawValue()).isEqualByComparingTo("2949644288000");
+        assertThat(revenue.value()).isEqualByComparingTo("294964.43");
+    }
+
+    @Test
+    void recordsWhichProviderRatiosYahooDerivesFromItsRevenueFigure() {
+        ReportedFinancials financials = hdfc();
+
+        assertThat(financials.headline().netProfitMarginPercent().dependsOnFields())
+                .contains("financialData.profitMargins", "financialData.totalRevenue");
+        assertThat(financials.headline().operatingMarginPercent().dependsOnFields()).contains("financialData.totalRevenue");
+        assertThat(financials.headline().quarterlyRevenueGrowthYoyPercent().dependsOnFields())
+                .contains("financialData.totalRevenue");
+        assertThat(financials.headline().returnOnEquityPercent().dependsOnFields())
+                .containsExactly("financialData.returnOnEquity");
+    }
+
+    @Test
+    void keepsTheEarningsModulesYearlyFiguresOnlyForCrossChecking() {
+        String withYearly = HDFC_EARNINGS.replace("\"financialsChart\": { \"quarterly\": [", """
+                "financialsChart": { "yearly": [
+                    { "date": 2025, "revenue": { "raw": 2870217300000, "fmt": "2.87T" }, "earnings": { "raw": 707922500000, "fmt": "707.92B" } },
+                    { "date": 2026, "revenue": { "raw": 1912186100000, "fmt": "1.91T" }, "earnings": { "raw": 760259700000, "fmt": "760.26B" } },
+                    { "date": 2027, "revenue": { "raw": 1000000000000, "fmt": "1T" }, "earnings": { "raw": 1000000000, "fmt": "1B" } }
+                  ], "quarterly": [""");
+        respond(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, withYearly));
+
+        ReportedFinancials financials = provider.getReportedFinancials("HDFC Bank");
+
+        // FY27 has not ended, so it is dropped; FY25 and FY26 are placed by the fiscal-year end.
+        assertThat(financials.annualCrossCheckFigures()).extracting(y -> y.period().label())
+                .containsExactly("FY25", "FY26");
+        assertThat(financials.annualCrossCheckFigures().get(0).revenue().value()).isEqualByComparingTo("287021.73");
+        assertThat(financials.annualCrossCheckFigures().get(0).revenue().source().sourceField())
+                .isEqualTo("earnings.financialsChart.yearly.revenue");
     }
 }

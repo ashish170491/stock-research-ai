@@ -19,7 +19,7 @@ class FinancialDataPointTest {
     @Test
     void anUnavailablePointCannotCarryAValue() {
         assertThatThrownBy(() -> new FinancialDataPoint("revenue", BigDecimal.ZERO, Unit.INR_CRORE, "0", null, null,
-                PERIOD, SOURCE, Availability.UNAVAILABLE, null, null, null, "missing"))
+                null, PERIOD, SOURCE, DataStatus.UNAVAILABLE, "missing", null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -44,11 +44,58 @@ class FinancialDataPointTest {
     }
 
     @Test
-    void aCalculatedPointMustStateItsCalculationAndInputs() {
+    void aCalculatedPointMustStateItsFormulaAndInputValues() {
+        List<CalculationInput> inputs = List.of(new CalculationInput("a", "x", BigDecimal.ONE, Unit.INR_CRORE, "FY26"));
         assertThatThrownBy(() -> FinancialDataPoint.calculated("m", BigDecimal.ONE, Unit.PERCENT, PERIOD, SOURCE,
-                null, List.of("f"))).isInstanceOf(IllegalArgumentException.class);
+                Formula.RATIO_PERCENT, null, inputs)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> FinancialDataPoint.calculated("m", BigDecimal.ONE, Unit.PERCENT, PERIOD, SOURCE,
-                "a / b", List.of())).isInstanceOf(IllegalArgumentException.class);
+                null, "a / b", inputs)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> FinancialDataPoint.calculated("m", BigDecimal.ONE, Unit.PERCENT, PERIOD, SOURCE,
+                Formula.RATIO_PERCENT, "a / b", List.of())).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aReportedValueInConflictStaysVisibleButIsNotUsable() {
+        FinancialDataPoint revenue = FinancialDataPoint.reported("revenue", BigDecimal.TEN,
+                ProviderUnit.WHOLE_CURRENCY_UNITS, BigDecimal.ONE, Unit.INR_CRORE, PERIOD, SOURCE);
+
+        FinancialDataPoint conflicted = revenue.inConflict("DATA_CONFLICT: two fields disagree");
+
+        assertThat(conflicted.status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(conflicted.available()).isFalse();
+        assertThat(conflicted.value()).isEqualByComparingTo("1");
+        assertThat(conflicted.statusReason()).contains("two fields disagree");
+    }
+
+    @Test
+    void aCalculatedValueInConflictOrInvalidHasNoValue() {
+        FinancialDataPoint margin = FinancialDataPoint.calculated("margin", BigDecimal.ONE, Unit.PERCENT, PERIOD, SOURCE,
+                Formula.RATIO_PERCENT, "a / b x 100", List.of(
+                        new CalculationInput("a", "x", BigDecimal.ONE, Unit.INR_CRORE, "FY26"),
+                        new CalculationInput("b", "y", new BigDecimal("100"), Unit.INR_CRORE, "FY26")));
+
+        FinancialDataPoint conflicted = margin.inConflict("input in conflict");
+        FinancialDataPoint invalid = margin.invalid("did not reproduce");
+
+        assertThat(conflicted.value()).isNull();
+        assertThat(conflicted.display()).isEqualTo("DATA_CONFLICT");
+        assertThat(conflicted.dependsOnFields()).containsExactly("x", "y");
+        assertThat(invalid.value()).isNull();
+        assertThat(invalid.status()).isEqualTo(DataStatus.INVALID);
+        assertThat(invalid.inputs()).hasSize(2);
+    }
+
+    @Test
+    void aMetricThatWasNotCalculatedCannotClaimToBeValid() {
+        assertThatThrownBy(() -> FinancialDataPoint.notCalculated("m", Unit.PERCENT, PERIOD, SOURCE, DataStatus.VALID,
+                Formula.RATIO_PERCENT, "a / b", List.of("x"), "reason")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void currenciesAreNeverConverted() {
+        assertThatThrownBy(() -> new CurrencyInfo("USD", "INR", CurrencyInfo.Conversion.SCALED_SAME_CURRENCY))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(CurrencyInfo.scaled("inr").normalizedCurrency()).isEqualTo("INR");
     }
 
     @Test
@@ -68,10 +115,17 @@ class FinancialDataPointTest {
         FinancialDataPoint reported = FinancialDataPoint.reported("revenue", BigDecimal.TEN,
                 ProviderUnit.WHOLE_CURRENCY_UNITS, BigDecimal.ONE, Unit.INR_CRORE, PERIOD, SOURCE);
         FinancialDataPoint calculated = FinancialDataPoint.calculated("margin", BigDecimal.ONE, Unit.PERCENT, PERIOD,
-                SOURCE, "a / b", List.of("x", "y"));
+                SOURCE, Formula.RATIO_PERCENT, "a / b", List.of(
+                        new CalculationInput("a", "x", BigDecimal.ONE, Unit.INR_CRORE, "FY26"),
+                        new CalculationInput("b", "y", BigDecimal.TEN, Unit.INR_CRORE, "FY26"),
+                        CalculationInput.derived("years", BigDecimal.ONE, Unit.YEARS)));
+        FinancialDataPoint derived = FinancialDataPoint.reported("profitMargins", BigDecimal.ONE,
+                ProviderUnit.FRACTION, BigDecimal.TEN, Unit.PERCENT, PERIOD, SOURCE.withField("financialData.profitMargins"))
+                .derivedFrom(List.of("financialData.totalRevenue"));
 
         assertThat(reported.dependsOnFields()).containsExactly("financialData.totalRevenue");
         assertThat(calculated.dependsOnFields()).containsExactly("x", "y");
+        assertThat(derived.dependsOnFields()).containsExactly("financialData.profitMargins", "financialData.totalRevenue");
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
+import com.ashish.stockresearch.service.ResearchReportWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -47,7 +48,9 @@ class LlmSymbolResolver {
             return Optional.empty();
         }
 
-        String candidate = response == null ? "" : response.strip().toUpperCase();
+        // Qwen3 can emit its reasoning inline; only the answer after it is a candidate.
+        String answer = ResearchReportWriter.stripThinking(response);
+        String candidate = answer == null ? "" : answer.strip().toUpperCase();
         if (candidate.isEmpty() || "UNKNOWN".equals(candidate) || !PLAUSIBLE_TICKER.matcher(candidate).matches()) {
             log.debug("LLM symbol lookup for '{}' returned no usable candidate: '{}'", companyName, response);
             return Optional.empty();

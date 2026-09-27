@@ -105,6 +105,6 @@ class YahooFinanceCompanyProfileProviderTest {
         CompanyProfile profile = provider.getCompanyProfile("HDFC Bank");
 
         assertThat(profile.marketCap().available()).isFalse();
-        assertThat(profile.marketCap().unavailableReason()).startsWith("metric semantics could not be verified");
+        assertThat(profile.marketCap().statusReason()).startsWith("metric semantics could not be verified");
     }
 }

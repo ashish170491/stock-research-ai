@@ -4,6 +4,7 @@ import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -33,8 +34,12 @@ public class StockPriceTool {
     public StockQuoteResult getStockQuote(
             @ToolParam(description = "The Indian stock's trading symbol (e.g. RELIANCE, WIPRO) or company name "
                     + "(e.g. 'Reliance Industries', 'HDFC Bank') - it will be resolved to the correct exchange symbol")
-            String symbol) {
+            String symbol,
+            ToolContext toolContext) {
         log.info("TOOL CALLED: getStockQuote symbol={}", symbol);
-        return stockMarketDataService.getQuote(symbol);
+        StockQuoteResult result = stockMarketDataService.getQuote(symbol);
+        ToolUsage.record(toolContext, new ToolUsage.Call("getStockQuote", symbol,
+                result.success() ? "OK" : "ERROR", String.valueOf(result)));
+        return result;
     }
 }

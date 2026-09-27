@@ -100,12 +100,15 @@ public final class ResearchFixtures {
                 missing("freeCashFlow", "financialData.freeCashflow", ttm),
                 crore("totalDebt", "financialData.totalDebt", "565871.38", balance),
                 crore("totalCash", "financialData.totalCash", "237766.63", balance),
-                percent("operatingMarginPercent", "financialData.operatingMargins", "33.29", ttm),
-                percent("netProfitMarginPercent", "financialData.profitMargins", "26.79", ttm),
+                percent("operatingMarginPercent", "financialData.operatingMargins", "33.29", ttm)
+                        .derivedFrom(List.of("financialData.totalRevenue")),
+                percent("netProfitMarginPercent", "financialData.profitMargins", "26.79", ttm)
+                        .derivedFrom(List.of("financialData.totalRevenue", "defaultKeyStatistics.netIncomeToCommon")),
                 percent("returnOnEquityPercent", "financialData.returnOnEquity", "13.84", ttm),
                 percent("returnOnAssetsPercent", "financialData.returnOnAssets", "1.75", ttm),
                 missing("debtToEquityPercent", "financialData.debtToEquity", balance),
-                percent("quarterlyRevenueGrowthYoyPercent", "financialData.revenueGrowth", "16.60", quarter),
+                percent("quarterlyRevenueGrowthYoyPercent", "financialData.revenueGrowth", "16.60", quarter)
+                        .derivedFrom(List.of("financialData.totalRevenue")),
                 percent("quarterlyEarningsGrowthYoyPercent", "financialData.earningsGrowth", "18.10", quarter),
                 FinancialDataPoint.unavailable("returnOnCapitalEmployedPercent", Unit.PERCENT, ttm, SOURCE,
                         "No capital-employed figure"));
@@ -120,6 +123,25 @@ public final class ResearchFixtures {
                 quarter(LATEST_QUARTER_END, "46355.55", "19059.72"));
     }
 
+    /**
+     * HDFC Bank's figures with the revenue conflict removed: TTM revenue equal to the sum of its four
+     * quarters, and no provider margins derived from the other revenue definition. For testing the
+     * calculations themselves on data that passes every source check.
+     */
+    public static ReportedFinancials consistentReported() {
+        ReportingPeriod ttm = CALENDAR.trailingTwelveMonths(LATEST_QUARTER_END);
+        HeadlineFinancials h = hdfcHeadline();
+        HeadlineFinancials consistent = new HeadlineFinancials(
+                crore("revenue", "financialData.totalRevenue", "184406.36", ttm), h.netProfit(), h.ebitda(),
+                h.freeCashFlow(), h.totalDebt(), h.totalCash(),
+                missing("operatingMarginPercent", "financialData.operatingMargins", ttm),
+                missing("netProfitMarginPercent", "financialData.profitMargins", ttm),
+                h.returnOnEquityPercent(), h.returnOnAssetsPercent(), h.debtToEquityPercent(),
+                h.quarterlyRevenueGrowthYoyPercent(), h.quarterlyEarningsGrowthYoyPercent(),
+                h.returnOnCapitalEmployedPercent());
+        return reported(consistent, hdfcQuarters(), hdfcAnnual(), CALENDAR.quarter(LATEST_QUARTER_END));
+    }
+
     public static ReportedFinancials hdfcReported() {
         return reported(hdfcHeadline(), hdfcQuarters(), hdfcAnnual(), CALENDAR.quarter(LATEST_QUARTER_END));
     }
@@ -127,7 +149,7 @@ public final class ResearchFixtures {
     public static ReportedFinancials reported(HeadlineFinancials headline, List<QuarterlyResult> quarters,
                                               List<AnnualFinancials> annual, ReportingPeriod latestQuarter) {
         return new ReportedFinancials("HDFCBANK", "NSE", "HDFC Bank Limited", "INR", latestQuarter,
-                CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31)), headline, quarters, annual, List.of(),
+                CALENDAR.fiscalYear(LocalDate.of(2026, 3, 31)), headline, quarters, annual, List.of(), List.of(),
                 new DataProvenance("Yahoo Finance", SourceType.MARKET_DATA_PROVIDER, DataFreshness.PERIODIC_FINANCIALS,
                         Instant.now(), LocalDate.of(2026, 7, 18), LATEST_QUARTER_END, LATEST_QUARTER_END, "note"));
     }

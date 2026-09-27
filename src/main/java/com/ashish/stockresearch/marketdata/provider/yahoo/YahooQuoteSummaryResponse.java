@@ -107,9 +107,14 @@ record YahooQuoteSummaryResponse(QuoteSummary quoteSummary) {
      * results announcement) and gives its fiscal label; {@code financialsChart}
      * carries the same quarters' revenue and earnings keyed by calendar
      * quarter ("2Q2026"). The two are joined on that key.
+     *
+     * {@code financialCurrency} here is the currency of these charts, which
+     * is not always the currency of {@code financialData}: Yahoo can report a
+     * company's headline figures in one currency and its quarterly charts in
+     * another.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Earnings(EarningsChart earningsChart, FinancialsChart financialsChart) {
+    record Earnings(EarningsChart earningsChart, FinancialsChart financialsChart, String financialCurrency) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -128,7 +133,16 @@ record YahooQuoteSummaryResponse(QuoteSummary quoteSummary) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record FinancialsChart(List<FinancialsQuarter> quarterly) {
+    record FinancialsChart(List<FinancialsQuarter> quarterly, List<FinancialsYear> yearly) {
+    }
+
+    /** @param date the calendar year in which the fiscal year ends, e.g. 2026 for FY26 */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record FinancialsYear(
+            Integer date,
+            YahooValue revenue,
+            YahooValue earnings
+    ) {
     }
 
     /** @param date calendar-quarter key, e.g. "2Q2026" */

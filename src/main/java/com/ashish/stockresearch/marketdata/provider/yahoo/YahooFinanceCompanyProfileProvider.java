@@ -136,7 +136,7 @@ class YahooFinanceCompanyProfileProvider implements CompanyProfileProvider {
         }
         return FinancialUnits.normalizeAmount(raw.raw(), ProviderScale.ONES, price.currency())
                 .map(normalized -> FinancialDataPoint.reported("marketCap", raw.raw(), ProviderUnit.WHOLE_CURRENCY_UNITS,
-                        normalized.value(), normalized.unit(), period, source))
+                        normalized.value(), normalized.unit(), period, source).withCurrency(normalized.currency()))
                 .orElseGet(() -> FinancialDataPoint.unavailable("marketCap", null, period, source,
                         "Market cap currency '%s' is unknown or unsupported, so it cannot be labelled"
                                 .formatted(price.currency())));
