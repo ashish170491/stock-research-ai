@@ -19,23 +19,28 @@ import java.util.Set;
 public enum IndustryGroup {
 
     BANK(List.of("net profit growth", "return on assets", "return on equity"),
-            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple"),
-            List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity"),
+            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple",
+                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple"),
+            List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity", "ROCE",
+                    "operating cash flow to net profit"),
             List.of("net interest margin", "gross and net NPA", "CASA ratio", "capital adequacy ratio",
                     "credit cost", "loan and deposit growth"),
-            "Deposits and borrowings are a bank's raw material, so debt and cash-flow measures do not describe "
-                    + "leverage or liquidity as they do for non-financial companies."),
+            "Deposits and borrowings are a bank's raw material, so debt, capital-employed and cash-flow measures "
+                    + "do not describe leverage, returns or liquidity as they do for non-financial companies."),
 
     NBFC(List.of("net profit growth", "return on assets", "return on equity"),
-            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent"),
-            List.of("EBITDA", "free cash flow", "operating margin"),
+            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "returnOnCapitalEmployedPercent",
+                    "ocfToPat3yMultiple", "ocfToPat5yMultiple"),
+            List.of("EBITDA", "free cash flow", "operating margin", "ROCE", "operating cash flow to net profit"),
             List.of("net interest margin", "gross and net stage-3 assets", "AUM growth", "cost of funds",
                     "capital adequacy ratio"),
             "Borrowing funds its lending book, so debt levels need asset-quality and funding-cost context."),
 
     INSURANCE(List.of("net profit growth", "return on equity"),
-            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple"),
-            List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity"),
+            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple",
+                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple"),
+            List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity", "ROCE",
+                    "operating cash flow to net profit"),
             List.of("solvency ratio", "value of new business margin", "embedded value", "persistency",
                     "combined ratio"),
             "Insurer revenue and profit follow premium and reserving cycles that generic margins do not capture."),

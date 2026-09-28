@@ -65,6 +65,10 @@ public class RequestRouter {
             Pattern.CASE_INSENSITIVE);
     private static final Pattern QUOTE = Pattern.compile(
             "\\b(?:price|quote|trading at)\\b", Pattern.CASE_INSENSITIVE);
+    /** "price to book of TCS" says "price" but asks for a valuation multiple, not a quote. */
+    private static final Pattern VALUATION = Pattern.compile(
+            "\\bp\\s*/\\s*[eb]\\b|\\bpe\\b|\\bprice[- ]to[- ]|\\bvaluation|\\b(?:earnings|dividend) yield|\\bmultiples?\\b",
+            Pattern.CASE_INSENSITIVE);
     /** Words around a company name in these requests, removed to leave the name itself. */
     private static final Set<String> FILLER = Set.of(
             "give", "me", "a", "an", "the", "of", "on", "for", "please", "can", "you", "provide", "do", "show",
@@ -143,7 +147,7 @@ public class RequestRouter {
                     : Optional.empty();
         }
         Intent intent = OVERVIEW.matcher(message).find() ? Intent.FULL_RESEARCH
-                : QUOTE.matcher(message).find() ? Intent.QUOTE : null;
+                : QUOTE.matcher(message).find() && !VALUATION.matcher(message).find() ? Intent.QUOTE : null;
         if (intent == null) {
             return Optional.empty();
         }

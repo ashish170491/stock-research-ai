@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.research;
 
+import java.math.BigDecimal;
 import com.ashish.stockresearch.research.model.CompanyProfile;
 import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
@@ -30,11 +31,14 @@ class StockResearchServiceTest {
     private ShareholdingProvider shareholdingProvider;
     @Mock
     private HistoricalMarketDataProvider historicalMarketDataProvider;
+    @Mock
+    private ValuationDataProvider valuationDataProvider;
 
     private StockResearchService service() {
         return new StockResearchService(companyProfileProvider, financialDataProvider,
                 shareholdingProvider, historicalMarketDataProvider,
-                new FinancialMetricsService(), new HistoricalPerformanceService());
+                new FinancialMetricsService(), new HistoricalPerformanceService(), valuationDataProvider,
+                new ValuationService(BigDecimal.valueOf(5)));
     }
 
     @Test

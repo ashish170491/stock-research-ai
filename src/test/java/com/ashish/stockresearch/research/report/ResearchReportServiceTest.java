@@ -1,5 +1,9 @@
 package com.ashish.stockresearch.research.report;
 
+import com.ashish.stockresearch.research.model.DataStatus;
+import com.ashish.stockresearch.research.model.FinancialSummary;
+import com.ashish.stockresearch.research.model.ValuationResult;
+import com.ashish.stockresearch.research.ValuationService;
 import com.ashish.stockresearch.research.FinancialMetricsService;
 import com.ashish.stockresearch.research.HistoricalPerformanceService;
 import com.ashish.stockresearch.research.ResearchFixtures;
@@ -40,6 +44,9 @@ import static org.mockito.Mockito.when;
 
 class ResearchReportServiceTest {
 
+    static final ValuationResult NO_VALUATION = ValuationResult.failure(ResearchStatus.DATA_NOT_AVAILABLE,
+            "no valuation in this test");
+
     private final FinancialDataValidator validator = new FinancialDataValidator(
             Clock.fixed(Instant.parse("2026-09-26T06:00:00Z"), ZoneId.of("Asia/Kolkata")));
     private final ResearchReportService service =
@@ -59,7 +66,7 @@ class ResearchReportServiceTest {
         return new ResearchReportService(mock(StockResearchService.class), validator, new SectorClassifier()).assemble("HDFC Bank",
                 CompanyProfileResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "Yahoo was down"),
                 financials, history,
-                ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "no source"));
+                ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "no source"), NO_VALUATION);
     }
 
     @Test
@@ -140,7 +147,8 @@ class ResearchReportServiceTest {
                     throw new IllegalStateException("financials provider crashed");
                 },
                 new UnsupportedShareholdingProvider(), provider,
-                new FinancialMetricsService(), new HistoricalPerformanceService());
+                new FinancialMetricsService(), new HistoricalPerformanceService(), provider,
+                new ValuationService(BigDecimal.valueOf(5)));
 
         StockResearchReport report = new ResearchReportService(research, validator, new SectorClassifier()).build("INFY");
 
@@ -151,9 +159,9 @@ class ResearchReportServiceTest {
     }
 
     @Test
-    void fetchesTheFourSectionsConcurrently() {
-        // Each fetch waits until all four have started: run one after another, the first would time out.
-        CountDownLatch allStarted = new CountDownLatch(4);
+    void fetchesTheFiveSectionsConcurrently() {
+        // Each fetch waits until all five have started: run one after another, the first would time out.
+        CountDownLatch allStarted = new CountDownLatch(5);
         StockResearchService research = mock(StockResearchService.class);
         when(research.getCompanyProfile(anyString())).thenAnswer(call -> {
             awaitOthers(allStarted);
@@ -171,17 +179,21 @@ class ResearchReportServiceTest {
             awaitOthers(allStarted);
             return ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "no source");
         });
+        when(research.getValuation(anyString())).thenAnswer(call -> {
+            awaitOthers(allStarted);
+            return ValuationResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "down");
+        });
 
         StockResearchReport report = new ResearchReportService(research, validator, new SectorClassifier()).build("INFY");
 
         assertThat(report.dataGaps()).extracting(DataGap::area)
-                .contains("Company", "Financials", "Share price history", "Shareholding");
+                .contains("Company", "Financials", "Share price history", "Shareholding", "Valuation");
     }
 
     private static void awaitOthers(CountDownLatch allStarted) throws InterruptedException {
         allStarted.countDown();
         if (!allStarted.await(5, TimeUnit.SECONDS)) {
-            throw new AssertionError("the four sections were not fetched concurrently");
+            throw new AssertionError("the five sections were not fetched concurrently");
         }
     }
 
@@ -208,10 +220,93 @@ class ResearchReportServiceTest {
                 CompanyProfileResult.failure(ResearchStatus.SYMBOL_NOT_FOUND, "x"),
                 FinancialSummaryResult.failure(ResearchStatus.SYMBOL_NOT_FOUND, "x"),
                 HistoricalPerformanceResult.failure(ResearchStatus.SYMBOL_NOT_FOUND, "x"),
-                ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "x"));
+                ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "x"), NO_VALUATION);
 
         assertThat(report.symbol()).isEqualTo("NOPE");
         assertThat(report.observations()).isEmpty();
         assertThat(report.latestReportedQuarter().known()).isFalse();
+    }
+
+    /** HDFC Bank's consistent figures with operating cash flow, EBIT and current liabilities added. */
+    private static FinancialSummary withCashAndCapital() {
+        List<com.ashish.stockresearch.research.model.AnnualFinancials> annual = ResearchFixtures.hdfcAnnual().stream()
+                .map(year -> ResearchFixtures.withCapitalAndCash(year, "100000", "1000000", "80000")).toList();
+        var consistent = ResearchFixtures.consistentReported();
+        return new FinancialMetricsService().summarize(ResearchFixtures.reported(consistent.headline(),
+                consistent.recentQuarters(), annual, consistent.latestReportedQuarter()));
+    }
+
+    private static CompanyProfileResult profileIn(String sector, String industry) {
+        var sample = new MockStockResearchProvider().getCompanyProfile("HDFCBANK");
+        return CompanyProfileResult.success(new com.ashish.stockresearch.research.model.CompanyProfile(sample.symbol(),
+                sample.exchange(), "HDFC Bank Limited", sector, industry, sample.country(), sample.website(),
+                sample.fullTimeEmployees(), sample.marketCap(), sample.sharesOutstanding(), sample.businessSummary(),
+                List.of(), sample.provenance()));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0} / {1}: observation drawn = {2}")
+    @org.junit.jupiter.params.provider.CsvSource({
+            "Financial Services, Banks - Regional, false",
+            "Technology, Information Technology Services, true"})
+    void drawsCashConversionAndRoceObservationsOnlyWhereTheyArePrimaryIndicators(String sector, String industry,
+                                                                                 boolean drawn) {
+        FinancialSummary summary = withCashAndCapital();
+        // Both are VALID, so only the sector rule can keep them out of the observations.
+        assertThat(summary.calculated().ocfToPat3yMultiple().status()).isEqualTo(DataStatus.VALID);
+        assertThat(summary.calculated().annual().getLast().returnOnCapitalEmployedPercent().status())
+                .isEqualTo(DataStatus.VALID);
+
+        StockResearchReport report = service.assemble("HDFCBANK", profileIn(sector, industry),
+                FinancialSummaryResult.success(summary),
+                HistoricalPerformanceResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "x"),
+                ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "x"), NO_VALUATION);
+
+        List<String> topics = report.observations().stream().map(Observation::topic).toList();
+        if (drawn) {
+            assertThat(topics).contains("cash conversion", "return on capital employed");
+        } else {
+            assertThat(topics).doesNotContain("cash conversion", "return on capital employed");
+            assertThat(report.withheldObservations()).filteredOn(w -> w.reason() == WithheldObservation.Reason.SECTOR_CONTEXT)
+                    .extracting(WithheldObservation::topic).contains("cash conversion", "return on capital employed");
+        }
+    }
+
+    @Test
+    void listsValuationAsADataGapWhenItCouldNotBeRetrieved() {
+        StockResearchReport report = hdfcReport(validator);
+
+        assertThat(report.dataGaps()).anySatisfy(gap -> {
+            assertThat(gap.area()).isEqualTo("Valuation");
+            assertThat(gap.item()).contains("P/E").contains("price-to-book").contains("dividend yield")
+                    .contains("earnings yield");
+        });
+        assertThat(new ResearchReportRenderer().renderEvidence(report))
+                .contains("Valuation unavailable: no valuation in this test")
+                .contains("Valuation / P/E, price-to-book, dividend yield and earnings yield");
+    }
+
+    @Test
+    void carriesValuationConflictsAndGapsIntoTheReport() {
+        // A P/E of 40.00x against price / EPS of 26.74x, and no dividend published.
+        var valuation = new ValuationService(BigDecimal.valueOf(5)).assess(com.ashish.stockresearch.research.ValuationFixtures
+                .valuation("1548.00", "57.90", "334.41", null, "40.00", "4.63", null));
+
+        StockResearchReport report = service.assemble("TECHM",
+                CompanyProfileResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "x"),
+                FinancialSummaryResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "x"),
+                HistoricalPerformanceResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE, "x"),
+                ShareholdingResult.failure(ResearchStatus.CAPABILITY_NOT_SUPPORTED, "x"), ValuationResult.success(valuation));
+        String evidence = new ResearchReportRenderer().renderEvidence(report);
+
+        assertThat(report.dataQualityIssues()).anySatisfy(i -> assertThat(i.affectedFields())
+                .containsExactly("summaryDetail.trailingPE"));
+        assertThat(report.dataGaps()).extracting(gap -> gap.area() + " / " + gap.item())
+                .contains("Valuation / dividendYieldPercent");
+        // In the table the model gets no disputed P/E to use, only the conflict explaining why - and no implied
+        // price / EPS figure (26.74) it could quote instead; the price it was checked against stays usable.
+        assertThat(evidence).contains("| trailingPe | WITHHELD").doesNotContain("| trailingPe | 40.00x")
+                .contains("away from share price / trailing EPS").contains("does not choose between them")
+                .doesNotContain("26.74")
+                .contains("| sharePrice | ₹1,548.00 per share |");
     }
 }

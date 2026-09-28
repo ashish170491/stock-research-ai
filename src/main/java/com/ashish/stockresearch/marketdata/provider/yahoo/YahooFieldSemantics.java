@@ -34,6 +34,8 @@ final class YahooFieldSemantics {
     static final Set<ProviderUnit> AMOUNT = Set.of(ProviderUnit.WHOLE_CURRENCY_UNITS);
     static final Set<ProviderUnit> PER_SHARE = Set.of(ProviderUnit.PER_SHARE);
     static final Set<ProviderUnit> SHARES = Set.of(ProviderUnit.SHARE_COUNT);
+    /** A multiple such as P/E: fmt "12.90" for raw 12.902477. */
+    static final Set<ProviderUnit> MULTIPLE = Set.of(ProviderUnit.MULTIPLE);
 
     private static final Pattern FORMATTED = Pattern.compile("^(-?[\\d,]*\\.?\\d+)\\s*([kKMBT%]?)$");
     /** fmt is rounded to 2 decimals in its own scale; allow that rounding plus a little. */

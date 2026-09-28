@@ -16,17 +16,19 @@ public record AnnualRatios(
         FinancialDataPoint operatingMarginPercent,
         FinancialDataPoint returnOnEquityPercent,
         FinancialDataPoint returnOnAssetsPercent,
-        FinancialDataPoint debtToEquityMultiple
+        FinancialDataPoint debtToEquityMultiple,
+        FinancialDataPoint returnOnCapitalEmployedPercent
 ) {
 
     public List<FinancialDataPoint> points() {
         return List.of(revenueGrowthYoyPercent, netProfitGrowthYoyPercent, netProfitMarginPercent,
-                operatingMarginPercent, returnOnEquityPercent, returnOnAssetsPercent, debtToEquityMultiple);
+                operatingMarginPercent, returnOnEquityPercent, returnOnAssetsPercent, debtToEquityMultiple,
+                returnOnCapitalEmployedPercent);
     }
 
     public AnnualRatios map(UnaryOperator<FinancialDataPoint> f) {
         return new AnnualRatios(period, f.apply(revenueGrowthYoyPercent), f.apply(netProfitGrowthYoyPercent),
                 f.apply(netProfitMarginPercent), f.apply(operatingMarginPercent), f.apply(returnOnEquityPercent),
-                f.apply(returnOnAssetsPercent), f.apply(debtToEquityMultiple));
+                f.apply(returnOnAssetsPercent), f.apply(debtToEquityMultiple), f.apply(returnOnCapitalEmployedPercent));
     }
 }

@@ -5,6 +5,7 @@ import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.research.model.ValuationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -37,19 +38,25 @@ public class StockResearchService {
     private final HistoricalMarketDataProvider historicalMarketDataProvider;
     private final FinancialMetricsService financialMetricsService;
     private final HistoricalPerformanceService historicalPerformanceService;
+    private final ValuationDataProvider valuationDataProvider;
+    private final ValuationService valuationService;
 
     public StockResearchService(CompanyProfileProvider companyProfileProvider,
                                 FinancialDataProvider financialDataProvider,
                                 ShareholdingProvider shareholdingProvider,
                                 HistoricalMarketDataProvider historicalMarketDataProvider,
                                 FinancialMetricsService financialMetricsService,
-                                HistoricalPerformanceService historicalPerformanceService) {
+                                HistoricalPerformanceService historicalPerformanceService,
+                                ValuationDataProvider valuationDataProvider,
+                                ValuationService valuationService) {
         this.companyProfileProvider = companyProfileProvider;
         this.financialDataProvider = financialDataProvider;
         this.shareholdingProvider = shareholdingProvider;
         this.historicalMarketDataProvider = historicalMarketDataProvider;
         this.financialMetricsService = financialMetricsService;
         this.historicalPerformanceService = historicalPerformanceService;
+        this.valuationDataProvider = valuationDataProvider;
+        this.valuationService = valuationService;
     }
 
     public CompanyProfileResult getCompanyProfile(String rawSymbol) {
@@ -69,6 +76,13 @@ public class StockResearchService {
         return execute("shareholding", rawSymbol,
                 symbol -> ShareholdingResult.success(shareholdingProvider.getShareholding(symbol)),
                 ShareholdingResult::failure);
+    }
+
+    /** Point-in-time valuation multiples, each checked against the share price it is quoted against. */
+    public ValuationResult getValuation(String rawSymbol) {
+        return execute("valuation", rawSymbol,
+                symbol -> ValuationResult.success(valuationService.assess(valuationDataProvider.getReportedValuation(symbol))),
+                ValuationResult::failure);
     }
 
     public HistoricalPerformanceResult getHistoricalPerformance(String rawSymbol, Integer years) {

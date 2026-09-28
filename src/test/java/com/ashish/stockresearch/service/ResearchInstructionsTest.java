@@ -17,13 +17,13 @@ class ResearchInstructionsTest {
         assertThat(ResearchInstructions.EVIDENCE_RULES).contains(
                 "1. FACT, OBSERVATION, INTERPRETATION", "2. FACTS AND CALCULATIONS", "3. SOURCE ATTRIBUTION",
                 "4. CAUSALITY", "5. QUALITATIVE LABELS", "6. GROWTH TERMINOLOGY", "7. DATA STATUS, CONFLICTS AND GAPS",
-                "8. SECTOR CONTEXT", "9. FINAL INTERPRETATION", "If it says Yahoo Finance", "grew at a",
+                "8. SECTOR CONTEXT", "9. FINAL INTERPRETATION", "10. VALUATION AND THE COMPANY NAMED", "If it says Yahoo Finance", "grew at a",
                 "NOT SUPPORTED BY CURRENT DATA SOURCE", "does not establish the specific cause");
     }
 
     @Test
     void containsNoExampleNumbersAModelCouldQuoteAsData() {
-        assertThat(ResearchInstructions.EVIDENCE_RULES.replaceAll("\\n\\s*\\d\\. ", "\n"))
+        assertThat(ResearchInstructions.EVIDENCE_RULES.replaceAll("\\n\\s*\\d+\\. ", "\n"))
                 .doesNotContainPattern("\\d");
     }
 }

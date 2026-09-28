@@ -57,6 +57,11 @@ app:
       requests-per-second: 2
 
   research:
+    valuation:
+      # A provider multiple (P/E, price-to-book, dividend yield) must agree with
+      # the price and per-share figures it is quoted against within this many
+      # percent; beyond it the multiple is DATA_CONFLICT.
+      cross-check-tolerance-percent: 5
     interpretation:
       # Whether the model reasons before writing a report's INTERPRETATION.
       # Measured 2026-09-27 on INFY, HDFCBANK and TCS (2 runs each): thinking

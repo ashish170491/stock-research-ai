@@ -20,5 +20,8 @@ public enum ProviderUnit {
     PER_SHARE,
 
     /** A count of shares. */
-    SHARE_COUNT
+    SHARE_COUNT,
+
+    /** A multiple, e.g. a price-to-earnings ratio: 12.90 = 12.90x. */
+    MULTIPLE
 }

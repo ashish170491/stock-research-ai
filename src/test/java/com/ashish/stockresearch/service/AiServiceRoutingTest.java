@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.service;
 
+import com.ashish.stockresearch.research.ValuationService;
 import com.ashish.stockresearch.agent.Intent;
 import com.ashish.stockresearch.agent.RequestRouter;
 import com.ashish.stockresearch.agent.ResearchSessions;
@@ -117,7 +118,8 @@ class AiServiceRoutingTest {
     private final StockMarketDataService quotes = mock(StockMarketDataService.class);
     private final StockResearchService research = new StockResearchService(
             new MockStockResearchProvider(), new MockStockResearchProvider(), new UnsupportedShareholdingProvider(),
-            new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService());
+            new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService(),
+            new MockStockResearchProvider(), new ValuationService(BigDecimal.valueOf(5)));
 
     private static final String CONVERSATION = "c1";
     private final ChatMemory chatMemory = MessageWindowChatMemory.builder()

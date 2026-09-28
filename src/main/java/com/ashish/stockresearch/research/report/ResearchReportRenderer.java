@@ -19,7 +19,10 @@ import com.ashish.stockresearch.research.model.HistoricalPerformance;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.QuarterlyResult;
 import com.ashish.stockresearch.research.model.ReportedFinancials;
+import com.ashish.stockresearch.research.model.ReportedValuation;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.research.model.ValuationResult;
+import com.ashish.stockresearch.research.model.ValuationSnapshot;
 import com.ashish.stockresearch.research.sector.SectorContext;
 import org.springframework.stereotype.Component;
 
@@ -208,6 +211,22 @@ public class ResearchReportRenderer {
         return md.toString();
     }
 
+    public String renderValuationTool(ValuationResult result) {
+        StringBuilder md = toolHeader("getValuation", result.success(), result.status(), result.message());
+        if (!result.success()) {
+            return md.toString();
+        }
+        ValuationSnapshot v = result.valuation();
+        ReportedValuation r = v.reported();
+        md.append("Company: ").append(r.companyName()).append(" (").append(r.symbol()).append(")\n\n");
+        renderConflicts(md, v.dataQualityIssues());
+        renderValuation(md, result, new Mask(conflictedFields(v.dataQualityIssues()), true));
+        md.append(CALCULATION_NOTE).append("\n\n");
+        renderIssuesAndGaps(md, v.dataQualityIssues(), v.dataGaps());
+        md.append("\n").append(r.provenance().note()).append("\n");
+        return md.toString();
+    }
+
     public String renderHistoricalPerformanceTool(HistoricalPerformanceResult result) {
         StringBuilder md = toolHeader("getHistoricalPerformance", result.success(), result.status(), result.message());
         if (!result.success()) {
@@ -312,6 +331,8 @@ public class ResearchReportRenderer {
             md.append("Price history unavailable: ").append(report.historicalPerformance().message()).append("\n\n");
         }
 
+        renderValuation(md, report.valuation(), conflicted);
+
         md.append("### Shareholding\n\n");
         if (report.shareholding().success()) {
             md.append("Shareholding data retrieved; see structured report.\n\n");
@@ -396,21 +417,26 @@ public class ResearchReportRenderer {
         List<AnnualFinancials> annual = reported.annualHistory();
         if (!annual.isEmpty()) {
             md.append("### Fiscal years (source fields: fundamentals-timeseries)\n\n")
-                    .append("| Fiscal year | Period end | Revenue | Net profit | Shareholders' equity | Total assets | Total debt |\n")
-                    .append("|---|---|---|---|---|---|---|\n");
+                    .append("| Fiscal year | Period end | Revenue | Net profit | Shareholders' equity | Total assets | Total debt "
+                            + "| EBIT | Current liabilities | Operating cash flow |\n")
+                    .append("|---|---|---|---|---|---|---|---|---|---|\n");
             for (AnnualFinancials year : annual) {
                 md.append("| ").append(year.period().label()).append(" | ").append(year.period().end()).append(" | ")
                         .append(value(year.revenue(), conflicted)).append(" | ")
                         .append(value(year.netProfit(), conflicted)).append(" | ")
                         .append(value(year.shareholdersEquity(), conflicted)).append(" | ")
                         .append(value(year.totalAssets(), conflicted)).append(" | ")
-                        .append(value(year.totalDebt(), conflicted)).append(" |\n");
+                        .append(value(year.totalDebt(), conflicted)).append(" | ")
+                        .append(value(year.ebit(), conflicted)).append(" | ")
+                        .append(value(year.currentLiabilities(), conflicted)).append(" | ")
+                        .append(value(year.operatingCashFlow(), conflicted)).append(" |\n");
             }
             md.append("\n");
             currencyLine(md, annual.stream().flatMap(y -> y.points().stream()).toList());
             md.append("### Calculated per fiscal year (CALCULATED by the application)\n\n")
-                    .append("| Fiscal year | Revenue YoY | Net profit YoY | Net margin | Operating margin | ROE | ROA | Debt / equity |\n")
-                    .append("|---|---|---|---|---|---|---|---|\n");
+                    .append("| Fiscal year | Revenue YoY | Net profit YoY | Net margin | Operating margin | ROE | ROA | Debt / equity "
+                            + "| ROCE |\n")
+                    .append("|---|---|---|---|---|---|---|---|---|\n");
             for (AnnualRatios r : summary.calculated().annual()) {
                 md.append("| ").append(r.period().label());
                 for (FinancialDataPoint p : r.points()) {
@@ -418,19 +444,49 @@ public class ResearchReportRenderer {
                 }
                 md.append(" |\n");
             }
-            md.append("\nROE and ROA use average opening and closing balances where the prior year is available. "
+            md.append("\nROE, ROA and ROCE use average opening and closing balances where the prior year is available; "
+                    + "ROCE is EBIT over capital employed (total assets minus current liabilities). "
                     + "Debt / equity is a multiple (x), not a percentage. DATA_CONFLICT and INVALID mean the metric was "
                     + "not calculated or failed verification; n/a means an input is unavailable.\n\n");
-            md.append("### Multi-year growth (CALCULATED)\n\n| Metric | Value | Period | Status | Calculation |\n")
+            md.append("### Multi-year growth and cash conversion (CALCULATED)\n\n| Metric | Value | Period | Status | Calculation |\n")
                     .append("|---|---|---|---|---|\n");
             for (FinancialDataPoint p : List.of(summary.calculated().revenueCagrPercent(),
-                    summary.calculated().netProfitCagrPercent())) {
+                    summary.calculated().netProfitCagrPercent(), summary.calculated().ocfToPat3yMultiple(),
+                    summary.calculated().ocfToPat5yMultiple())) {
                 md.append("| ").append(p.metric()).append(" | ").append(cell(p)).append(" | ")
                         .append(p.period().label()).append(" | ").append(status(p)).append(" | ")
-                        .append(p.calculation() == null ? "" : p.calculation()).append(" |\n");
+                        .append(p.calculation() == null ? "" : p.calculation())
+                        .append(p.status() == DataStatus.UNAVAILABLE ? " - " + p.statusReason() : "").append(" |\n");
             }
-            md.append("\n");
+            md.append("\nOperating cash flow to net profit is a multiple (x) of the years' summed figures; it needs every "
+                    + "year in its window, so with fewer years it is n/a rather than a ratio over a shorter period.\n\n");
         }
+    }
+
+    /** Point-in-time multiples and the price and per-share figures they were checked against. */
+    private void renderValuation(StringBuilder md, ValuationResult result, Mask conflicted) {
+        md.append("### Valuation (point in time)\n\n");
+        if (!result.success()) {
+            md.append("Valuation unavailable: ").append(result.message()).append("\n\n");
+            return;
+        }
+        ValuationSnapshot v = result.valuation();
+        ReportedValuation r = v.reported();
+        md.append("_Measured against the share price ").append(v.asOf() != null ? "on " + v.asOf() : "at an unstated date")
+                .append("; these change with the price. Facts about the price, not judgements: no fair value, price "
+                        + "target or recommendation, and no benchmark is supplied to call any of them high or low._\n\n");
+        md.append("| Metric | Value | As of | Status | Raw value (provider unit) | Source field |\n")
+                .append("|---|---|---|---|---|---|\n");
+        for (FinancialDataPoint p : List.of(r.price(), v.trailingPe(), r.trailingEps(), v.priceToBook(),
+                r.bookValuePerShare(), v.dividendYieldPercent(), r.dividendPerShare(), v.earningsYieldPercent())) {
+            md.append("| ").append(p.metric()).append(" | ").append(value(p, conflicted)).append(" | ")
+                    .append(p.period().label()).append(" | ").append(status(p)).append(" | ")
+                    .append(raw(p, conflicted)).append(" | ").append(fields(p)).append(" |\n");
+        }
+        md.append("\nTrailing P/E, price-to-book and dividend yield are REPORTED by the provider, not calculated by the "
+                + "application; each was checked against the share price and per-share figure shown, and DATA_CONFLICT "
+                + "means they disagree and the multiple is not usable. Only earnings yield is CALCULATED, as 100 / "
+                + "trailing P/E.\n\n");
     }
 
     private void renderHistory(StringBuilder md, HistoricalPerformance p, Mask conflicted) {
@@ -481,6 +537,10 @@ public class ResearchReportRenderer {
         List<FinancialDataPoint> points = new ArrayList<>();
         if (report.financials().success()) {
             report.financials().financialSummary().calculated().points().stream()
+                    .filter(p -> p.calculationStatus() == CalculationStatus.CALCULATED).forEach(points::add);
+        }
+        if (report.valuation().success()) {
+            Stream.of(report.valuation().valuation().earningsYieldPercent())
                     .filter(p -> p.calculationStatus() == CalculationStatus.CALCULATED).forEach(points::add);
         }
         if (report.historicalPerformance().success()) {

@@ -353,6 +353,26 @@ class YahooFinanceFinancialDataProviderTest {
     }
 
     @Test
+    void requestsTheAnnualSeriesThatRoceAndCashConversionNeed() {
+        server.expect(requestTo(containsString("/v10/finance/quoteSummary/HDFCBANK.NS")))
+                .andRespond(withSuccess(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, HDFC_EARNINGS),
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/ws/fundamentals-timeseries")))
+                .andExpect(requestTo(containsString("annualEBIT")))
+                .andExpect(requestTo(containsString("annualCurrentLiabilities")))
+                .andExpect(requestTo(containsString("annualOperatingCashFlow")))
+                .andRespond(withSuccess(HDFC_TIMESERIES, MediaType.APPLICATION_JSON));
+
+        ReportedFinancials financials = provider.getReportedFinancials("HDFC Bank");
+
+        server.verify();
+        // HDFC Bank's recorded series has none of them, so each is UNAVAILABLE - not zero.
+        assertThat(financials.annualHistory().getLast().operatingCashFlow().status())
+                .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.UNAVAILABLE);
+        assertThat(financials.annualHistory().getLast().operatingCashFlow().value()).isNull();
+    }
+
+    @Test
     void fallsBackToMostRecentQuarterWhenThereAreNoDatedQuarterlyResults() {
         respond(quoteSummary(HDFC_FINANCIALS, HDFC_STATISTICS, "null"));
 

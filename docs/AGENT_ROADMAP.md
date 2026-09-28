@@ -364,10 +364,32 @@ Create `CLAUDE.md` in the project root so Claude Code follows your architecture 
 - New tools: description states what the tool does NOT return; return compact
   rendered text, record the call on ToolUsage.
 - Run ./mvnw test before finishing. Use fixtures, never live Yahoo, in tests.
-- Roadmap: docs/AGENT_ROADMAP.md
+- Roadmap: docs/AGENT_ROADMAP.md. Acceptance specs: docs/specs/. A step is done only
+  when `/verify-step N` returns PASSED or PASSED_LIVE_PENDING.
+- Never edit docs/specs/ to make a verification pass.
 ```
 
 ---
+
+## Verifying each step
+
+The files for this are:
+
+| File | Purpose |
+| --- | --- |
+| `docs/specs/step-NN-*.md` | Acceptance criteria for each step, with IDs (for example S3-5) and types AUTO, CODE or LIVE. |
+| `docs/specs/invariants.md` | Rules that must still hold after every step (INV-1 to INV-12). |
+| `scripts/verify-invariants.sh` | Deterministic checks. Run it yourself with `bash scripts/verify-invariants.sh [--skip-tests]`. |
+| `.claude/agents/roadmap-verifier.md` | An independent, skeptical subagent. It can't edit code, and every PASS needs file:line or command evidence. |
+| `.claude/skills/verify-step/SKILL.md` | The `/verify-step N` command, which runs the verifier in its own context. |
+| `docs/verification/` | Dated reports, plus `STATUS.md` showing progress across all steps. |
+
+The loop for each step:
+1. Read the step's spec before implementing, and adjust it if needed (in a separate commit).
+2. In Claude Code: `Implement docs/AGENT_ROADMAP.md Step N. Acceptance criteria: docs/specs/step-NN-*.md.`
+3. Start Ollama and the app if you want the LIVE checks to run.
+4. Run `/verify-step N`. Fix the FAIL items, then run it again.
+5. Commit, then tag: `git tag roadmap-step-N`.
 
 ## A note on use
 

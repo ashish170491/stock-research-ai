@@ -55,6 +55,31 @@ public class UnsupportedClaimFilter {
                     + "market share|moat|major player|key player|significant scale|dominant player)\\b",
             Pattern.CASE_INSENSITIVE);
 
+    /** Valuation judgements - no benchmark, fair value or target exists in the data. */
+    private static final String VALUATION_JUDGEMENTS =
+            "(?:under|over)[- ]?valued|fairly valued|fair values?|intrinsic values?|price targets?|target prices?|"
+                    + "margin of safety|cheap(?:ly|er|est)?|expensive|richly valued|"
+                    + "(?:low|high|reasonable|modest|elevated|demanding|rich|stretched|compelling|premium|discounted?)"
+                    + " (?:valuations?|multiples?|P/?E|P/?B|price[- ]to[- ](?:book|earnings))";
+    /**
+     * "The P/E of 15.13x is low", "trades at a discount": judgements whose own wording asserts them, so
+     * they are never merely mentioned.
+     */
+    private static final String VALUATION_LEVEL =
+            "trad(?:es|ing|ed) at a (?:premium|discount)|(?:P/?E|P/?B|price[- ]to[- ](?:book|earnings)|valuations?|multiples?|(?:earnings|dividend) yield)"
+                    + "(?: ratios?)?(?:[^.]|\\.\\d){0,40}?\\b(?:is|are|looks?|appears?|seems?|remains?)\\s+"
+                    // a scare-quoted level ('is "high."') is still asserted
+                    + "[\"'“‘]?(?:relatively |quite |very |fairly |somewhat |rather )?(?:low|high|reasonable|modest|elevated|"
+                    + "demanding|rich|stretched|compelling|lofty|undemanding|generous)";
+    /** Benchmark comparisons - no benchmarks are supplied. */
+    private static final String BENCHMARK_COMPARISONS =
+            "(?:industry|sector|peer|market) (?:benchmarks?|averages?|norms?|standards?|medians?)|"
+                    + "(?:relative|compared) to (?:its |the )?(?:peers|industry|sector|competitors)|"
+                    + "than (?:its |the )?(?:peers|industry|sector|competitors)";
+    /** "(would) require external context (sector averages ...)": says a benchmark is missing. */
+    private static final String NEEDS_CONTEXT =
+            "\\b(?:requires?|needs?|would need)\\s+(?:[\\w-]+\\s+){0,2}?(?:context|benchmarks?|comparisons?)\\b";
+
     private static final Pattern NEVER_SUPPORTED = Pattern.compile(
             "\\b(accelerat\\w*|decelerat\\w*|momentum|"
                     // leverage labels - no leverage criteria exist in the data
@@ -81,10 +106,47 @@ public class UnsupportedClaimFilter {
                     + "(?:the |its |these |those |all |most |such )?(?:[\\w-]+ ){0,2}?(?:expectations|norms|"
                     + "priorities|benchmarks?|standards?|criteria|requirements|thresholds?)|"
                     + "(?:out|under)perform\\w*|"
-                    // benchmark comparisons - no benchmarks are supplied
-                    + "(?:industry|sector|peer|market) (?:benchmarks?|averages?|norms?|standards?|medians?)|"
-                    + "(?:relative|compared) to (?:its |the )?(?:peers|industry|sector|competitors)|"
-                    + "than (?:its |the )?(?:peers|industry|sector|competitors))\\b",
+                    // readings of what a figure says about the future - nothing in the data measures them
+                    + "growth (?:potential|prospects|opportunit(?:y|ies))|balance between growth|"
+                    + "(?:investor|market) expectations|priced in|"
+                    + VALUATION_JUDGEMENTS + "|" + VALUATION_LEVEL + "|" + BENCHMARK_COMPARISONS + ")\\b",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Judgement words a sentence may mention while declining to make the judgement ("the data does
+     * not show whether the stock is undervalued"). Every other never-supported claim is removed however
+     * it is phrased.
+     */
+    private static final Pattern MENTIONABLE = Pattern.compile(
+            "(?:" + VALUATION_JUDGEMENTS + "|" + BENCHMARK_COMPARISONS + ")", Pattern.CASE_INSENSITIVE);
+    /**
+     * Level claims ("the P/E is high") assert themselves, so they count as mentioned only as the open
+     * question of a "whether"/"if" clause: "no judgement on whether the P/E is high, low or fair".
+     */
+    private static final Pattern LEVEL_CLAIM = Pattern.compile("(?:" + VALUATION_LEVEL + ")", Pattern.CASE_INSENSITIVE);
+    /** A sentence declining to judge says something is missing. */
+    private static final Pattern ABSENCE = Pattern.compile(
+            "\\b(?:no|not|none|neither|nor|without|cannot|unable|insufficient|lacks?|lacking|absence)\\b|n['’]t\\b|"
+                    + NEEDS_CONTEXT, Pattern.CASE_INSENSITIVE);
+    /** "whether (the stock is) ..." / "if (it is) ...": the judgement is the open question, not the answer. */
+    private static final Pattern HYPOTHETICAL = Pattern.compile("\\b(?:whether|if)\\b", Pattern.CASE_INSENSITIVE);
+    /** "does not supply (a) ...", "no ...", "without (a) ...": the judgement is what the data lacks. */
+    private static final Pattern NOT_SUPPLIED = Pattern.compile(
+            "\\b(?:(?:does|do|did)\\s+not|doesn['’]t|don['’]t|didn['’]t)\\s+(?:include|supply|provide|contain|"
+                    + "offer|give|cover|have|report|return)\\b|\\b(?:lacks?|lacking|absence of)\\b|"
+                    + "\\bno\\b(?!\\s+(?:means|longer|doubt|question))|\\bwithout\\b(?!\\s+(?:doubt|question))|"
+                    + NEEDS_CONTEXT, Pattern.CASE_INSENSITIVE);
+    /** "industry benchmarks are not provided": the judgement term is the subject of what is missing. */
+    private static final Pattern NOT_SUPPLIED_AFTER = Pattern.compile(
+            "^(?:\\s+(?:or|and|,)?\\s*[\\w/-]+){0,4}?\\s*(?:is|are|was|were)\\s+(?:not\\s+(?:provided|supplied|included|"
+                    + "available|given|reported|part of)|unavailable|missing|absent)\\b", Pattern.CASE_INSENSITIVE);
+    /** Ends the clause an introducer governs: a judgement after one of these is asserted, not mentioned. */
+    private static final Pattern PIVOT = Pattern.compile(
+            "[;:—–]|\\b(?:but|however|though|although|yet|while|whereas|and it|so it)\\b",
+            Pattern.CASE_INSENSITIVE);
+    /** "without benchmarks, the stock looks cheap" asserts the judgement after the introducer. */
+    private static final Pattern COPULA = Pattern.compile(
+            "\\b(?:is|are|was|were|be|being|been|looks?|appears?|seems?|remains?|trades?|trading)\\b|['’]s\\b",
             Pattern.CASE_INSENSITIVE);
 
     /**
@@ -145,7 +207,11 @@ public class UnsupportedClaimFilter {
             "return on equity", Pattern.compile("\\b(?:return on equity|ROE)\\b", Pattern.CASE_INSENSITIVE),
             "return on assets", Pattern.compile("\\b(?:return on assets|ROA)\\b", Pattern.CASE_INSENSITIVE),
             "debt-to-equity", Pattern.compile("\\b(?:debt[- ]to[- ]equity|leverage|gearing|capital structure|"
-                    + "total debt)\\b", Pattern.CASE_INSENSITIVE));
+                    + "total debt)\\b", Pattern.CASE_INSENSITIVE),
+            "cash conversion", Pattern.compile("\\b(?:operating cash flow|cash conversion|OCF)\\b",
+                    Pattern.CASE_INSENSITIVE),
+            "return on capital employed", Pattern.compile("\\b(?:return on capital employed|ROCE)\\b",
+                    Pattern.CASE_INSENSITIVE));
     /** A trend, level or conclusion - what may not be said about a withheld topic. */
     private static final Pattern CONCLUSION = Pattern.compile(
             "\\d|\\b(?:gr[eo]w\\w*|rose|rise|rising|increas\\w*|decreas\\w*|declin\\w*|fell|fall\\w*|drop\\w*|"
@@ -161,7 +227,8 @@ public class UnsupportedClaimFilter {
                     + "not possible|impossible|prevent\\w*|mismatch\\w*|lack of|absence of|missing)\\b",
             Pattern.CASE_INSENSITIVE);
 
-    private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
+    /** After . ! or ?, also when a closing quote or bracket follows: 'is "cheap." The ...' is two sentences. */
+    private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?][\"'”’)]?)\\s+");
 
     public record Result(String text, List<String> removedSentences) {
     }
@@ -230,7 +297,8 @@ public class UnsupportedClaimFilter {
     }
 
     private boolean unsupported(String sentence, String evidence) {
-        if (NEVER_SUPPORTED.matcher(sentence).find() || CAUSAL.matcher(sentence).find()) {
+        if ((NEVER_SUPPORTED.matcher(sentence).find() && !declinesToJudge(sentence))
+                || CAUSAL.matcher(sentence).find()) {
             return true;
         }
         boolean advice = ADVICE.matcher(sentence).find();
@@ -244,5 +312,72 @@ public class UnsupportedClaimFilter {
             }
         }
         return false;
+    }
+
+    /**
+     * A sentence saying the data cannot support a valuation or benchmark judgement ("does not indicate
+     * whether the stock is overvalued", "no fair value is supplied") is kept. It qualifies only if it says
+     * something is missing and every never-supported phrase in it is a valuation or benchmark term that is
+     * quoted, or governed by "whether"/"if" or a "does not supply"/"no"/"without" introducer in the same
+     * clause - so "without benchmarks, the stock looks cheap" and "there is no fair value; it is
+     * undervalued" are still removed.
+     */
+    private static boolean declinesToJudge(String sentence) {
+        if (!ABSENCE.matcher(sentence).find()) {
+            return false;
+        }
+        Matcher matcher = NEVER_SUPPORTED.matcher(sentence);
+        boolean any = false;
+        while (matcher.find()) {
+            any = true;
+            String term = matcher.group();
+            boolean mentioned = MENTIONABLE.matcher(term).matches()
+                    ? mentioned(sentence, matcher.start(), matcher.end(), false)
+                    : LEVEL_CLAIM.matcher(term).matches() && mentioned(sentence, matcher.start(), matcher.end(), true);
+            if (!mentioned) {
+                return false;
+            }
+        }
+        return any;
+    }
+
+    /** @param onlyAsAQuestion only a "whether"/"if" clause can make the term a mention (level claims) */
+    private static boolean mentioned(String sentence, int start, int end, boolean onlyAsAQuestion) {
+        // "... does not show whether it is undervalued, though it probably is" asserts it after all
+        String after = sentence.substring(end);
+        Matcher pivot = PIVOT.matcher(after);
+        if (pivot.find() && COPULA.matcher(after.substring(pivot.end())).find()) {
+            return false;
+        }
+        String before = sentence.substring(0, start);
+        if (onlyAsAQuestion) {
+            return governedBy(before, HYPOTHETICAL, gap -> !gap.contains(",") && !PIVOT.matcher(gap).find());
+        }
+        if (quoted(sentence, start, end) || NOT_SUPPLIED_AFTER.matcher(after).find()) {
+            return true;
+        }
+        // a "whether" clause may contain a verb ("whether the stock is cheap") but not a comma, which would
+        // end it ("even if there is no benchmark, the stock is cheap")
+        return governedBy(before, HYPOTHETICAL, gap -> !gap.contains(",") && !PIVOT.matcher(gap).find())
+                || governedBy(before, NOT_SUPPLIED, gap -> !PIVOT.matcher(gap).find() && !COPULA.matcher(gap).find());
+    }
+
+    /** Whether the nearest {@code introducer} before a term exists and the words between pass {@code clause}. */
+    private static boolean governedBy(String before, Pattern introducer, java.util.function.Predicate<String> clause) {
+        Matcher matcher = introducer.matcher(before);
+        int end = -1;
+        while (matcher.find()) {
+            end = matcher.end();
+        }
+        return end >= 0 && clause.test(before.substring(end));
+    }
+
+    private static boolean quoted(String sentence, int start, int end) {
+        int after = end;
+        while (after < sentence.length() && ".,!?".indexOf(sentence.charAt(after)) >= 0) {
+            after++;
+        }
+        return start > 0 && "\"'“‘".indexOf(sentence.charAt(start - 1)) >= 0
+                && after < sentence.length() && "\"'”’".indexOf(sentence.charAt(after)) >= 0;
     }
 }

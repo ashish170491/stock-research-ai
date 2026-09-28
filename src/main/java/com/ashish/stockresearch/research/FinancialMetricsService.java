@@ -106,7 +106,8 @@ public class FinancialMetricsService {
         gaps.addAll(gapsFrom("Financials (reported)", marked.headline().points()));
         gaps.addAll(gapsFrom("Financials (calculated)", List.of(verified.netProfitMarginTtmPercent(),
                 verified.latestQuarterRevenueGrowthQoqPercent(), verified.latestQuarterNetProfitGrowthQoqPercent(),
-                verified.revenueCagrPercent(), verified.netProfitCagrPercent())));
+                verified.revenueCagrPercent(), verified.netProfitCagrPercent(), verified.ocfToPat3yMultiple(),
+                verified.ocfToPat5yMultiple())));
 
         return new FinancialSummary(marked, verified, List.copyOf(gaps), List.copyOf(issues));
     }
@@ -303,6 +304,8 @@ public class FinancialMetricsService {
                         "latestQuarterNetProfitGrowthQoqPercent"),
                 cagr(annual, AnnualFinancials::revenue, "revenue", "revenueCagrPercent"),
                 cagr(annual, AnnualFinancials::netProfit, "net profit", "netProfitCagrPercent"),
+                ocfToPat(annual, 3, "ocfToPat3yMultiple"),
+                ocfToPat(annual, 5, "ocfToPat5yMultiple"),
                 annualRatios(annual));
     }
 
@@ -466,9 +469,108 @@ public class FinancialMetricsService {
                             "return on equity", "shareholders' equity", "returnOnEquityPercent"),
                     averageBalanceReturn(prior, year, AnnualFinancials::totalAssets,
                             "return on assets", "total assets", "returnOnAssetsPercent"),
-                    debtToEquity(year)));
+                    debtToEquity(year),
+                    returnOnCapitalEmployed(prior, year)));
         }
         return List.copyOf(ratios);
+    }
+
+    /**
+     * Operating cash flow over net profit, both summed over the last {@code years} consecutive fiscal
+     * years - how much of the reported profit arrived as cash. Every year in the window must be VALID:
+     * with a year missing the result is UNAVAILABLE, never a ratio over fewer years than it claims.
+     */
+    private FinancialDataPoint ocfToPat(List<AnnualFinancials> annual, int years, String metricName) {
+        if (annual.size() < years) {
+            return FinancialDataPoint.unavailable(metricName, Unit.MULTIPLE, ReportingPeriod.unknown(), null,
+                    ("Operating cash flow to net profit over %d years needs %d fiscal years of statements; "
+                            + "%d available%s").formatted(years, years, annual.size(), annual.isEmpty() ? ""
+                            : " (%s to %s)".formatted(annual.get(0).period().label(),
+                                    annual.get(annual.size() - 1).period().label())));
+        }
+        List<AnnualFinancials> window = annual.subList(annual.size() - years, annual.size());
+        for (int i = 1; i < window.size(); i++) {
+            if (!consecutiveYears(window.get(i - 1).period(), window.get(i).period())) {
+                return FinancialDataPoint.unavailable(metricName, Unit.MULTIPLE, ReportingPeriod.unknown(), null,
+                        "Operating cash flow to net profit over %d years needs consecutive fiscal years; %s and %s are not"
+                                .formatted(years, window.get(i - 1).period().label(), window.get(i).period().label()));
+            }
+        }
+        AnnualFinancials first = window.get(0);
+        AnnualFinancials last = window.get(window.size() - 1);
+        ReportingPeriod span = new ReportingPeriod(PeriodType.MULTI_YEAR, first.period().start(), last.period().end(),
+                "%s to %s (%d years)".formatted(first.period().label(), last.period().label(), years), null, null);
+        String labels = String.join(" + ", window.stream().map(year -> year.period().label()).toList());
+        String calculation = "(%s operating cash flow) / (%s net profit) (a multiple, not a percentage)"
+                .formatted(labels, labels);
+        List<FinancialDataPoint> cash = window.stream().map(AnnualFinancials::operatingCashFlow).toList();
+        List<FinancialDataPoint> profit = window.stream().map(AnnualFinancials::netProfit).toList();
+        FinancialDataPoint[] all = java.util.stream.Stream.concat(cash.stream(), profit.stream())
+                .toArray(FinancialDataPoint[]::new);
+        Optional<Blocked> blocked = blocked(all);
+        if (blocked.isPresent()) {
+            return notCalculated(metricName, Unit.MULTIPLE, span, last.netProfit().source(), Formula.SUM_RATIO,
+                    calculation, blocked.get(), "Operating cash flow to net profit over %d years".formatted(years), all);
+        }
+        List<CalculationInput> inputs = new ArrayList<>();
+        window.forEach(year -> inputs.add(CalculationInput.of(year.period().label() + " operating cash flow",
+                year.operatingCashFlow())));
+        window.forEach(year -> inputs.add(CalculationInput.of(year.period().label() + " net profit", year.netProfit())));
+        return FinancialCalculator.sumRatio(cash.stream().map(FinancialDataPoint::value).toList(),
+                        profit.stream().map(FinancialDataPoint::value).toList())
+                .map(value -> FinancialDataPoint.calculated(metricName, value, Unit.MULTIPLE, span,
+                        last.operatingCashFlow().source(), Formula.SUM_RATIO, calculation, inputs))
+                .orElseGet(() -> FinancialDataPoint.unavailable(metricName, Unit.MULTIPLE, span,
+                        last.netProfit().source(), "Operating cash flow to net profit over %d years not calculated: "
+                                .formatted(years) + "net profit over %s is not positive".formatted(span.label())));
+    }
+
+    /**
+     * EBIT over capital employed (total assets minus current liabilities), averaged over the opening and
+     * closing balance sheets when the prior year's is available - the same basis rule as ROE.
+     */
+    private FinancialDataPoint returnOnCapitalEmployed(AnnualFinancials prior, AnnualFinancials year) {
+        String metric = "returnOnCapitalEmployedPercent";
+        String label = year.period().label();
+        FinancialDataPoint ebit = year.ebit();
+        FinancialDataPoint assets = year.totalAssets();
+        FinancialDataPoint liabilities = year.currentLiabilities();
+        // An opening balance that exists but is not VALID blocks the average rather than being skipped.
+        boolean hasOpening = prior != null && reportedOrDisputed(prior.totalAssets())
+                && reportedOrDisputed(prior.currentLiabilities());
+        String basis = hasOpening
+                ? "average capital employed (%s and %s closing)".formatted(prior.period().label(), label)
+                : "closing capital employed at %s (no prior-year balance sheet available, so not averaged)".formatted(label);
+        String calculation = "%s EBIT / %s x 100, capital employed = total assets - current liabilities"
+                .formatted(label, basis);
+        FinancialDataPoint[] inputs = hasOpening
+                ? new FinancialDataPoint[]{ebit, assets, liabilities, prior.totalAssets(), prior.currentLiabilities()}
+                : new FinancialDataPoint[]{ebit, assets, liabilities};
+        Optional<Blocked> blocked = blocked(inputs);
+        if (blocked.isPresent()) {
+            return notCalculated(metric, Unit.PERCENT, year.period(), assets.source(),
+                    Formula.RETURN_ON_CAPITAL_EMPLOYED_PERCENT, calculation, blocked.get(), "ROCE", inputs);
+        }
+        List<CalculationInput> recorded = new ArrayList<>(List.of(
+                CalculationInput.of(label + " EBIT", ebit),
+                CalculationInput.of(label + " closing total assets", assets),
+                CalculationInput.of(label + " closing current liabilities", liabilities)));
+        if (hasOpening) {
+            recorded.add(CalculationInput.of(prior.period().label() + " closing total assets", prior.totalAssets()));
+            recorded.add(CalculationInput.of(prior.period().label() + " closing current liabilities",
+                    prior.currentLiabilities()));
+        }
+        return FinancialCalculator.returnOnCapitalEmployedPercent(ebit.value(), assets.value(), liabilities.value(),
+                        hasOpening ? prior.totalAssets().value() : null,
+                        hasOpening ? prior.currentLiabilities().value() : null)
+                .map(value -> FinancialDataPoint.calculated(metric, value, Unit.PERCENT, year.period(), ebit.source(),
+                        Formula.RETURN_ON_CAPITAL_EMPLOYED_PERCENT, calculation, recorded))
+                .orElseGet(() -> FinancialDataPoint.unavailable(metric, Unit.PERCENT, year.period(), assets.source(),
+                        "ROCE not calculated: capital employed is not positive"));
+    }
+
+    private static boolean reportedOrDisputed(FinancialDataPoint point) {
+        return point != null && (point.value() != null || point.status() != DataStatus.UNAVAILABLE);
     }
 
     private FinancialDataPoint yoy(AnnualFinancials prior, AnnualFinancials year,

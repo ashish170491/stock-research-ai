@@ -130,6 +130,51 @@ class CalculationVerifierTest {
                 Unit.PERCENT, profit, closing, opening), sources())).isPresent();
     }
 
+    private static CalculationInput value(String name, String value) {
+        return CalculationInput.derived(name, new BigDecimal(value), null);
+    }
+
+    @Test
+    void recomputesEarningsYieldFromTheRecordedPe() {
+        FinancialDataPoint right = calculated(Formula.RECIPROCAL_PERCENT, "3.74", Unit.PERCENT, value("trailing P/E", "26.74"));
+        FinancialDataPoint wrong = calculated(Formula.RECIPROCAL_PERCENT, "3.84", Unit.PERCENT, value("trailing P/E", "26.74"));
+
+        assertThat(CalculationVerifier.problem(right, sources())).isEmpty();
+        assertThat(CalculationVerifier.problem(wrong, sources())).get().asString().contains("does not match");
+    }
+
+    @Test
+    void recomputesARatioOfSumsFromItsNumeratorsThenItsDenominators() {
+        CalculationInput[] inputs = {value("FY24 OCF", "120"), value("FY25 OCF", "130"), value("FY26 OCF", "150"),
+                value("FY24 net profit", "100"), value("FY25 net profit", "100"), value("FY26 net profit", "100")};
+
+        assertThat(CalculationVerifier.problem(calculated(Formula.SUM_RATIO, "1.33", Unit.MULTIPLE, inputs), sources()))
+                .isEmpty();
+        assertThat(CalculationVerifier.problem(calculated(Formula.SUM_RATIO, "1.43", Unit.MULTIPLE, inputs), sources()))
+                .isPresent();
+        // An odd number of inputs cannot be split into matching years.
+        assertThat(CalculationVerifier.problem(calculated(Formula.SUM_RATIO, "1.20", Unit.MULTIPLE,
+                value("a", "120"), value("b", "100"), value("c", "1")), sources())).get().asString()
+                .contains("cannot be recomputed");
+    }
+
+    @Test
+    void recomputesReturnOnCapitalEmployedOnAverageAndOnClosingCapitalEmployed() {
+        CalculationInput ebit = value("FY26 EBIT", "60");
+        CalculationInput assets = value("FY26 total assets", "500");
+        CalculationInput liabilities = value("FY26 current liabilities", "100");
+        CalculationInput openingAssets = value("FY25 total assets", "360");
+        CalculationInput openingLiabilities = value("FY25 current liabilities", "60");
+
+        assertThat(CalculationVerifier.problem(calculated(Formula.RETURN_ON_CAPITAL_EMPLOYED_PERCENT, "17.14",
+                Unit.PERCENT, ebit, assets, liabilities, openingAssets, openingLiabilities), sources())).isEmpty();
+        assertThat(CalculationVerifier.problem(calculated(Formula.RETURN_ON_CAPITAL_EMPLOYED_PERCENT, "15.00",
+                Unit.PERCENT, ebit, assets, liabilities), sources())).isEmpty();
+        // Averaged inputs, closing-only result: rejected.
+        assertThat(CalculationVerifier.problem(calculated(Formula.RETURN_ON_CAPITAL_EMPLOYED_PERCENT, "15.00",
+                Unit.PERCENT, ebit, assets, liabilities, openingAssets, openingLiabilities), sources())).isPresent();
+    }
+
     @Test
     void leavesPointsThatAreNotValidCalculationsAlone() {
         FinancialDataPoint missing = FinancialDataPoint.unavailable("m", Unit.PERCENT, FY26, SOURCE, "not published");

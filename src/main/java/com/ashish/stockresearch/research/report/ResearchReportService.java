@@ -17,6 +17,8 @@ import com.ashish.stockresearch.research.model.HistoricalPerformance;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.research.model.ValuationResult;
+import com.ashish.stockresearch.research.model.ValuationSnapshot;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
 import com.ashish.stockresearch.research.sector.SectorContext;
@@ -80,12 +82,16 @@ public class ResearchReportService {
                     CompletableFuture.supplyAsync(() -> research.getHistoricalPerformance(symbol, HISTORY_YEARS), executor);
             CompletableFuture<ShareholdingResult> shareholding =
                     CompletableFuture.supplyAsync(() -> research.getShareholding(symbol), executor);
-            return assemble(symbol, profile.join(), financials.join(), history.join(), shareholding.join());
+            CompletableFuture<ValuationResult> valuation =
+                    CompletableFuture.supplyAsync(() -> research.getValuation(symbol), executor);
+            return assemble(symbol, profile.join(), financials.join(), history.join(), shareholding.join(),
+                    valuation.join());
         }
     }
 
     StockResearchReport assemble(String requested, CompanyProfileResult profile, FinancialSummaryResult financials,
-                                 HistoricalPerformanceResult history, ShareholdingResult shareholding) {
+                                 HistoricalPerformanceResult history, ShareholdingResult shareholding,
+                                 ValuationResult valuation) {
         List<Observation> candidates = new ArrayList<>();
         List<DataGap> gaps = new ArrayList<>();
         List<DataQualityIssue> issues = new ArrayList<>();
@@ -133,6 +139,18 @@ public class ResearchReportService {
                     SHAREHOLDING_UNAVAILABLE + " (" + shareholding.status() + ")"));
         }
 
+        // Valuation is stated as facts about the price only: no observation is drawn from it, since
+        // nothing supplies a benchmark to call a multiple high or low.
+        if (valuation.success()) {
+            ValuationSnapshot v = valuation.valuation();
+            issues.addAll(v.dataQualityIssues());
+            gaps.addAll(v.dataGaps());
+            sources.add(reference(v.reported().provenance(), "Share price and valuation multiples"));
+        } else {
+            gaps.add(new DataGap("Valuation", "P/E, price-to-book, dividend yield and earnings yield",
+                    valuation.message()));
+        }
+
         Set<String> conflicted = new LinkedHashSet<>();
         issues.stream().filter(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT)
                 .forEach(i -> conflicted.addAll(i.affectedFields()));
@@ -155,7 +173,7 @@ public class ResearchReportService {
                 validator.today(),
                 latestQuarter,
                 sector,
-                profile, financials, history, shareholding,
+                profile, financials, history, shareholding, valuation,
                 observations, List.copyOf(withheld), List.copyOf(gaps), List.copyOf(issues), List.copyOf(sources));
     }
 
@@ -167,8 +185,9 @@ public class ResearchReportService {
         }
         return Optional.of(DataQualityIssue.warning(("The source reports this company's headline financial figures in "
                 + "%s, while its share price and market capitalisation are in INR. No exchange rate is sourced, so no "
-                + "currency conversion is performed and no ratio combining the two (such as P/E or price-to-sales) is "
-                + "calculated. Figures are shown in the currency the source reported them in.").formatted(currency),
+                + "currency conversion is performed and no ratio combining the accounts with the price (such as "
+                + "price-to-sales) is calculated; valuation multiples are checked only against the provider's rupee "
+                + "per-share figures. Figures are shown in the currency the source reported them in.").formatted(currency),
                 List.of("financialData.financialCurrency")));
     }
 
@@ -199,6 +218,13 @@ public class ResearchReportService {
                     "return on assets");
             t.single(latest.debtToEquityMultiple(), "Total debt was %2$s shareholders' equity at the end of %1$s.",
                     "Debt-to-equity", "debt-to-equity");
+            t.single(latest.returnOnCapitalEmployedPercent(), "Return on capital employed for %s was %s.",
+                    "Return on capital employed", "return on capital employed");
+        }
+        for (FinancialDataPoint cashConversion : List.of(summary.calculated().ocfToPat3yMultiple(),
+                summary.calculated().ocfToPat5yMultiple())) {
+            t.single(cashConversion, "Operating cash flow over %s was %s net profit over the same years.",
+                    "Operating cash flow to net profit", "cash conversion");
         }
         t.cagr(summary.calculated().revenueCagrPercent(), "Revenue", "revenue growth");
         t.cagr(summary.calculated().netProfitCagrPercent(), "Net profit", "net profit growth");

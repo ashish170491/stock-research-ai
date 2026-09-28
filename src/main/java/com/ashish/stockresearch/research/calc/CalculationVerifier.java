@@ -117,6 +117,24 @@ public final class CalculationVerifier {
             case DRAWDOWN_PERCENT -> in.size() == 2 && in.get(0) > 0 ? (in.get(1) / in.get(0) - 1) * 100 : null;
             case DAYS_TO_YEARS -> in.size() == 1 ? in.get(0) / DAYS_PER_YEAR : null;
             case SELECTED_VALUE -> in.size() == 1 ? in.get(0) : null;
+            case RECIPROCAL_PERCENT -> in.size() == 1 && in.get(0) > 0 ? 100 / in.get(0) : null;
+            case SUM_RATIO -> {
+                if (in.isEmpty() || in.size() % 2 != 0) {
+                    yield null;
+                }
+                int half = in.size() / 2;
+                double numerator = in.subList(0, half).stream().mapToDouble(Double::doubleValue).sum();
+                double denominator = in.subList(half, in.size()).stream().mapToDouble(Double::doubleValue).sum();
+                yield denominator > 0 ? numerator / denominator : null;
+            }
+            case RETURN_ON_CAPITAL_EMPLOYED_PERCENT -> {
+                if (in.size() != 3 && in.size() != 5) {
+                    yield null;
+                }
+                double closing = in.get(1) - in.get(2);
+                double basis = in.size() == 5 ? (closing + in.get(3) - in.get(4)) / 2 : closing;
+                yield basis > 0 ? in.get(0) / basis * 100 : null;
+            }
         };
         return result == null || !Double.isFinite(result) ? Optional.empty() : Optional.of(result);
     }

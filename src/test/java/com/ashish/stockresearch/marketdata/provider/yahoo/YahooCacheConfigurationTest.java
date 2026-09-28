@@ -35,12 +35,13 @@ class YahooCacheConfigurationTest {
         CacheManager manager = context.getBean(CacheManager.class);
 
         assertThat(manager.getCacheNames()).containsExactlyInAnyOrder(
-                "quotes", "priceHistory", "financials", "companyProfiles", "symbolResolution");
+                "quotes", "priceHistory", "financials", "companyProfiles", "symbolResolution", "valuations");
         assertThat(ttl(manager, "quotes")).isEqualTo(Duration.ofMinutes(1));
         assertThat(ttl(manager, "priceHistory")).isEqualTo(Duration.ofHours(6));
         assertThat(ttl(manager, "financials")).isEqualTo(Duration.ofHours(24));
         assertThat(ttl(manager, "companyProfiles")).isEqualTo(Duration.ofHours(24));
         assertThat(ttl(manager, "symbolResolution")).isEqualTo(Duration.ofDays(7));
+        assertThat(ttl(manager, "valuations")).isEqualTo(Duration.ofMinutes(5));
         assertThat(manager.getCache("misspelt")).isNull();
     }
 

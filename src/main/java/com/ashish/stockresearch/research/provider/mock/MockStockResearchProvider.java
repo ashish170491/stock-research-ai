@@ -3,6 +3,7 @@ package com.ashish.stockresearch.research.provider.mock;
 import com.ashish.stockresearch.research.CompanyProfileProvider;
 import com.ashish.stockresearch.research.FinancialDataProvider;
 import com.ashish.stockresearch.research.HistoricalMarketDataProvider;
+import com.ashish.stockresearch.research.ValuationDataProvider;
 import com.ashish.stockresearch.research.calc.FinancialUnits;
 import com.ashish.stockresearch.research.calc.FiscalCalendar;
 import com.ashish.stockresearch.research.model.AnnualFinancials;
@@ -16,6 +17,7 @@ import com.ashish.stockresearch.research.model.PricePoint;
 import com.ashish.stockresearch.research.model.ProviderUnit;
 import com.ashish.stockresearch.research.model.QuarterlyResult;
 import com.ashish.stockresearch.research.model.ReportedFinancials;
+import com.ashish.stockresearch.research.model.ReportedValuation;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
 import com.ashish.stockresearch.research.model.SourceInfo;
 import com.ashish.stockresearch.research.model.SourceType;
@@ -45,7 +47,7 @@ import java.util.List;
 @Component
 @Profile("mock")
 public class MockStockResearchProvider
-        implements CompanyProfileProvider, FinancialDataProvider, HistoricalMarketDataProvider {
+        implements CompanyProfileProvider, FinancialDataProvider, HistoricalMarketDataProvider, ValuationDataProvider {
 
     private static final Logger log = LoggerFactory.getLogger(MockStockResearchProvider.class);
     private static final String SOURCE =
@@ -113,7 +115,10 @@ public class MockStockResearchProvider
                     crore("annualOperatingIncome", String.valueOf(1600 + 150 * (3 - i)), period),
                     crore("shareholdersEquity", String.valueOf(7000 + 700 * (3 - i)), closing),
                     crore("totalAssets", String.valueOf(15000 + 1000 * (3 - i)), closing),
-                    crore("totalDebt", String.valueOf(500 + 20 * (3 - i)), closing)));
+                    crore("totalDebt", String.valueOf(500 + 20 * (3 - i)), closing),
+                    crore("ebit", String.valueOf(1700 + 150 * (3 - i)), period),
+                    crore("currentLiabilities", String.valueOf(3000 + 200 * (3 - i)), closing),
+                    crore("operatingCashFlow", String.valueOf(1000 + 130 * (3 - i)), period)));
         }
         return new ReportedFinancials(symbol, "NSE", symbol + " Limited (sample)", "INR", quarter,
                 CALENDAR.fiscalYear(FISCAL_YEAR_END), headline, quarters, annual, List.of(), List.of(),
@@ -132,6 +137,30 @@ public class MockStockResearchProvider
         }
         return new PriceHistory(symbol, "NSE", "INR", closes, "Fabricated sample series (NOT REAL PRICES)",
                 provenance(DataFreshness.HISTORICAL, end, null));
+    }
+
+    @Override
+    public ReportedValuation getReportedValuation(String symbolOrName) {
+        String symbol = normalize(symbolOrName);
+        warn("valuation", symbol);
+        LocalDate asOf = LocalDate.of(2026, 9, 1);
+        ReportingPeriod at = ReportingPeriod.pointInTime(asOf);
+        return new ReportedValuation(symbol, "NSE", symbol + " Limited (sample)", asOf,
+                perShare("sharePrice", "1000.00", at), perShare("trailingEps", "50.00", at),
+                perShare("bookValuePerShare", "400.00", at), perShare("dividendPerShare", "20.00", at),
+                multiple("trailingPe", "20.00", at), multiple("priceToBook", "2.50", at),
+                percent("dividendYieldPercent", "2.00", at),
+                provenance(DataFreshness.DELAYED, asOf, null));
+    }
+
+    private FinancialDataPoint perShare(String metric, String value, ReportingPeriod period) {
+        return FinancialDataPoint.reported(metric, new BigDecimal(value), ProviderUnit.PER_SHARE, new BigDecimal(value),
+                Unit.INR_PER_SHARE, period, source(period.end()));
+    }
+
+    private FinancialDataPoint multiple(String metric, String value, ReportingPeriod period) {
+        return FinancialDataPoint.reported(metric, new BigDecimal(value), ProviderUnit.MULTIPLE, new BigDecimal(value),
+                Unit.MULTIPLE, period, source(period.end()));
     }
 
     private FinancialDataPoint crore(String metric, String value, ReportingPeriod period) {

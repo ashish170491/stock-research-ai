@@ -94,6 +94,15 @@ final class ResearchInstructions {
 			  because of conflicts and gaps.
 			- Do not answer "Is this a good investment?". Give no buy, sell or hold recommendation,
 			  rating, score, price target or valuation opinion.
+
+			10. VALUATION AND THE COMPANY NAMED
+			- Trailing P/E, price-to-book and dividend yield are reported by the source at one share
+			  price: call them reported, never calculated. Only earnings yield is calculated.
+			- If asked whether a stock is cheap, expensive or fairly priced, give the figures and say
+			  that the data supplies no benchmark, fair value or target to judge them against. Do not
+			  make the judgement, and do not repeat the question's judgement words.
+			- Name the company as the tool results name it (their "Company:" line), so a short or
+			  ambiguous name in the question is never left unclear.
 			""";
 
 	private ResearchInstructions() {

@@ -51,6 +51,21 @@ public final class ResearchFixtures {
                 "Yahoo Finance did not publish " + field);
     }
 
+    /** The year with EBIT, current liabilities and operating cash flow; a null one is not published. */
+    public static AnnualFinancials withCapitalAndCash(AnnualFinancials year, String ebit, String currentLiabilities,
+                                                      String operatingCashFlow) {
+        String ts = "fundamentals-timeseries.";
+        ReportingPeriod period = year.period();
+        ReportingPeriod closing = ReportingPeriod.pointInTime(period.end());
+        return new AnnualFinancials(period, year.revenue(), year.netProfit(), year.operatingIncome(),
+                year.shareholdersEquity(), year.totalAssets(), year.totalDebt(),
+                ebit == null ? missing("ebit", ts + "annualEBIT", period) : crore("ebit", ts + "annualEBIT", ebit, period),
+                currentLiabilities == null ? missing("currentLiabilities", ts + "annualCurrentLiabilities", closing)
+                        : crore("currentLiabilities", ts + "annualCurrentLiabilities", currentLiabilities, closing),
+                operatingCashFlow == null ? missing("operatingCashFlow", ts + "annualOperatingCashFlow", period)
+                        : crore("operatingCashFlow", ts + "annualOperatingCashFlow", operatingCashFlow, period));
+    }
+
     public static AnnualFinancials year(int endYear, String revenue, String netProfit, String equity, String assets) {
         return year(endYear, revenue, netProfit, equity, assets, null);
     }
@@ -68,7 +83,10 @@ public final class ResearchFixtures {
                 crore("shareholdersEquity", ts + "annualStockholdersEquity", equity, closing),
                 crore("totalAssets", ts + "annualTotalAssets", assets, closing),
                 debt == null ? missing("totalDebt", ts + "annualTotalDebt", closing)
-                        : crore("totalDebt", ts + "annualTotalDebt", debt, closing));
+                        : crore("totalDebt", ts + "annualTotalDebt", debt, closing),
+                missing("ebit", ts + "annualEBIT", period),
+                missing("currentLiabilities", ts + "annualCurrentLiabilities", closing),
+                missing("operatingCashFlow", ts + "annualOperatingCashFlow", period));
     }
 
     public static List<AnnualFinancials> hdfcAnnual() {

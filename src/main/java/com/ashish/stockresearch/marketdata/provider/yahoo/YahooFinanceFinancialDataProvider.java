@@ -101,8 +101,11 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
     private static final String EQUITY = "annualStockholdersEquity";
     private static final String ASSETS = "annualTotalAssets";
     private static final String DEBT = "annualTotalDebt";
-    private static final List<String> ANNUAL_TYPES =
-            List.of(REVENUE, NET_INCOME, OPERATING_INCOME, EQUITY, ASSETS, DEBT);
+    private static final String EBIT = "annualEBIT";
+    private static final String CURRENT_LIABILITIES = "annualCurrentLiabilities";
+    private static final String OPERATING_CASH_FLOW = "annualOperatingCashFlow";
+    private static final List<String> ANNUAL_TYPES = List.of(REVENUE, NET_INCOME, OPERATING_INCOME, EQUITY, ASSETS,
+            DEBT, EBIT, CURRENT_LIABILITIES, OPERATING_CASH_FLOW);
     private static final String TOTAL_REVENUE = "financialData.totalRevenue";
     private static final String NET_INCOME_TO_COMMON = "defaultKeyStatistics.netIncomeToCommon";
     /**
@@ -179,7 +182,9 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
                 ratio("quarterlyEarningsGrowthYoyPercent", financials.earningsGrowth(), latestQuarter, base,
                         "financialData.earningsGrowth"),
                 FinancialDataPoint.unavailable("returnOnCapitalEmployedPercent", Unit.PERCENT, ttm, base,
-                        "Yahoo Finance publishes no capital-employed figure, so ROCE is not available from this source"));
+                        "Yahoo Finance publishes no trailing-twelve-month capital-employed figure, so there is no TTM "
+                                + "ROCE; ROCE is calculated per fiscal year from annual EBIT, total assets and current "
+                                + "liabilities where Yahoo publishes them"));
 
         List<AnnualFinancials> annual = annualHistory(resolution.providerSymbol(), calendar, gaps);
         List<AnnualCrossCheckFigures> crossCheck = annualCrossCheck(result.earnings(), calendar, fiscalYearEnd);
@@ -358,7 +363,12 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
                     annualAmount("annualOperatingIncome", values.get(OPERATING_INCOME), period, source, OPERATING_INCOME),
                     annualAmount("shareholdersEquity", values.get(EQUITY), closing, source, EQUITY),
                     annualAmount("totalAssets", values.get(ASSETS), closing, source, ASSETS),
-                    annualAmount("totalDebt", values.get(DEBT), closing, source, DEBT)));
+                    annualAmount("totalDebt", values.get(DEBT), closing, source, DEBT),
+                    annualAmount("ebit", values.get(EBIT), period, source, EBIT),
+                    annualAmount("currentLiabilities", values.get(CURRENT_LIABILITIES), closing, source,
+                            CURRENT_LIABILITIES),
+                    annualAmount("operatingCashFlow", values.get(OPERATING_CASH_FLOW), period, source,
+                            OPERATING_CASH_FLOW)));
         });
         if (years.isEmpty()) {
             gaps.add(new DataGap("Financials", "annualHistory",
