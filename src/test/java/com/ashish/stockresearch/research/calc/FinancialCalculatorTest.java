@@ -67,6 +67,41 @@ class FinancialCalculatorTest {
     }
 
     @Test
+    void calculatesEarningsYieldAsTheReciprocalOfAPositivePe() {
+        // 100 / 26.74 = 3.7397...
+        assertThat(FinancialCalculator.earningsYieldPercent(d("26.74"))).contains(d("3.74"));
+        // A loss-making company has no meaningful P/E to invert.
+        assertThat(FinancialCalculator.earningsYieldPercent(d("0"))).isEmpty();
+        assertThat(FinancialCalculator.earningsYieldPercent(d("-12.5"))).isEmpty();
+        assertThat(FinancialCalculator.earningsYieldPercent(null)).isEmpty();
+    }
+
+    @Test
+    void calculatesARatioOfSumsOnlyOverMatchingYears() {
+        // (120 + 130 + 150) / (100 + 100 + 100) = 1.33x
+        assertThat(FinancialCalculator.sumRatio(List.of(d("120"), d("130"), d("150")),
+                List.of(d("100"), d("100"), d("100")))).contains(d("1.33"));
+        // Unequal counts, a missing year, or a non-positive denominator: no ratio at all.
+        assertThat(FinancialCalculator.sumRatio(List.of(d("120"), d("130")), List.of(d("100")))).isEmpty();
+        assertThat(FinancialCalculator.sumRatio(java.util.Arrays.asList(d("120"), null),
+                List.of(d("100"), d("100")))).isEmpty();
+        assertThat(FinancialCalculator.sumRatio(List.of(d("50")), List.of(d("-10")))).isEmpty();
+    }
+
+    @Test
+    void calculatesReturnOnCapitalEmployedOnAverageCapitalEmployedAndFallsBackToClosing() {
+        // capital employed: 500 - 100 = 400 closing, 360 - 60 = 300 opening; 60 / 350 = 17.14%
+        assertThat(FinancialCalculator.returnOnCapitalEmployedPercent(d("60"), d("500"), d("100"), d("360"), d("60")))
+                .contains(d("17.14"));
+        // no opening balance sheet: 60 / 400 = 15.00%
+        assertThat(FinancialCalculator.returnOnCapitalEmployedPercent(d("60"), d("500"), d("100"), null, null))
+                .contains(d("15.00"));
+        // capital employed that is not positive gives no ROCE
+        assertThat(FinancialCalculator.returnOnCapitalEmployedPercent(d("60"), d("100"), d("120"), null, null)).isEmpty();
+        assertThat(FinancialCalculator.returnOnCapitalEmployedPercent(d("60"), d("500"), null, null, null)).isEmpty();
+    }
+
+    @Test
     void calculatesReturnOnAssets() {
         assertThat(FinancialCalculator.returnOnAssetsPercent(d("70479.34"), d("4818767.11"), d("5262119.32")))
                 .contains(d("1.40"));

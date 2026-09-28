@@ -55,7 +55,7 @@ class StockResearchToolsTest {
     @Test
     void exposesEveryResearchCapabilityAsADistinctTool() {
         assertThat(toolMethods().stream().map(Method::getName).sorted().toList()).containsExactly(
-                "getCompanyProfile", "getFinancialSummary", "getHistoricalPerformance", "getShareholding");
+                "getCompanyProfile", "getFinancialSummary", "getHistoricalPerformance", "getShareholding", "getValuation");
     }
 
     @Test
@@ -154,5 +154,47 @@ class StockResearchToolsTest {
     @Test
     void passesStringsThroughUnchanged() {
         assertThat(new PlainTextResultConverter().convert("# a\nb", String.class)).isEqualTo("# a\nb");
+    }
+
+    @Test
+    void describesValuationAsPointInTimeWithNoFairValueTargetOrRecommendation() {
+        String description = description("getValuation");
+
+        assertThat(description).contains("POINT-IN-TIME").contains("changes with the price")
+                .contains("NO fair value").contains("price target").contains("buy/sell/hold recommendation")
+                .contains("high or low").contains("no peer, sector or historical benchmark")
+                // what it does not return, what the argument accepts, and that figures are quoted, not recalculated
+                .contains("returns no financial statements").contains("Accepts an NSE/BSE trading symbol")
+                .contains("never recalculate them");
+    }
+
+    @Test
+    void rendersTheValuationAsCompactTextAndRecordsTheCall() {
+        when(stockResearchService.getValuation("TECHM")).thenReturn(com.ashish.stockresearch.research.model.ValuationResult
+                .success(new com.ashish.stockresearch.research.ValuationService(java.math.BigDecimal.valueOf(5))
+                        .assess(com.ashish.stockresearch.research.ValuationFixtures.techm())));
+
+        String text = tools.getValuation("TECHM", context);
+
+        assertThat(text).startsWith("TOOL RESULT: getValuation").contains("Tech Mahindra Limited (TECHM)")
+                .contains("| trailingPe | 26.74x | As of 2026-09-25 | REPORTED")
+                .contains("| earningsYieldPercent | 3.74% | As of 2026-09-25 | CALCULATED")
+                .contains("no fair value, price target or recommendation")
+                .doesNotContain("{").hasSizeLessThan(4_000);
+        assertThat(usage.calls()).singleElement().satisfies(call -> {
+            assertThat(call.tool()).isEqualTo("getValuation");
+            assertThat(call.symbol()).isEqualTo("TECHM");
+            assertThat(call.status()).isEqualTo("OK");
+            assertThat(call.evidence()).isEqualTo(text);
+        });
+    }
+
+    @Test
+    void rendersAValuationFailureWithItsStatus() {
+        when(stockResearchService.getValuation("TECHM")).thenReturn(com.ashish.stockresearch.research.model.ValuationResult
+                .failure(com.ashish.stockresearch.research.model.ResearchStatus.PROVIDER_UNAVAILABLE, "Yahoo is down"));
+
+        assertThat(tools.getValuation("TECHM", context)).contains("PROVIDER_UNAVAILABLE").contains("Yahoo is down");
+        assertThat(usage.calls().get(0).status()).isEqualTo("PROVIDER_UNAVAILABLE");
     }
 }

@@ -353,7 +353,8 @@ class FinancialMetricsServiceTest {
                                 SOURCE.withField("fundamentals-timeseries.annualTotalRevenue")),
                         crore("annualNetProfit", "f", "70479.34", fy26),
                         missing("a", "f", fy26), missing("b", "f", fy26), missing("c", "f", fy26),
-                        missing("d", "f", fy26))),
+                        missing("d", "f", fy26), missing("e", "f", fy26), missing("g", "f", fy26),
+                        missing("h", "f", fy26))),
                 CALENDAR.quarter(LocalDate.of(2026, 6, 30)));
 
         FinancialSummary summary = service.summarize(mixed);
@@ -389,5 +390,101 @@ class FinancialMetricsServiceTest {
 
     private static <T> T last(List<T> list) {
         return list.get(list.size() - 1);
+    }
+
+    // --- Cash conversion and ROCE -------------------------------------------------------------
+
+    /** Four fiscal years whose OCF/PAT and ROCE can be checked by hand. */
+    private static List<AnnualFinancials> capitalAndCashYears(String fy25OperatingCashFlow, String fy26CurrentLiabilities) {
+        return List.of(
+                ResearchFixtures.withCapitalAndCash(year(2023, "1000", "100", "800", "1500"), "150", "300", "90"),
+                ResearchFixtures.withCapitalAndCash(year(2024, "1100", "110", "880", "1600"), "160", "320", "130"),
+                ResearchFixtures.withCapitalAndCash(year(2025, "1200", "120", "960", "1700"), "180", "340",
+                        fy25OperatingCashFlow),
+                ResearchFixtures.withCapitalAndCash(year(2026, "1300", "130", "1040", "1800"), "200",
+                        fy26CurrentLiabilities, "150"));
+    }
+
+    private FinancialSummary summarizeYears(List<AnnualFinancials> annual) {
+        return service.summarize(reported(consistentReported().headline(), hdfcQuarters(), annual,
+                CALENDAR.quarter(LATEST_QUARTER_END)));
+    }
+
+    @Test
+    void calculatesOperatingCashFlowToNetProfitOverTheLastThreeYearsAndTheVerifierReproducesIt() {
+        FinancialDataPoint ocfToPat = summarizeYears(capitalAndCashYears("120", "360")).calculated().ocfToPat3yMultiple();
+
+        // (130 + 120 + 150) / (110 + 120 + 130) = 400 / 360 = 1.11x
+        assertThat(ocfToPat.status()).isEqualTo(DataStatus.VALID);
+        assertThat(ocfToPat.display()).isEqualTo("1.11x");
+        assertThat(ocfToPat.unit()).isEqualTo(Unit.MULTIPLE);
+        assertThat(ocfToPat.formula()).isEqualTo(Formula.SUM_RATIO);
+        assertThat(ocfToPat.period().label()).isEqualTo("FY24 to FY26 (3 years)");
+        assertThat(ocfToPat.inputs()).extracting(input -> input.name()).containsExactly(
+                "FY24 operating cash flow", "FY25 operating cash flow", "FY26 operating cash flow",
+                "FY24 net profit", "FY25 net profit", "FY26 net profit");
+        assertThat(CalculationVerifier.problem(ocfToPat, new CalculationVerifier.SourceValues())).isEmpty();
+    }
+
+    @Test
+    void givesNoFiveYearCashConversionWhenOnlyFourYearsAreReported() {
+        FinancialSummary summary = summarizeYears(capitalAndCashYears("120", "360"));
+        FinancialDataPoint fiveYear = summary.calculated().ocfToPat5yMultiple();
+
+        assertThat(fiveYear.status()).isEqualTo(DataStatus.UNAVAILABLE);
+        assertThat(fiveYear.value()).isNull();
+        assertThat(fiveYear.statusReason()).contains("needs 5 fiscal years").contains("4 available (FY23 to FY26)");
+        assertThat(summary.dataGaps()).anySatisfy(gap -> assertThat(gap.item()).isEqualTo("ocfToPat5yMultiple"));
+    }
+
+    @Test
+    void aMissingYearMakesCashConversionUnavailableNotARatioOverFewerYears() {
+        FinancialDataPoint ocfToPat = summarizeYears(capitalAndCashYears(null, "360")).calculated().ocfToPat3yMultiple();
+
+        assertThat(ocfToPat.status()).isEqualTo(DataStatus.UNAVAILABLE);
+        assertThat(ocfToPat.value()).isNull();
+        assertThat(ocfToPat.statusReason()).contains("operatingCashFlow").contains("FY25");
+    }
+
+    @Test
+    void aDisputedNetProfitYearBlocksCashConversion() {
+        List<AnnualFinancials> years = new java.util.ArrayList<>(capitalAndCashYears("120", "360"));
+        AnnualFinancials fy25 = years.get(2);
+        years.set(2, new AnnualFinancials(fy25.period(), fy25.revenue(), fy25.netProfit().inConflict("two feeds disagree"),
+                fy25.operatingIncome(), fy25.shareholdersEquity(), fy25.totalAssets(), fy25.totalDebt(), fy25.ebit(),
+                fy25.currentLiabilities(), fy25.operatingCashFlow()));
+
+        FinancialDataPoint ocfToPat = summarizeYears(years).calculated().ocfToPat3yMultiple();
+
+        assertThat(ocfToPat.status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(ocfToPat.value()).isNull();
+    }
+
+    @Test
+    void calculatesRoceOnAverageCapitalEmployedAndOnClosingWithoutAPriorYear() {
+        List<AnnualRatios> annual = summarizeYears(capitalAndCashYears("120", "360")).calculated().annual();
+        FinancialDataPoint fy26 = last(annual).returnOnCapitalEmployedPercent();
+        FinancialDataPoint fy23 = annual.get(0).returnOnCapitalEmployedPercent();
+
+        // capital employed 1800 - 360 = 1440 and 1700 - 340 = 1360, average 1400; 200 / 1400 = 14.29%
+        assertThat(fy26.status()).isEqualTo(DataStatus.VALID);
+        assertThat(fy26.display()).isEqualTo("14.29%");
+        assertThat(fy26.formula()).isEqualTo(Formula.RETURN_ON_CAPITAL_EMPLOYED_PERCENT);
+        assertThat(fy26.inputs()).hasSize(5);
+        assertThat(fy26.calculation()).contains("average capital employed (FY25 and FY26 closing)")
+                .contains("total assets - current liabilities");
+        // FY23 has no prior year: 150 / (1500 - 300) = 12.50%, and it says so.
+        assertThat(fy23.display()).isEqualTo("12.50%");
+        assertThat(fy23.calculation()).contains("closing capital employed at FY23");
+        assertThat(CalculationVerifier.problem(fy26, new CalculationVerifier.SourceValues())).isEmpty();
+    }
+
+    @Test
+    void givesNoRoceWhenCurrentLiabilitiesAreNotPublished() {
+        FinancialDataPoint fy26 = last(summarizeYears(capitalAndCashYears("120", null)).calculated().annual())
+                .returnOnCapitalEmployedPercent();
+
+        assertThat(fy26.status()).isEqualTo(DataStatus.UNAVAILABLE);
+        assertThat(fy26.statusReason()).contains("currentLiabilities");
     }
 }

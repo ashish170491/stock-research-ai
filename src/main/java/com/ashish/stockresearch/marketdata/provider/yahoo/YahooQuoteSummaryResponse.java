@@ -35,7 +35,25 @@ record YahooQuoteSummaryResponse(QuoteSummary quoteSummary) {
             FinancialData financialData,
             DefaultKeyStatistics defaultKeyStatistics,
             Price price,
-            Earnings earnings
+            Earnings earnings,
+            SummaryDetail summaryDetail
+    ) {
+    }
+
+    /**
+     * Price-based figures measured against the current share price.
+     *
+     * @param dividendRate  the indicated annual dividend per share, in the listing currency
+     * @param dividendYield dividendRate / price, as Yahoo sends it (a fraction; confirmed per value).
+     *                      Not trailingAnnualDividendYield, which Yahoo has been seen to compute
+     *                      against a different currency (INFY.NS: 0.05% against a 5.00% yield).
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SummaryDetail(
+            YahooValue trailingPE,
+            YahooValue dividendRate,
+            YahooValue dividendYield,
+            String currency
     ) {
     }
 
@@ -85,7 +103,10 @@ record YahooQuoteSummaryResponse(QuoteSummary quoteSummary) {
             YahooValue netIncomeToCommon,
             @JsonDeserialize(using = RawValueDeserializer.class) BigDecimal mostRecentQuarter,
             @JsonDeserialize(using = RawValueDeserializer.class) BigDecimal lastFiscalYearEnd,
-            YahooValue sharesOutstanding
+            YahooValue sharesOutstanding,
+            YahooValue trailingEps,
+            YahooValue bookValue,
+            YahooValue priceToBook
     ) {
     }
 

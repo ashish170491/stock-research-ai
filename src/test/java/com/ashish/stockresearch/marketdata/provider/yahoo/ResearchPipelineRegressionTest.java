@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
+import com.ashish.stockresearch.research.ValuationService;
 import com.ashish.stockresearch.research.FinancialMetricsService;
 import com.ashish.stockresearch.research.HistoricalPerformanceService;
 import com.ashish.stockresearch.research.StockResearchService;
@@ -89,7 +90,9 @@ class ResearchPipelineRegressionTest {
                 new YahooFinanceFinancialDataProvider(resolver, quoteSummary, validator),
                 new UnsupportedShareholdingProvider(),
                 new YahooFinanceHistoricalMarketDataProvider(client, resolver),
-                new FinancialMetricsService(), new HistoricalPerformanceService());
+                new FinancialMetricsService(), new HistoricalPerformanceService(),
+                new YahooFinanceValuationProvider(resolver, quoteSummary),
+                new ValuationService(java.math.BigDecimal.valueOf(5)));
         return new ResearchReportService(research, validator, new SectorClassifier()).build(symbol);
     }
 
@@ -115,14 +118,19 @@ class ResearchPipelineRegressionTest {
                 h.quarterlyRevenueGrowthYoyPercent(), h.quarterlyEarningsGrowthYoyPercent(),
                 h.returnOnCapitalEmployedPercent(), f.calculated().revenueCagrPercent(),
                 f.calculated().netProfitCagrPercent(), f.calculated().netProfitMarginTtmPercent(),
+                f.calculated().ocfToPat3yMultiple(), f.calculated().ocfToPat5yMultiple(),
                 report.companyProfile().companyProfile().marketCap()));
         for (AnnualRatios r : f.calculated().annual()) {
             points.addAll(List.of(r.revenueGrowthYoyPercent(), r.netProfitGrowthYoyPercent(), r.netProfitMarginPercent(),
                     r.operatingMarginPercent(), r.returnOnEquityPercent(), r.returnOnAssetsPercent(),
-                    r.debtToEquityMultiple()));
+                    r.debtToEquityMultiple(), r.returnOnCapitalEmployedPercent()));
         }
         f.reported().annualHistory().forEach(y -> points.addAll(List.of(y.revenue(), y.netProfit(),
-                y.operatingIncome(), y.shareholdersEquity(), y.totalAssets(), y.totalDebt())));
+                y.operatingIncome(), y.shareholdersEquity(), y.totalAssets(), y.totalDebt(), y.ebit(),
+                y.currentLiabilities(), y.operatingCashFlow())));
+        assertThat(report.valuation().success()).as(report.valuation().message()).isTrue();
+        points.addAll(report.valuation().valuation().reported().points());
+        points.addAll(report.valuation().valuation().metrics());
         return points;
     }
 
@@ -190,7 +198,12 @@ class ResearchPipelineRegressionTest {
             }
             if (p.unit() == Unit.MULTIPLE) {
                 assertThat(p.display()).as(p.metric()).endsWith("x");
-                assertThat(p.calculation()).as(p.metric()).contains("a multiple, not a percentage");
+                if (p.calculationStatus() == CalculationStatus.REPORTED) {
+                    // A provider multiple (P/E, price-to-book) whose fmt Yahoo confirmed as a plain multiple.
+                    assertThat(p.providerUnit()).as(p.metric()).isEqualTo(ProviderUnit.MULTIPLE);
+                } else {
+                    assertThat(p.calculation()).as(p.metric()).contains("a multiple, not a percentage");
+                }
             }
             if (p.unit() == Unit.INR_CRORE && p.calculationStatus() == CalculationStatus.REPORTED) {
                 assertThat(p.providerUnit()).as(p.metric()).isEqualTo(ProviderUnit.WHOLE_CURRENCY_UNITS);
@@ -485,5 +498,71 @@ class ResearchPipelineRegressionTest {
                 // Figures that are the application's survive, exactly as displayed.
                 .contains("₹56,815.40 crore (↑7.22% YoY)")
                 .contains("0.07x");
+    }
+
+    // --- Step 2: valuation, cash conversion and ROCE on the recorded Yahoo data -----------------
+
+    @Test
+    void techMahindrasCashConversionAndRoceAreCalculatedFromItsStatements() {
+        StockResearchReport report = report("TECHM");
+        FinancialSummary f = financials(report);
+
+        // (6,376.10 + 5,786.10 + 6,172.10) / (2,357.80 + 4,251.50 + 4,811.40) crore, FY24 to FY26
+        FinancialDataPoint ocfToPat = f.calculated().ocfToPat3yMultiple();
+        assertThat(ocfToPat.status()).isEqualTo(com.ashish.stockresearch.research.model.DataStatus.VALID);
+        assertThat(ocfToPat.period().label()).isEqualTo("FY24 to FY26 (3 years)");
+        assertThat(ocfToPat.display()).isEqualTo("1.61x");
+        // Yahoo supplies four fiscal years, so there is no five-year figure - and it says why.
+        assertThat(f.calculated().ocfToPat5yMultiple().status())
+                .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.UNAVAILABLE);
+        assertThat(f.calculated().ocfToPat5yMultiple().statusReason()).contains("4 available (FY23 to FY26)");
+        FinancialDataPoint roce = f.calculated().annual().getLast().returnOnCapitalEmployedPercent();
+        assertThat(roce.status()).isEqualTo(com.ashish.stockresearch.research.model.DataStatus.VALID);
+        assertThat(roce.inputs()).hasSize(5);
+        assertThat(report.observations()).anySatisfy(o -> assertThat(o.statement())
+                .isEqualTo("Operating cash flow over FY24 to FY26 (3 years) was 1.61x net profit over the same years."));
+        assertThat(report.observations()).anySatisfy(o -> assertThat(o.statement())
+                .startsWith("Return on capital employed for FY26 was " + roce.display()));
+    }
+
+    @Test
+    void hdfcBankGetsNoObservationFromCashConversionOrRoce() {
+        StockResearchReport report = report("HDFCBANK");
+        FinancialSummary f = financials(report);
+
+        // Yahoo's two feeds disagree on HDFC Bank's fiscal-year net profit, so cash conversion is not calculated.
+        assertThat(f.calculated().ocfToPat3yMultiple().status())
+                .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.DATA_CONFLICT);
+        assertThat(f.calculated().ocfToPat3yMultiple().value()).isNull();
+        // Whatever its status, a bank's operating cash flow (deposit and lending flows) gives no observation;
+        // ResearchReportServiceTest shows the same for a VALID figure.
+        assertThat(report.observations()).noneSatisfy(o -> assertThat(o.topic()).isIn("cash conversion",
+                "return on capital employed"));
+        assertThat(report.withheldObservations()).anySatisfy(w -> {
+            assertThat(w.topic()).isEqualTo("cash conversion");
+            assertThat(w.reason()).isEqualTo(WithheldObservation.Reason.SECTOR_CONTEXT);
+        });
+        // Yahoo publishes no EBIT or current liabilities for a bank, so there is no ROCE at all.
+        assertThat(f.calculated().annual().getLast().returnOnCapitalEmployedPercent().status())
+                .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.UNAVAILABLE);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TECHM", "HDFCBANK"})
+    void theReportStatesValuationAsDatedFactsCheckedAgainstThePrice(String symbol) {
+        StockResearchReport report = report(symbol);
+        String markdown = renderer.render(report, "x");
+        String evidence = renderer.renderEvidence(report);
+
+        var valuation = report.valuation().valuation();
+        assertThat(valuation.metrics()).allSatisfy(p -> assertThat(p.status()).as(p.metric())
+                .isEqualTo(com.ashish.stockresearch.research.model.DataStatus.VALID));
+        assertThat(valuation.dataQualityIssues()).isEmpty();
+        for (String text : List.of(markdown, evidence)) {
+            assertThat(text).contains("### Valuation (point in time)")
+                    .contains("| trailingPe | " + valuation.trailingPe().display() + " | As of 2026-09-25 |")
+                    .contains("no fair value, price target or recommendation");
+        }
+        assertThat(report.sources()).anySatisfy(s -> assertThat(s.covers()).contains("valuation multiples"));
     }
 }

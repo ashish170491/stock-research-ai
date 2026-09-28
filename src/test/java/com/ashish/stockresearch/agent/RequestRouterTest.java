@@ -311,4 +311,25 @@ class RequestRouterTest {
 
         assertThat(routed.companies()).isEmpty();
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "What is the price to book of TCS?", "What is the P/E of Infosys?", "Price-to-earnings of TCS",
+            "What is the dividend yield on the TCS share price?"})
+    void leavesValuationQuestionsThatSayPriceToTheModelRatherThanQuoting(String message) {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"TCS\"]}");
+
+        RoutedRequest routed = router(model).route(message);
+
+        assertThat(routed.intent()).isEqualTo(Intent.SPECIFIC_QUESTION);
+        assertThat(model.prompts).hasSize(1);
+    }
+
+    @Test
+    void stillQuotesAPlainPriceQuestionWithoutTheModel() {
+        StubModel model = new StubModel(null, new IllegalStateException("the model must not be called"));
+
+        assertThat(router(model).route("price of TCS").intent()).isEqualTo(Intent.QUOTE);
+        assertThat(model.prompts).isEmpty();
+    }
 }

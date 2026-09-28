@@ -141,6 +141,59 @@ public final class FinancialCalculator {
         return ratioPercent(netIncome, averageOrClosing(openingAssets, closingAssets));
     }
 
+    /**
+     * Earnings yield: 100 / P/E, the percentage of the price that trailing earnings represent.
+     * Only for a positive P/E: a loss-making company has no meaningful P/E to invert.
+     */
+    public static Optional<BigDecimal> earningsYieldPercent(BigDecimal priceToEarnings) {
+        if (priceToEarnings == null || priceToEarnings.signum() <= 0) {
+            return Optional.empty();
+        }
+        return Optional.of(HUNDRED.divide(priceToEarnings, MATH).setScale(2, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * sum(numerators) / sum(denominators) as a multiple, e.g. operating cash flow over net profit across
+     * the same fiscal years. Needs the same number of each and a positive denominator sum.
+     */
+    public static Optional<BigDecimal> sumRatio(List<BigDecimal> numerators, List<BigDecimal> denominators) {
+        if (numerators == null || denominators == null || numerators.isEmpty()
+                || numerators.size() != denominators.size()
+                // not contains(null): immutable lists throw on it rather than answering
+                || numerators.stream().anyMatch(java.util.Objects::isNull)
+                || denominators.stream().anyMatch(java.util.Objects::isNull)) {
+            return Optional.empty();
+        }
+        return multiple(numerators.stream().reduce(BigDecimal.ZERO, BigDecimal::add),
+                denominators.stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    /** Capital employed: total assets minus current liabilities, at the same balance-sheet date. */
+    public static Optional<BigDecimal> capitalEmployed(BigDecimal totalAssets, BigDecimal currentLiabilities) {
+        if (totalAssets == null || currentLiabilities == null) {
+            return Optional.empty();
+        }
+        return Optional.of(totalAssets.subtract(currentLiabilities));
+    }
+
+    /**
+     * EBIT over average capital employed (opening and closing), or closing when no opening balance is
+     * available - the same rule as ROE. Needs positive capital employed.
+     */
+    public static Optional<BigDecimal> returnOnCapitalEmployedPercent(BigDecimal ebit,
+                                                                      BigDecimal closingAssets,
+                                                                      BigDecimal closingCurrentLiabilities,
+                                                                      BigDecimal openingAssets,
+                                                                      BigDecimal openingCurrentLiabilities) {
+        Optional<BigDecimal> closing = capitalEmployed(closingAssets, closingCurrentLiabilities);
+        if (closing.isEmpty()) {
+            return Optional.empty();
+        }
+        BigDecimal opening = capitalEmployed(openingAssets, openingCurrentLiabilities).orElse(null);
+        BigDecimal basis = averageOrClosing(opening, closing.get());
+        return basis != null && basis.signum() > 0 ? ratioPercent(ebit, basis) : Optional.empty();
+    }
+
     /** Elapsed years between two dates (days / 365.25), to 4 decimal places. */
     public static BigDecimal yearsBetween(LocalDate start, LocalDate end) {
         long days = ChronoUnit.DAYS.between(start, end);

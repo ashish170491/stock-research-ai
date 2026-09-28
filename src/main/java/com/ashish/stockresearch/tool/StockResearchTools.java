@@ -5,6 +5,7 @@ import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.research.model.ValuationResult;
 import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
@@ -52,6 +53,7 @@ public class StockResearchTools {
     static final String FINANCIALS_TOOL = "getFinancialSummary";
     static final String HISTORY_TOOL = "getHistoricalPerformance";
     static final String SHAREHOLDING_TOOL = "getShareholding";
+    static final String VALUATION_TOOL = "getValuation";
 
     private final StockResearchService stockResearchService;
     private final ResearchReportRenderer renderer;
@@ -94,7 +96,8 @@ public class StockResearchTools {
     @Tool(name = FINANCIALS_TOOL, description = """
             Get a company's financials: headline TTM revenue, net profit, margins, returns, debt and cash; \
             recent reported quarters with period-end and results-publication dates; fiscal-year statements; \
-            and YoY growth, CAGR, margins, ROE, ROA and debt-to-equity calculated and verified by the application. \
+            and YoY growth, CAGR, margins, ROE, ROA, ROCE, debt-to-equity and operating cash flow to net profit \
+            calculated and verified by the application. \
             Normally needed for any fundamental overview or analysis, and for questions about financial \
             performance, profitability, margins, growth, leverage or balance sheet. \
             Every value has a period, status and source. Status VALID values may be quoted exactly as displayed. \
@@ -113,6 +116,33 @@ public class StockResearchTools {
         FinancialSummaryResult result = stockResearchService.getFinancialSummary(symbol);
         return recorded(toolContext, FINANCIALS_TOOL, symbol, result.status().name(),
                 renderer.renderFinancialSummaryTool(result));
+    }
+
+    @Tool(name = VALUATION_TOOL, description = """
+            Get a stock's valuation multiples at one point in time: trailing P/E, price-to-book, dividend yield, \
+            and earnings yield (calculated by the application as 100 / P/E), with the share price, EPS, book \
+            value and dividend per share they are measured against. Use it for questions about P/E, price-to-book, \
+            dividend yield, earnings yield or valuation multiples. \
+            The values are POINT-IN-TIME: each is dated to the share price it was measured against and changes \
+            with the price, so state the date and never present them as current once time has passed. \
+            This tool gives NO fair value, intrinsic value, price target, or buy/sell/hold recommendation, and \
+            says nothing about whether a multiple is high or low: no peer, sector or historical benchmark is \
+            supplied, so make no such comparison. It returns no financial statements or growth - use \
+            getFinancialSummary for those - and no live quote - use getStockQuote. \
+            Each multiple was checked against the price and per-share figure it is quoted against; a \
+            DATA_CONFLICT or UNAVAILABLE value is not usable: report its status and reason. Quote values exactly \
+            as displayed; never recalculate them or compute a new figure from them. Their source is Yahoo Finance. \
+            Accepts an NSE/BSE trading symbol (e.g. TCS, RELIANCE) or a company name.""",
+            resultConverter = PlainTextResultConverter.class)
+    public String getValuation(
+            @ToolParam(description = "Indian stock trading symbol (e.g. TCS, INFY) or company name "
+                    + "(e.g. 'Tata Consultancy Services')")
+            String symbol,
+            ToolContext toolContext) {
+        log.info("TOOL CALLED: getValuation symbol={}", symbol);
+        ValuationResult result = stockResearchService.getValuation(symbol);
+        return recorded(toolContext, VALUATION_TOOL, symbol, result.status().name(),
+                renderer.renderValuationTool(result));
     }
 
     @Tool(name = SHAREHOLDING_TOOL, description = """

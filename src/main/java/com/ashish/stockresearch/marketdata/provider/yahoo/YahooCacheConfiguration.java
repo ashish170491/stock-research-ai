@@ -18,8 +18,8 @@ import java.util.Set;
 
 /**
  * Caches what Yahoo returns, each kind of data for as long as it stays meaningful: a quote for a
- * minute, a price series for a trading session, statements and profiles for a day, and a
- * name-to-symbol mapping for a week. A repeated question makes no Yahoo calls, and the eventual
+ * minute, a valuation for five, a price series for a trading session, statements and profiles for a
+ * day, and a name-to-symbol mapping for a week. A repeated question makes no Yahoo calls, and the eventual
  * screener can read many stocks without being rate-limited.
  *
  * Only successful answers are cached: a provider failure is an exception, and exceptions are
@@ -36,6 +36,7 @@ class YahooCacheConfiguration {
     static final String FINANCIALS = "financials";
     static final String COMPANY_PROFILES = "companyProfiles";
     static final String SYMBOL_RESOLUTION = "symbolResolution";
+    static final String VALUATIONS = "valuations";
 
     /** Bean name of the key generator that makes "tcs", " TCS " and "TCS" the same entry. */
     static final String SYMBOL_KEY = "symbolKey";
@@ -45,7 +46,9 @@ class YahooCacheConfiguration {
             PRICE_HISTORY, Duration.ofHours(6),
             FINANCIALS, Duration.ofHours(24),
             COMPANY_PROFILES, Duration.ofHours(24),
-            SYMBOL_RESOLUTION, Duration.ofDays(7));
+            SYMBOL_RESOLUTION, Duration.ofDays(7),
+            // Measured against the share price, so kept for minutes, not hours.
+            VALUATIONS, Duration.ofMinutes(5));
 
     private static final int MAX_ENTRIES_PER_CACHE = 2_000;
 

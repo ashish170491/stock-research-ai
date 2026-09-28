@@ -2,6 +2,8 @@ package com.ashish.stockresearch.research.sector;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SectorClassifierTest {
@@ -44,5 +46,18 @@ class SectorClassifierTest {
         assertThat(bank.lessMeaningfulMetrics()).contains("EBITDA", "conventional debt-to-equity");
         assertThat(bank.sectorMetricsNotAvailable()).contains("net interest margin", "gross and net NPA");
         assertThat(bank.basis()).contains("Yahoo Finance").contains("Banks - Regional");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = IndustryGroup.class, names = {"BANK", "NBFC", "INSURANCE"})
+    void treatsCashConversionAndRoceAsNotPrimaryForFinancials(IndustryGroup group) {
+        assertThat(List.of("returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple"))
+                .allSatisfy(metric -> assertThat(group.isNonPrimary(metric)).as(metric).isTrue());
+    }
+
+    @Test
+    void keepsCashConversionAndRoceAsPrimaryForNonFinancials() {
+        assertThat(List.of("returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple"))
+                .allSatisfy(metric -> assertThat(IndustryGroup.IT_SERVICES.isNonPrimary(metric)).as(metric).isFalse());
     }
 }

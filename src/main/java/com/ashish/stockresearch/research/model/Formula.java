@@ -32,5 +32,19 @@ public enum Formula {
     DAYS_TO_YEARS,
 
     /** A value selected from a series (e.g. the highest close). Inputs: the selected value. */
-    SELECTED_VALUE
+    SELECTED_VALUE,
+    /** 100 / value, e.g. earnings yield from a P/E. Inputs: the value. */
+    RECIPROCAL_PERCENT,
+    /**
+     * sum(numerators) / sum(denominators), as a multiple, over the same years - e.g. operating cash flow
+     * over net profit. Inputs: the numerators, then the denominators, the same number of each.
+     */
+    SUM_RATIO,
+    /**
+     * EBIT / capital employed x 100, capital employed being total assets minus current liabilities,
+     * averaged over the opening and closing balance sheets when both are available.
+     * Inputs: EBIT, closing total assets, closing current liabilities[, opening total assets,
+     * opening current liabilities].
+     */
+    RETURN_ON_CAPITAL_EMPLOYED_PERCENT
 }

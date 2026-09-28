@@ -5,7 +5,11 @@ import java.util.function.UnaryOperator;
 
 /**
  * One fiscal year of statement data - the inputs for the year-on-year,
- * CAGR, margin, ROE, ROA and debt-to-equity calculations.
+ * CAGR, margin, ROE, ROA, debt-to-equity, ROCE and cash-conversion calculations.
+ *
+ * @param ebit               earnings before interest and tax, for ROCE
+ * @param currentLiabilities closing current liabilities; total assets minus these is capital employed
+ * @param operatingCashFlow  cash generated from operations, for cash conversion (OCF / net profit)
  */
 public record AnnualFinancials(
         ReportingPeriod period,
@@ -14,15 +18,20 @@ public record AnnualFinancials(
         FinancialDataPoint operatingIncome,
         FinancialDataPoint shareholdersEquity,
         FinancialDataPoint totalAssets,
-        FinancialDataPoint totalDebt
+        FinancialDataPoint totalDebt,
+        FinancialDataPoint ebit,
+        FinancialDataPoint currentLiabilities,
+        FinancialDataPoint operatingCashFlow
 ) {
 
     public List<FinancialDataPoint> points() {
-        return List.of(revenue, netProfit, operatingIncome, shareholdersEquity, totalAssets, totalDebt);
+        return List.of(revenue, netProfit, operatingIncome, shareholdersEquity, totalAssets, totalDebt, ebit,
+                currentLiabilities, operatingCashFlow);
     }
 
     public AnnualFinancials map(UnaryOperator<FinancialDataPoint> f) {
         return new AnnualFinancials(period, f.apply(revenue), f.apply(netProfit), f.apply(operatingIncome),
-                f.apply(shareholdersEquity), f.apply(totalAssets), f.apply(totalDebt));
+                f.apply(shareholdersEquity), f.apply(totalAssets), f.apply(totalDebt), f.apply(ebit),
+                f.apply(currentLiabilities), f.apply(operatingCashFlow));
     }
 }

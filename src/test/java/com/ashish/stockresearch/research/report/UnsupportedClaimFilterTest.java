@@ -287,4 +287,94 @@ class UnsupportedClaimFilterTest {
 
         assertThat(filter.filter(text, EVIDENCE).text()).isEqualTo(text);
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "At 26.74x, the stock looks cheap.",
+            "TCS appears undervalued at current levels.",
+            "The shares are overvalued relative to earnings.",
+            "It trades at a premium to peers.",
+            "The low P/E suggests value.",
+            "A high price-to-book multiple limits upside.",
+            "The fair value is ₹1,800 per share.",
+            "The dividend yield offers a margin of safety."})
+    void removesValuationJudgementsForWhichNoBenchmarkFairValueOrTargetExists(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter("The trailing P/E was 26.74x as of 2026-09-25. " + sentence,
+                EVIDENCE);
+
+        assertThat(result.text()).isEqualTo("The trailing P/E was 26.74x as of 2026-09-25.");
+    }
+
+    @Test
+    void keepsValuationFactsStatedWithTheirDates() {
+        String text = "The trailing P/E was 26.74x and price-to-book 4.63x as of 2026-09-25. "
+                + "Earnings yield, calculated as 100 / P/E, was 3.74%.";
+
+        assertThat(filter.filter(text, EVIDENCE).text()).isEqualTo(text);
+    }
+
+    @Test
+    void removesConclusionsAboutWithheldCashConversionAndRoce() {
+        UnsupportedClaimFilter.Result result = filter.filter("Operating cash flow rose to 1.61x net profit. "
+                        + "ROCE improved to 18.20% in FY26. Cash conversion was withheld for this bank.", EVIDENCE,
+                java.util.List.of("cash conversion", "return on capital employed"));
+
+        assertThat(result.text()).isEqualTo("Cash conversion was withheld for this bank.");
+    }
+
+    // Sentences from real answers to "What is PE of TCS?" and "Is HDFC cheap at current valuation?", which
+    // declined the judgement and were wrongly removed, leaving a dangling "Without such benchmarks, ...".
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "This ratio alone does not indicate whether the stock is overvalued or undervalued without comparative "
+                    + "benchmarks.",
+            "- No industry, sector, or historical benchmark is provided to contextualize whether the P/E or "
+                    + "price-to-book ratios are \"cheap\" or \"expensive.\"",
+            "- The tool does not supply data on peer comparisons, fair value estimates, or long-term valuation trends.",
+            "The available data does not include benchmarks to determine if HDFC’s current valuation is \"cheap.\"",
+            "The trailing P/E and price-to-book ratios are factual metrics as of 2026-09-25 but require external "
+                    + "context (e.g., sector averages, historical ranges, or peer comparisons) to assess relative value.",
+            "No fair value or price target is supplied.",
+            "The data cannot show whether TCS is undervalued.",
+            // from "Is ICICIBANK cheap at current valuation?"
+            "- UNAVAILABLE: Historical P/E and industry benchmarks are not provided in the data.",
+            "A fair value or price target is not supplied."})
+    void keepsSentencesThatDeclineAValuationJudgement(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter(sentence, EVIDENCE);
+
+        assertThat(result.removedSentences()).isEmpty();
+        assertThat(result.text()).isEqualTo(sentence);
+    }
+
+    @Test
+    void splitsSentencesAfterAClosingQuote() {
+        String text = "The data does not include benchmarks to determine if it is \"cheap.\" The P/E is 16.08x.";
+
+        assertThat(filter.filter(text, EVIDENCE).text()).isEqualTo(text);
+    }
+
+    // A refusal's wording wrapped round a judgement that is still made.
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "Without benchmarks, the stock looks cheap.",
+            "There is no fair value estimate; the stock is undervalued.",
+            "The data does not include a price target, but the shares are expensive.",
+            "The stock is by no means cheap.",
+            "It is not cheap.",
+            "Even if there is no benchmark, the stock is undervalued.",
+            "The data lacks benchmarks and the P/E of 15.13x is low.",
+            "The data does not show whether it is undervalued, though it probably is.",
+            "Without a price target, TCS still trades at a discount to peers.",
+            "No benchmark is supplied, but the P/E is reasonable.",
+            "The earnings yield of 7.75% suggests a balance between growth potential and income generation.",
+            "The P/E is not supplied with a benchmark, yet the stock is attractive.",
+            "The stock is cheap; industry benchmarks are not provided.",
+            "The fair value is ₹1,800, though a price target is not supplied.",
+            "Sector averages show the stock is expensive, and peer data is not provided."})
+    void stillRemovesJudgementsWrappedInARefusal(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter("The trailing P/E was 15.13x as of 2026-09-25. " + sentence,
+                EVIDENCE);
+
+        assertThat(result.text()).isEqualTo("The trailing P/E was 15.13x as of 2026-09-25.");
+    }
 }

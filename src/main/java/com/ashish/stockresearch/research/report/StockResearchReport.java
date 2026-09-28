@@ -7,6 +7,7 @@ import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
+import com.ashish.stockresearch.research.model.ValuationResult;
 import com.ashish.stockresearch.research.sector.SectorContext;
 
 import java.time.LocalDate;
@@ -42,6 +43,7 @@ public record StockResearchReport(
         FinancialSummaryResult financials,
         HistoricalPerformanceResult historicalPerformance,
         ShareholdingResult shareholding,
+        ValuationResult valuation,
         List<Observation> observations,
         List<WithheldObservation> withheldObservations,
         List<DataGap> dataGaps,
