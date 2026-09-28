@@ -338,7 +338,12 @@ class UnsupportedClaimFilterTest {
             "The data cannot show whether TCS is undervalued.",
             // from "Is ICICIBANK cheap at current valuation?"
             "- UNAVAILABLE: Historical P/E and industry benchmarks are not provided in the data.",
-            "A fair value or price target is not supplied."})
+            "A fair value or price target is not supplied.",
+            // from "What is the P/E of Infosys?" (verification run 2026-09-28)
+            "- No benchmark or judgment on whether the P/E is high, low, or fair is provided.",
+            "This is a point-in-time metric and does not imply any judgment on whether the multiple is high, low, "
+                    + "or fair.",
+            "The data does not show whether the P/E is high or low."})
     void keepsSentencesThatDeclineAValuationJudgement(String sentence) {
         UnsupportedClaimFilter.Result result = filter.filter(sentence, EVIDENCE);
 
@@ -370,7 +375,11 @@ class UnsupportedClaimFilterTest {
             "The P/E is not supplied with a benchmark, yet the stock is attractive.",
             "The stock is cheap; industry benchmarks are not provided.",
             "The fair value is ₹1,800, though a price target is not supplied.",
-            "Sector averages show the stock is expensive, and peer data is not provided."})
+            "Sector averages show the stock is expensive, and peer data is not provided.",
+            "The P/E is high, so whether it is cheap is unclear.",
+            "The data does not show whether the P/E is high, but it is.",
+            "No benchmark is supplied, and the P/E of 12.82x is \"high.\"",
+            "The P/E is low and no benchmark is provided."})
     void stillRemovesJudgementsWrappedInARefusal(String sentence) {
         UnsupportedClaimFilter.Result result = filter.filter("The trailing P/E was 15.13x as of 2026-09-25. " + sentence,
                 EVIDENCE);

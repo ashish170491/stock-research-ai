@@ -68,7 +68,8 @@ public class UnsupportedClaimFilter {
     private static final String VALUATION_LEVEL =
             "trad(?:es|ing|ed) at a (?:premium|discount)|(?:P/?E|P/?B|price[- ]to[- ](?:book|earnings)|valuations?|multiples?|(?:earnings|dividend) yield)"
                     + "(?: ratios?)?(?:[^.]|\\.\\d){0,40}?\\b(?:is|are|looks?|appears?|seems?|remains?)\\s+"
-                    + "(?:relatively |quite |very |fairly |somewhat |rather )?(?:low|high|reasonable|modest|elevated|"
+                    // a scare-quoted level ('is "high."') is still asserted
+                    + "[\"'“‘]?(?:relatively |quite |very |fairly |somewhat |rather )?(?:low|high|reasonable|modest|elevated|"
                     + "demanding|rich|stretched|compelling|lofty|undemanding|generous)";
     /** Benchmark comparisons - no benchmarks are supplied. */
     private static final String BENCHMARK_COMPARISONS =
@@ -118,6 +119,11 @@ public class UnsupportedClaimFilter {
      */
     private static final Pattern MENTIONABLE = Pattern.compile(
             "(?:" + VALUATION_JUDGEMENTS + "|" + BENCHMARK_COMPARISONS + ")", Pattern.CASE_INSENSITIVE);
+    /**
+     * Level claims ("the P/E is high") assert themselves, so they count as mentioned only as the open
+     * question of a "whether"/"if" clause: "no judgement on whether the P/E is high, low or fair".
+     */
+    private static final Pattern LEVEL_CLAIM = Pattern.compile("(?:" + VALUATION_LEVEL + ")", Pattern.CASE_INSENSITIVE);
     /** A sentence declining to judge says something is missing. */
     private static final Pattern ABSENCE = Pattern.compile(
             "\\b(?:no|not|none|neither|nor|without|cannot|unable|insufficient|lacks?|lacking|absence)\\b|n['’]t\\b|"
@@ -324,24 +330,32 @@ public class UnsupportedClaimFilter {
         boolean any = false;
         while (matcher.find()) {
             any = true;
-            if (!MENTIONABLE.matcher(matcher.group()).matches() || !mentioned(sentence, matcher.start(), matcher.end())) {
+            String term = matcher.group();
+            boolean mentioned = MENTIONABLE.matcher(term).matches()
+                    ? mentioned(sentence, matcher.start(), matcher.end(), false)
+                    : LEVEL_CLAIM.matcher(term).matches() && mentioned(sentence, matcher.start(), matcher.end(), true);
+            if (!mentioned) {
                 return false;
             }
         }
         return any;
     }
 
-    private static boolean mentioned(String sentence, int start, int end) {
+    /** @param onlyAsAQuestion only a "whether"/"if" clause can make the term a mention (level claims) */
+    private static boolean mentioned(String sentence, int start, int end, boolean onlyAsAQuestion) {
         // "... does not show whether it is undervalued, though it probably is" asserts it after all
         String after = sentence.substring(end);
         Matcher pivot = PIVOT.matcher(after);
         if (pivot.find() && COPULA.matcher(after.substring(pivot.end())).find()) {
             return false;
         }
+        String before = sentence.substring(0, start);
+        if (onlyAsAQuestion) {
+            return governedBy(before, HYPOTHETICAL, gap -> !gap.contains(",") && !PIVOT.matcher(gap).find());
+        }
         if (quoted(sentence, start, end) || NOT_SUPPLIED_AFTER.matcher(after).find()) {
             return true;
         }
-        String before = sentence.substring(0, start);
         // a "whether" clause may contain a verb ("whether the stock is cheap") but not a comma, which would
         // end it ("even if there is no benchmark, the stock is cheap")
         return governedBy(before, HYPOTHETICAL, gap -> !gap.contains(",") && !PIVOT.matcher(gap).find())
