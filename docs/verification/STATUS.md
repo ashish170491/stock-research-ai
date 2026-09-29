@@ -7,7 +7,7 @@ Updated by the `roadmap-verifier` agent (`/verify-step N`). The latest report fo
 | 0 | Performance and housekeeping | NOT_VERIFIED | | | |
 | 1 | Conversation memory | NOT_VERIFIED | | | |
 | 2 | Valuation and quality tools | PASSED | 2026-09-28 | 647c27f | [step-02-2026-09-28.md](step-02-2026-09-28.md) |
-| 3 | Deterministic screening engine | NOT_VERIFIED | | | |
+| 3 | Deterministic screening engine | PASSED | 2026-09-28 | 5ceecd4 (uncommitted working tree) | [step-03-2026-09-28.md](step-03-2026-09-28.md) |
 | 4 | Screener agent (chain) | NOT_VERIFIED | | | |
 | 5 | Parallel deep-dive and comparison | NOT_VERIFIED | | | |
 | 6 | Critic loop (evaluator-optimizer) | NOT_VERIFIED | | | |
