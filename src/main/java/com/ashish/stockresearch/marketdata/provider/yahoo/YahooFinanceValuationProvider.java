@@ -89,8 +89,13 @@ class YahooFinanceValuationProvider implements ValuationDataProvider {
                         "defaultKeyStatistics.trailingEps"),
                 perShare("bookValuePerShare", statistics != null ? statistics.bookValue() : null, at, base,
                         "defaultKeyStatistics.bookValue"),
-                perShare("dividendPerShare", detail != null ? detail.dividendRate() : null, at, base,
-                        "summaryDetail.dividendRate"),
+                detail != null && detail.currency() != null && !"INR".equalsIgnoreCase(detail.currency())
+                        ? FinancialDataPoint.unavailable("dividendPerShare", Unit.INR_PER_SHARE, at,
+                                base.withField("summaryDetail.dividendRate"), ("Yahoo Finance quotes summaryDetail "
+                                        + "in %s, so its dividend per share is not labelled as rupees")
+                                        .formatted(detail.currency()))
+                        : perShare("dividendPerShare", detail != null ? detail.dividendRate() : null, at, base,
+                                "summaryDetail.dividendRate"),
                 multiple("trailingPe", detail != null ? detail.trailingPE() : null, at, base,
                         "summaryDetail.trailingPE"),
                 multiple("priceToBook", statistics != null ? statistics.priceToBook() : null, at, base,
@@ -105,7 +110,8 @@ class YahooFinanceValuationProvider implements ValuationDataProvider {
     private static String note(LocalDate asOf) {
         return ("Point-in-time valuation: every figure is measured against the share price %s (exchange prices "
                 + "are delayed by about 15 minutes) and changes with it. Per-share figures are in rupees, the listing "
-                + "currency, even where the accounts are reported in another currency. These are facts about the "
+                + "currency, even where the accounts are reported in another currency; each is confirmed by the "
+                + "cross-check of its multiple against the rupee share price, and disputed with it if that fails. These are facts about the "
                 + "price, not judgements: there is no fair value, price target or recommendation.")
                 .formatted(asOf != null ? "on " + asOf : "at an unstated date");
     }

@@ -168,6 +168,28 @@ public final class FinancialCalculator {
                 denominators.stream().reduce(BigDecimal.ZERO, BigDecimal::add));
     }
 
+    /** The arithmetic mean, to 2 decimal places; empty for no values or a missing one. */
+    public static Optional<BigDecimal> mean(List<BigDecimal> values) {
+        if (values == null || values.isEmpty() || values.stream().anyMatch(java.util.Objects::isNull)) {
+            return Optional.empty();
+        }
+        return Optional.of(values.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(values.size()), 2, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * Dividends paid as a percentage of the same year's operating cash flow. The cash-flow statement
+     * reports dividends as an outflow, so {@code dividendsPaid} must be zero or negative; a positive figure
+     * is not what the field is understood to mean and gives no result. Needs positive operating cash flow.
+     */
+    public static Optional<BigDecimal> dividendsToOperatingCashFlowPercent(BigDecimal dividendsPaid,
+                                                                           BigDecimal operatingCashFlow) {
+        if (dividendsPaid == null || dividendsPaid.signum() > 0) {
+            return Optional.empty();
+        }
+        return ratioPercent(dividendsPaid.negate(), operatingCashFlow);
+    }
+
     /** Capital employed: total assets minus current liabilities, at the same balance-sheet date. */
     public static Optional<BigDecimal> capitalEmployed(BigDecimal totalAssets, BigDecimal currentLiabilities) {
         if (totalAssets == null || currentLiabilities == null) {

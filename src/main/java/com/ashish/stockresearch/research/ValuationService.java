@@ -31,8 +31,10 @@ import java.util.Optional;
  *   <li>Earnings yield (100 / P/E) is calculated only from a VALID, positive P/E and is reproduced by
  *       {@link CalculationVerifier} before it is used.</li>
  * </ul>
- * A multiple whose check cannot run (a per-share input missing) keeps its status, and the gap in the
- * checking is reported as a data-quality warning rather than hidden.
+ * A failed check disputes the multiple and its per-share input alike; the share price stays usable.
+ * A multiple whose check cannot run (a per-share input missing) keeps its status, the gap in the
+ * checking is reported as a data-quality warning, and the snapshot names it as unchecked - screening
+ * never passes a rule on an unchecked multiple.
  */
 @Service
 public class ValuationService {
@@ -46,32 +48,42 @@ public class ValuationService {
 
     public ValuationSnapshot assess(ReportedValuation reported) {
         List<DataQualityIssue> issues = new ArrayList<>();
-        FinancialDataPoint pe = crossChecked(reported.trailingPe(), "trailing P/E", reported.price(),
-                reported.trailingEps(), "share price / trailing EPS", issues,
+        Checked pe = crossChecked(reported.trailingPe(), "trailing P/E", reported.price(),
+                reported.trailingEps(), Side.DENOMINATOR, "share price / trailing EPS", issues,
                 (price, eps) -> FinancialCalculator.multiple(price, eps));
-        FinancialDataPoint pb = crossChecked(reported.priceToBook(), "price-to-book", reported.price(),
-                reported.bookValuePerShare(), "share price / book value per share", issues,
+        Checked pb = crossChecked(reported.priceToBook(), "price-to-book", reported.price(),
+                reported.bookValuePerShare(), Side.DENOMINATOR, "share price / book value per share", issues,
                 (price, book) -> FinancialCalculator.multiple(price, book));
-        FinancialDataPoint dividendYield = crossChecked(reported.dividendYieldPercent(), "dividend yield",
-                reported.dividendPerShare(), reported.price(), "dividend per share / share price x 100", issues,
-                (dividend, price) -> FinancialCalculator.ratioPercent(dividend, price));
+        Checked dividendYield = crossChecked(reported.dividendYieldPercent(), "dividend yield",
+                reported.dividendPerShare(), reported.price(), Side.NUMERATOR, "dividend per share / share price x 100",
+                issues, (dividend, price) -> FinancialCalculator.ratioPercent(dividend, price));
+        // A failed check disputes the per-share figure too: nothing says which of the two is wrong - it could
+        // be the per-share figure (a stale EPS, or one not in rupees) - so neither is kept as usable.
+        ReportedValuation checkedInputs = reported.withPerShare(pe.perShare(), pb.perShare(), dividendYield.perShare());
 
         CalculationVerifier.SourceValues sources = new CalculationVerifier.SourceValues();
         reported.points().forEach(sources::add);
-        FinancialDataPoint earningsYield = CalculationVerifier.verify(earningsYield(pe), sources);
+        FinancialDataPoint earningsYield = CalculationVerifier.verify(earningsYield(pe.multiple()), sources);
         if (earningsYield.status() == DataStatus.INVALID) {
             issues.add(DataQualityIssue.invalidCalculation("earningsYieldPercent failed verification and is withheld. "
                     + earningsYield.statusReason(), earningsYield.dependsOnFields()));
         }
 
         List<DataGap> gaps = new ArrayList<>();
-        for (FinancialDataPoint metric : List.of(pe, pb, dividendYield, earningsYield)) {
+        for (FinancialDataPoint metric : List.of(pe.multiple(), pb.multiple(), dividendYield.multiple(), earningsYield)) {
             if (metric.status() == DataStatus.UNAVAILABLE) {
                 gaps.add(new DataGap("Valuation", metric.metric(), metric.statusReason()));
             }
         }
-        return new ValuationSnapshot(reported, pe, pb, dividendYield, earningsYield, List.copyOf(issues),
-                List.copyOf(gaps));
+        // Earnings yield is calculated from the P/E, so an unchecked P/E leaves it unchecked too.
+        java.util.Map<String, String> unchecked = new java.util.LinkedHashMap<>();
+        for (Checked checked : List.of(pe, pb, dividendYield)) {
+            checked.uncheckedReason().ifPresent(reason -> unchecked.put(checked.multiple().metric(), reason));
+        }
+        pe.uncheckedReason().ifPresent(reason -> unchecked.put(earningsYield.metric(), "calculated from a trailing P/E "
+                + "that was not cross-checked: " + reason));
+        return new ValuationSnapshot(checkedInputs, pe.multiple(), pb.multiple(), dividendYield.multiple(),
+                earningsYield, List.copyOf(issues), List.copyOf(gaps), java.util.Map.copyOf(unchecked));
     }
 
     @FunctionalInterface
@@ -79,15 +91,28 @@ public class ValuationService {
         Optional<BigDecimal> expected(BigDecimal numerator, BigDecimal denominator);
     }
 
+    /** Which input of the check is the per-share figure; the other is the share price. */
+    private enum Side { NUMERATOR, DENOMINATOR }
+
+    /**
+     * @param multiple        the provider's multiple, DATA_CONFLICT if the check failed
+     * @param perShare        the per-share input, DATA_CONFLICT with the multiple if the check failed
+     * @param uncheckedReason why the check could not run, for an available multiple that was not checked
+     */
+    private record Checked(FinancialDataPoint multiple, FinancialDataPoint perShare, Optional<String> uncheckedReason) {
+    }
+
     /**
      * The reported figure unchanged when it agrees with {@code check} of its two inputs, or marked
-     * DATA_CONFLICT when it does not. Inputs must be VALID and in the same unit (never mixed currencies).
+     * DATA_CONFLICT - together with its per-share input - when it does not. Inputs must be VALID and in
+     * the same unit (never mixed currencies).
      */
-    private FinancialDataPoint crossChecked(FinancialDataPoint reported, String name, FinancialDataPoint numerator,
-                                            FinancialDataPoint denominator, String checkDescription,
-                                            List<DataQualityIssue> issues, Check check) {
+    private Checked crossChecked(FinancialDataPoint reported, String name, FinancialDataPoint numerator,
+                                 FinancialDataPoint denominator, Side perShareSide, String checkDescription,
+                                 List<DataQualityIssue> issues, Check check) {
+        FinancialDataPoint perShare = perShareSide == Side.NUMERATOR ? numerator : denominator;
         if (reported == null || !reported.available()) {
-            return reported;
+            return new Checked(reported, perShare, Optional.empty());
         }
         Optional<String> unusable = unusable(numerator).or(() -> unusable(denominator))
                 .or(() -> numerator.unit() == denominator.unit() ? Optional.empty()
@@ -96,24 +121,25 @@ public class ValuationService {
         Optional<BigDecimal> expected = unusable.isPresent() ? Optional.empty()
                 : check.expected(numerator.value(), denominator.value());
         if (expected.isEmpty()) {
+            String why = unusable.orElse("the check's denominator is not positive");
             issues.add(DataQualityIssue.warning("The provider's %s (%s) could not be checked against %s: %s."
-                    .formatted(name, reported.display(), checkDescription,
-                            unusable.orElse("the check's denominator is not positive")), fields(reported)));
-            return reported;
+                    .formatted(name, reported.display(), checkDescription, why), fields(reported)));
+            return new Checked(reported, perShare, Optional.of("could not be checked against " + checkDescription
+                    + ": " + why));
         }
         Optional<BigDecimal> difference = FinancialCalculator.growthPercent(expected.get(), reported.value())
                 .map(BigDecimal::abs);
         if (difference.isEmpty() || difference.get().compareTo(tolerancePercent) <= 0) {
-            return reported;
+            return new Checked(reported, perShare, Optional.empty());
         }
         // The implied figure is left out: it is not a verified data point, and a model shown it could
         // quote it as the multiple.
         String reason = ("The provider's %s (%s) is more than %s%% away from %s (%s and %s). The application does "
                 + "not choose between them and states no replacement figure.").formatted(name, reported.display(),
                 tolerancePercent.toPlainString(), checkDescription, numerator.display(), denominator.display());
-        // Only the multiple is disputed: the price and per-share figure it was checked against stay usable.
-        issues.add(DataQualityIssue.conflict(reason, fields(reported)));
-        return reported.inConflict(reason);
+        // The share price is not disputed: its currency and date are confirmed by the quote itself.
+        issues.add(DataQualityIssue.conflict(reason, fields(reported, perShare)));
+        return new Checked(reported.inConflict(reason), perShare.inConflict(reason), Optional.empty());
     }
 
     private static Optional<String> unusable(FinancialDataPoint point) {

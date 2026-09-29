@@ -31,7 +31,8 @@ import java.util.regex.Pattern;
  *       ("according to company filings" - the data comes from Yahoo Finance;
  *       advice to go and check filings is allowed), and judgements against
  *       criteria nobody supplied ("appears to meet", "in line with sector
- *       norms"). Speculation about what share-price moves reflect ("investor
+ *       norms"). When a screenStocks result supplied the criteria, saying which of them a stock
+ *       meets is allowed; a label drawn from meeting them ("a quality company", "a top pick") is not. Speculation about what share-price moves reflect ("investor
  *       sentiment", "market pressures") is removed too, unless the sentence is
  *       advice to find out. These are removed even if
  *       the words happen to occur in the evidence, e.g. a product named an
@@ -71,6 +72,14 @@ public class UnsupportedClaimFilter {
                     // a scare-quoted level ('is "high."') is still asserted
                     + "[\"'“‘]?(?:relatively |quite |very |fairly |somewhat |rather )?(?:low|high|reasonable|modest|elevated|"
                     + "demanding|rich|stretched|compelling|lofty|undemanding|generous)";
+    /** Investment labels - no criterion ever establishes one, not even a screen's. */
+    private static final String INVESTMENT_LABELS =
+            "quality (?:company|companies|stocks?|business(?:es)?|names?)|"
+                    + "(?:a|an|is|are) quality[- ]compounders?(?![- ](?:criteri|preset|screen|rule))|"
+                    + "top picks?|best (?:stocks?|picks?|investments?|bets?)|good (?:stocks?|investments?|buys?|picks?)|"
+                    // "which SUNPHARMA exemplifies": a stock standing for what the criteria describe
+                    + "exemplif\\w*|epitomi[sz]\\w*|embod(?:y|ies|ied|ying)|"
+                    + "value (?:picks?|buys?)";
     /** Benchmark comparisons - no benchmarks are supplied. */
     private static final String BENCHMARK_COMPARISONS =
             "(?:industry|sector|peer|market) (?:benchmarks?|averages?|norms?|standards?|medians?)|"
@@ -93,6 +102,9 @@ public class UnsupportedClaimFilter {
                     // evaluative labels - the data supplies no criteria for any of them
                     + "financially (?:healthy|sound|strong|stable|robust)|"
                     + "steadily|steady (?:growth|performance|profitability)|resilien\\w*|remained stable|"
+                    // one fiscal year's payout ratio, or a CAGR between two years, shows no consistency
+                    + "consistent(?:ly)? (?:dividend payouts?|dividends?|payouts?|growth|profitability|performance|"
+                    + "returns|earnings|profits?)|"
                     + "(?:stable|sound|prudent|healthy|comfortable|balanced|reasonable) (?:capital structure|balance sheet|"
                     + "financial position)|"
                     + "strong(?:er|est|ly)?|weak(?:er|est|ness)?|(?:un)?healthy|poor(?:er|ly)?|excellent|attractive|"
@@ -109,7 +121,8 @@ public class UnsupportedClaimFilter {
                     // readings of what a figure says about the future - nothing in the data measures them
                     + "growth (?:potential|prospects|opportunit(?:y|ies))|balance between growth|"
                     + "(?:investor|market) expectations|priced in|"
-                    + VALUATION_JUDGEMENTS + "|" + VALUATION_LEVEL + "|" + BENCHMARK_COMPARISONS + ")\\b",
+                    + VALUATION_JUDGEMENTS + "|" + VALUATION_LEVEL + "|" + INVESTMENT_LABELS + "|"
+                    + BENCHMARK_COMPARISONS + ")\\b",
             Pattern.CASE_INSENSITIVE);
 
     /**
@@ -118,7 +131,35 @@ public class UnsupportedClaimFilter {
      * it is phrased.
      */
     private static final Pattern MENTIONABLE = Pattern.compile(
-            "(?:" + VALUATION_JUDGEMENTS + "|" + BENCHMARK_COMPARISONS + ")", Pattern.CASE_INSENSITIVE);
+            "(?:" + VALUATION_JUDGEMENTS + "|" + INVESTMENT_LABELS + "|" + BENCHMARK_COMPARISONS + ")",
+            Pattern.CASE_INSENSITIVE);
+    /**
+     * "meets / does not meet the supplied criterion": allowed only when a screenStocks result supplied the
+     * criteria. "Appears to meet" stays a hedge on criteria nobody applied, and "meets industry norms" names
+     * no criterion at all.
+     */
+    private static final Pattern SUPPLIED_CRITERIA = Pattern.compile(
+            "(?<!(?:appears?|seems?|looks?|likely) to )\\b(?:meets?|met|meeting|(?:does|do|did) not meet|doesn't meet|"
+                    + "fails? to meet|failed to meet|satisf(?:y|ies|ied)|pass(?:es|ed)?)\\s+(?:(?:the|its|these|those|"
+                    + "all|both|every|each|most|none of the|any of the|\\w+ of (?:the |its )?)\\s+)?(?:[\\w/.%≥≤-]+\\s+){0,4}?"
+                    + "(?:criteri(?:on|a)|rules?|thresholds?)\\b",
+            Pattern.CASE_INSENSITIVE);
+    /**
+     * Calling a criterion that could not be assessed "failed": "failed the profit CAGR criterion
+     * (DATA_CONFLICT)", "failed due to UNAVAILABLE data", "DATA_CONFLICT caused failures". A screen's
+     * INSUFFICIENT_DATA is neither met nor failed. "X did not meet A, and B is INSUFFICIENT_DATA" is not matched.
+     */
+    private static final String FAILED = "\\b(?:fail(?:s|ed|ing|ures?)?|(?:does|do|did) not meet|not met)\\b";
+    private static final String UNASSESSED = "(?:INSUFFICIENT_DATA|insufficient data|DATA_CONFLICT|conflicting data|"
+            + "UNAVAILABLE|INVALID|missing data|incomplete data|could not be assessed|not assessed|cannot be assessed)";
+    private static final Pattern FAILED_FOR_WANT_OF_DATA = Pattern.compile(
+            FAILED + "(?![- ]verif)[^.;]{0,100}?\\([^)]*" + UNASSESSED
+                    + "|" + FAILED + "(?![- ]verif)[^.;]{0,60}?\\b(?:due to|because of|owing to|as a result of|from)\\b"
+                    + "[^.;]{0,60}?" + UNASSESSED
+                    + "|" + UNASSESSED + "[^.;]{0,60}?\\b(?:caused|led to|resulted in)\\b[^.;]{0,30}?\\bfail",
+            Pattern.CASE_INSENSITIVE);
+    /** Marks evidence that came from the screening tool. */
+    private static final String SCREENING_EVIDENCE = "tool result: screenstocks";
     /**
      * Level claims ("the P/E is high") assert themselves, so they count as mentioned only as the open
      * question of a "whether"/"if" clause: "no judgement on whether the P/E is high, low or fair".
@@ -297,6 +338,14 @@ public class UnsupportedClaimFilter {
     }
 
     private boolean unsupported(String sentence, String evidence) {
+        if (evidence.contains(SCREENING_EVIDENCE)) {
+            // The criteria were supplied: saying which ones a stock meets is reporting the screen. What is
+            // left of the sentence is still checked.
+            if (FAILED_FOR_WANT_OF_DATA.matcher(sentence).find()) {
+                return true;
+            }
+            sentence = SUPPLIED_CRITERIA.matcher(sentence).replaceAll("criteria-result");
+        }
         if ((NEVER_SUPPORTED.matcher(sentence).find() && !declinesToJudge(sentence))
                 || CAUSAL.matcher(sentence).find()) {
             return true;

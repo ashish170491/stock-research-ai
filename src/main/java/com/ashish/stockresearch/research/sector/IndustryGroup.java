@@ -20,9 +20,10 @@ public enum IndustryGroup {
 
     BANK(List.of("net profit growth", "return on assets", "return on equity"),
             Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple",
-                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple"),
+                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple",
+                    "dividendsToOcfPercent"),
             List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity", "ROCE",
-                    "operating cash flow to net profit"),
+                    "operating cash flow to net profit", "dividends paid to operating cash flow"),
             List.of("net interest margin", "gross and net NPA", "CASA ratio", "capital adequacy ratio",
                     "credit cost", "loan and deposit growth"),
             "Deposits and borrowings are a bank's raw material, so debt, capital-employed and cash-flow measures "
@@ -30,20 +31,37 @@ public enum IndustryGroup {
 
     NBFC(List.of("net profit growth", "return on assets", "return on equity"),
             Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "returnOnCapitalEmployedPercent",
-                    "ocfToPat3yMultiple", "ocfToPat5yMultiple"),
-            List.of("EBITDA", "free cash flow", "operating margin", "ROCE", "operating cash flow to net profit"),
+                    "ocfToPat3yMultiple", "ocfToPat5yMultiple", "dividendsToOcfPercent"),
+            List.of("EBITDA", "free cash flow", "operating margin", "ROCE", "operating cash flow to net profit",
+                    "dividends paid to operating cash flow"),
             List.of("net interest margin", "gross and net stage-3 assets", "AUM growth", "cost of funds",
                     "capital adequacy ratio"),
             "Borrowing funds its lending book, so debt levels need asset-quality and funding-cost context."),
 
     INSURANCE(List.of("net profit growth", "return on equity"),
             Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple",
-                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple"),
+                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple",
+                    "dividendsToOcfPercent"),
             List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity", "ROCE",
-                    "operating cash flow to net profit"),
+                    "operating cash flow to net profit", "dividends paid to operating cash flow"),
             List.of("solvency ratio", "value of new business margin", "embedded value", "persistency",
                     "combined ratio"),
             "Insurer revenue and profit follow premium and reserving cycles that generic margins do not capture."),
+
+    /**
+     * Financial companies that are not a bank, NBFC or insurer: holding companies, asset managers,
+     * exchanges and brokers. Their consolidated statements mix lending, insurance and fee businesses,
+     * so industrial measures of leverage, margins and cash flow do not describe them.
+     */
+    FINANCIAL_OTHER(List.of("net profit growth", "return on equity"),
+            Set.of("ebitda", "freeCashFlow", "operatingMarginPercent", "debtToEquityPercent", "debtToEquityMultiple",
+                    "returnOnCapitalEmployedPercent", "ocfToPat3yMultiple", "ocfToPat5yMultiple",
+                    "dividendsToOcfPercent"),
+            List.of("EBITDA", "free cash flow", "operating margin", "conventional debt-to-equity", "ROCE",
+                    "operating cash flow to net profit", "dividends paid to operating cash flow"),
+            List.of("earnings by subsidiary or segment", "assets under management", "capital adequacy of lending "
+                    + "subsidiaries", "solvency of insurance subsidiaries"),
+            "Consolidated figures combine lending, insurance and fee businesses, so they need a segment view."),
 
     IT_SERVICES(List.of("revenue growth", "EBIT / operating margin", "net profit (PAT) growth", "return on equity",
                     "ROCE", "free cash flow", "cash conversion"),

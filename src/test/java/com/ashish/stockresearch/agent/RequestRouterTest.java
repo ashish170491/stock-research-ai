@@ -332,4 +332,38 @@ class RequestRouterTest {
         assertThat(router(model).route("price of TCS").intent()).isEqualTo(Intent.QUOTE);
         assertThat(model.prompts).isEmpty();
     }
+
+    // --- Screening: many stocks, no single company ------------------------------------------
+
+    @ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "Which Nifty 50 stocks meet the quality-compounder criteria?",
+            "Screen the Nifty 50 for dividend stocks",
+            "Find stocks with reasonable value",
+            "Which banks' stocks pass the quality compounder screen?",
+            "List companies that meet the dividend preset"})
+    void sendsAScreeningRequestToTheToolLoopWithoutAskingTheModel(String message) {
+        StubModel model = new StubModel("{\"intent\":\"FULL_RESEARCH\",\"companies\":[\"RELIANCE\"]}");
+
+        RoutedRequest routed = router(model).route(message);
+
+        assertThat(routed).isEqualTo(RoutedRequest.specificQuestion());
+        assertThat(model.prompts).isEmpty();
+    }
+
+    @Test
+    void neverAsksWhichCompanyAScreenMeans() {
+        String message = "Which stocks have their ROE above the quality-compounder threshold?";
+
+        assertThat(RequestRouter.needsACompany(message, RoutedRequest.specificQuestion(), null)).isFalse();
+        // a follow-up naming no company is still asked about
+        assertThat(RequestRouter.needsACompany("and its debt?", RoutedRequest.specificQuestion(), null)).isTrue();
+    }
+
+    @Test
+    void stillRoutesAQuestionAboutOneCompanysSharesAsBefore() {
+        StubModel model = new StubModel("not used");
+
+        assertThat(router(model).route("Infosys stock price")).isEqualTo(new RoutedRequest(Intent.QUOTE, List.of("INFY")));
+    }
 }

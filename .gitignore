@@ -35,5 +35,8 @@ build/
 ### Application logs ###
 logs/
 
+### Screening snapshot database ###
+data/
+
 ### Local review bundle ###
 REVIEW_BUNDLE.md

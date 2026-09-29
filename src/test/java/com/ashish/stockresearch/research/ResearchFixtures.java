@@ -63,7 +63,8 @@ public final class ResearchFixtures {
                 currentLiabilities == null ? missing("currentLiabilities", ts + "annualCurrentLiabilities", closing)
                         : crore("currentLiabilities", ts + "annualCurrentLiabilities", currentLiabilities, closing),
                 operatingCashFlow == null ? missing("operatingCashFlow", ts + "annualOperatingCashFlow", period)
-                        : crore("operatingCashFlow", ts + "annualOperatingCashFlow", operatingCashFlow, period));
+                        : crore("operatingCashFlow", ts + "annualOperatingCashFlow", operatingCashFlow, period),
+                year.cashDividendsPaid());
     }
 
     public static AnnualFinancials year(int endYear, String revenue, String netProfit, String equity, String assets) {
@@ -86,7 +87,8 @@ public final class ResearchFixtures {
                         : crore("totalDebt", ts + "annualTotalDebt", debt, closing),
                 missing("ebit", ts + "annualEBIT", period),
                 missing("currentLiabilities", ts + "annualCurrentLiabilities", closing),
-                missing("operatingCashFlow", ts + "annualOperatingCashFlow", period));
+                missing("operatingCashFlow", ts + "annualOperatingCashFlow", period),
+                missing("cashDividendsPaid", ts + "annualCashDividendsPaid", period));
     }
 
     public static List<AnnualFinancials> hdfcAnnual() {

@@ -69,6 +69,15 @@ public class RequestRouter {
     private static final Pattern VALUATION = Pattern.compile(
             "\\bp\\s*/\\s*[eb]\\b|\\bpe\\b|\\bprice[- ]to[- ]|\\bvaluation|\\b(?:earnings|dividend) yield|\\bmultiples?\\b",
             Pattern.CASE_INSENSITIVE);
+    /**
+     * A request to screen many stocks against criteria - "which Nifty 50 stocks meet...", "screen for
+     * dividend stocks". It names no single company, so it goes to the tool loop, which has screenStocks.
+     */
+    static final Pattern SCREEN = Pattern.compile(
+            "\\bscreen(?:s|ed|ing|er)?\\b|\\bquality[- ]compounders?\\b|\\breasonable[- ]value\\b|\\bnifty\\s*50\\b"
+                    + "|\\b(?:which|find|list|show)\\s+(?:me\\s+)?(?:\\S+\\s+){0,3}?(?:stocks|companies)\\b"
+                    + "|\\b(?:stocks|companies)\\s+(?:that|which)\\s+(?:meet|pass|satisfy|clear)\\b",
+            Pattern.CASE_INSENSITIVE);
     /** Words around a company name in these requests, removed to leave the name itself. */
     private static final Set<String> FILLER = Set.of(
             "give", "me", "a", "an", "the", "of", "on", "for", "please", "can", "you", "provide", "do", "show",
@@ -115,7 +124,9 @@ public class RequestRouter {
     public static boolean needsACompany(String message, RoutedRequest routed, ResearchSession session) {
         return routed.intent() == Intent.SPECIFIC_QUESTION && routed.companies().isEmpty()
                 && (session == null || session.companies().isEmpty())
-                && message != null && ABOUT_AN_UNNAMED_COMPANY.matcher(message).find();
+                && message != null && ABOUT_AN_UNNAMED_COMPANY.matcher(message).find()
+                // "which stocks have their ROE above..." is a screen, not a question about one company
+                && !SCREEN.matcher(message).find();
     }
 
     public RoutedRequest route(String message) {
@@ -135,6 +146,9 @@ public class RequestRouter {
     Optional<RoutedRequest> byKeywords(String message) {
         if (message == null || message.isBlank()) {
             return Optional.empty();
+        }
+        if (SCREEN.matcher(message).find()) {
+            return Optional.of(RoutedRequest.specificQuestion());
         }
         Matcher compare = COMPARE.matcher(message);
         if (compare.matches()) {

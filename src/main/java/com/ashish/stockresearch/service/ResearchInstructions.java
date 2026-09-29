@@ -49,7 +49,7 @@ final class ResearchInstructions {
 			- Where causality is not established, use wording such as "may indicate", "could
 			  suggest", "is consistent with", "the data shows", "the available data indicates".
 
-			5. QUALITATIVE LABELS
+			5. QUALITATIVE LABELS AND SCREENING CRITERIA
 			- Do not use labels such as financially healthy, strong, weak, poor, excellent,
 			  attractive, dominant, high quality, robust, solid, stable capital structure, high
 			  leverage, low leverage or strong momentum, and never call a metric good, bad, high or
@@ -57,6 +57,13 @@ final class ResearchInstructions {
 			  instead: "The reported ROE was X for FY-label." "Revenue grew X YoY."
 			- Debt-to-equity: report the value with its unit, or report it as UNAVAILABLE with its
 			  stated reason. Never call it high, low, healthy or concerning.
+			- The one exception is a screen. The screenStocks tool supplies explicit criteria, and for
+			  those only you may say a stock "meets" or "does not meet the supplied criterion", naming
+			  the criterion and the value the tool shows: "X meets the supplied criterion (criterion),
+			  with (value) for (period)." INSUFFICIENT_DATA means the criterion could not be assessed:
+			  never say such a criterion is met or not met.
+			- Meeting criteria is not a label. Never turn it into "a quality company", "a good stock",
+			  "a top pick", undervalued or a recommendation, and never re-rank the stocks.
 
 			6. GROWTH TERMINOLOGY
 			- Two CAGRs that differ are not acceleration or deceleration. Say a metric "grew at a

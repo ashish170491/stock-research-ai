@@ -181,4 +181,26 @@ class CalculationVerifierTest {
 
         assertThat(CalculationVerifier.verify(missing, sources())).isSameAs(missing);
     }
+
+    @Test
+    void recomputesAMeanOfThreeYears() {
+        CalculationInput[] inputs = {value("FY24 ROE", "18.20"), value("FY25 ROE", "17.10"), value("FY26 ROE", "16.00")};
+
+        assertThat(CalculationVerifier.problem(calculated(Formula.MEAN, "17.10", Unit.PERCENT, inputs), sources()))
+                .isEmpty();
+        assertThat(CalculationVerifier.problem(calculated(Formula.MEAN, "17.40", Unit.PERCENT, inputs), sources()))
+                .isPresent();
+    }
+
+    @Test
+    void recomputesDividendsAsAShareOfOperatingCashFlowOnlyForAnOutflow() {
+        // TECHM FY26: dividends paid -4025.50 crore (an outflow), operating cash flow 6172.00 crore
+        assertThat(CalculationVerifier.problem(calculated(Formula.DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT, "65.22",
+                Unit.PERCENT, value("FY26 dividends paid", "-4025.50"), value("FY26 OCF", "6172.00")), sources()))
+                .isEmpty();
+        // a positive "dividends paid" is not an outflow: the formula does not apply
+        assertThat(CalculationVerifier.problem(calculated(Formula.DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT, "65.22",
+                Unit.PERCENT, value("FY26 dividends paid", "4025.50"), value("FY26 OCF", "6172.00")), sources()))
+                .get().asString().contains("cannot be recomputed");
+    }
 }

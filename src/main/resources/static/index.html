@@ -13,6 +13,8 @@
     --accent: #2458d6; --accent-soft: #e8eefc; --user: #2458d6; --user-text: #ffffff;
     --warn-bg: #fff6e0; --warn-line: #e8b93a; --warn-text: #6b4e00;
     --err-bg: #fdecec; --err-text: #9b1c1c; --code: #f1f3f6; --on-accent: #ffffff;
+    --pass-bg: #e6f4ea; --pass-text: #146c2e; --fail-bg: #fdecec; --fail-text: #a3261f;
+    --na-bg: #fff4d6; --na-text: #7a5600; --skip-bg: #eef0f3; --skip-text: #5d6673;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -20,6 +22,8 @@
       --accent: #7aa2ff; --accent-soft: #1f2a44; --user: #3b63d6; --user-text: #ffffff;
       --warn-bg: #2e2612; --warn-line: #a07c1c; --warn-text: #f0d68a;
       --err-bg: #3a1a1a; --err-text: #f4b4b4; --code: #232830; --on-accent: #0b1430;
+      --pass-bg: #16301f; --pass-text: #8fd9a8; --fail-bg: #3a1a1a; --fail-text: #f4a9a3;
+      --na-bg: #33290f; --na-text: #f0d68a; --skip-bg: #232830; --skip-text: #9aa3af;
     }
   }
   * { box-sizing: border-box; }
@@ -90,6 +94,91 @@
   button.primary:disabled { opacity: .5; cursor: default; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   .report-bar { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  /* --- screener --- */
+  .column.wide { max-width: 1280px; }
+  .intro h2 { margin: 0 0 4px; font-size: 20px; }
+  .intro p { margin: 0; color: var(--muted); max-width: 760px; }
+  .freshness { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; padding: 10px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+  .freshness .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--pass-text); flex: none; }
+  .freshness .dot.busy { background: var(--na-text); animation: pulse 1.2s infinite; }
+  .freshness .dot.none { background: var(--fail-text); }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .freshness .grow { flex: 1; min-width: 200px; }
+  .freshness small { color: var(--muted); display: block; }
+  h3.step { font-size: 15px; margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; }
+  h3.step span { background: var(--accent); color: var(--on-accent); width: 22px; height: 22px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  .presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .preset { text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 12px;
+    padding: 12px 14px; cursor: pointer; font: inherit; display: flex; flex-direction: column; gap: 4px; }
+  .preset:hover { border-color: var(--accent); }
+  .preset[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .preset strong { font-size: 15px; }
+  .preset .desc { color: var(--muted); font-size: 13px; }
+  .preset .count { color: var(--accent); font-size: 12px; font-weight: 600; }
+  details.criteria { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
+  details.criteria summary { cursor: pointer; font-weight: 600; }
+  details.criteria h4 { margin: 10px 0 4px; font-size: 13px; }
+  details.criteria ul { margin: 0; padding-left: 18px; }
+  details.criteria li { margin: 2px 0; }
+  details.criteria .muted, .muted { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .controls button.primary { padding: 9px 18px; }
+  .disclaimer { margin: 18px 0 12px; font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 4px 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .card { border-radius: 12px; padding: 12px 14px; }
+  .card .big { font-size: 26px; font-weight: 700; line-height: 1.1; }
+  .card .label { font-weight: 600; margin-bottom: 4px; }
+  .card p { margin: 4px 0 0; font-size: 13px; }
+  .card.pass { background: var(--pass-bg); color: var(--pass-text); }
+  .card.na { background: var(--na-bg); color: var(--na-text); }
+  .card.skip { background: var(--skip-bg); color: var(--skip-text); }
+  .card .names { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .card .names button { border: 0; border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 12px; font-weight: 600;
+    background: var(--panel); color: var(--pass-text); cursor: pointer; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 6px 0 10px; align-items: center; }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .toolbar input[type=text] { flex: 0 1 280px; }
+  .toolbar label { font-size: 14px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .section-title { font-size: 16px; margin: 22px 0 4px; }
+  .section-sub { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  /* full width; the company column never collapses, and the table scrolls sideways inside its frame
+     only when its columns cannot fit */
+  table.screen { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.screen th.crit { min-width: 92px; }
+  table.screen td.company { min-width: 180px; max-width: 240px; }
+  table.screen td.num { white-space: nowrap; }
+  table.screen th, table.screen td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.screen th { background: var(--code); font-weight: 600; position: sticky; top: 0; }
+  table.screen th small { display: block; font-weight: 400; color: var(--muted); }
+  table.screen tr.stock { cursor: pointer; }
+  table.screen tr.stock:hover td { background: var(--accent-soft); }
+  table.screen tr.stock.flash td { background: var(--accent-soft); }
+  table.screen tr.meets-all td:first-child { box-shadow: inset 3px 0 0 var(--pass-text); }
+  .company strong { display: block; }
+  .company span { color: var(--muted); font-size: 12px; }
+  .grp { display: inline-block; margin-top: 2px; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--code); color: var(--muted); white-space: nowrap; }
+  .met { white-space: nowrap; font-weight: 600; }
+  .bar { height: 5px; background: var(--code); border-radius: 3px; margin-top: 4px; width: 60px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--pass-text); }
+  .cell { display: inline-block; padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+  .cell b { margin-right: 4px; }
+  .cell b { font-size: 12px; }
+  .cell.PASS { background: var(--pass-bg); color: var(--pass-text); }
+  .cell.FAIL { background: var(--fail-bg); color: var(--fail-text); }
+  .cell.INSUFFICIENT_DATA { background: var(--na-bg); color: var(--na-text); }
+  /* a period that differs from the column's, on its own line so it can wrap */
+  .cell small { display: block; opacity: .8; white-space: normal; max-width: 160px; }
+  tr.detail td { background: var(--bg); }
+  tr.detail ul { margin: 4px 0; padding-left: 18px; }
+  tr.detail li { margin: 4px 0; }
+  tr.detail .src { color: var(--muted); font-size: 12px; }
+  details.more { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
+  details.more summary { cursor: pointer; font-weight: 600; }
+  .notice { padding: 14px; border-radius: 10px; background: var(--na-bg); color: var(--na-text); margin-top: 16px; }
   @media (max-width: 600px) { .user .bubble { max-width: 92%; } header { gap: 8px; } }
 </style>
 </head>
@@ -99,6 +188,7 @@
   <div class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-view="chat">Chat</button>
     <button role="tab" aria-selected="false" data-view="report">Report</button>
+    <button role="tab" aria-selected="false" data-view="screen">Screener</button>
   </div>
   <div class="spacer"></div>
   <span class="conv">Conversation <code id="conv-id"></code></span>
@@ -133,13 +223,37 @@
       <div class="empty"><h2>Full research report</h2>Facts, observations, data gaps and sources built in Java, plus a verified interpretation.</div>
     </div></div>
   </section>
+
+  <section class="view" id="view-screen">
+    <div class="scroll"><div class="column wide">
+      <div class="intro">
+        <h2>Stock screener</h2>
+        <p>See which Nifty 50 companies meet a set of financial criteria. The application checks every criterion itself and
+          shows the figure each result was decided on. Results come from the latest data snapshot, not live prices.</p>
+      </div>
+      <div class="freshness" id="snap-bar"><span class="dot busy"></span><span class="grow">Checking the data snapshot…</span></div>
+
+      <h3 class="step"><span>1</span>Choose a screen</h3>
+      <div class="presets" id="presets"></div>
+      <details class="criteria" id="criteria"><summary>What this screen checks</summary><div id="criteria-body"></div></details>
+
+      <h3 class="step"><span>2</span>Narrow it down <span style="background:none;color:var(--muted);width:auto;font-weight:400">(optional)</span></h3>
+      <div class="controls">
+        <select id="group" aria-label="Type of company"></select>
+        <button class="primary" id="run-screen" type="button">Show results</button>
+        <button class="secondary" id="ask-chat" type="button" title="Opens the chat with this question filled in">Ask the assistant about this screen</button>
+      </div>
+
+      <div id="screen-out"></div>
+    </div></div>
+  </section>
 </main>
 
 <script>
 (() => {
   const STORE_KEY = 'stock-research-chat';
   const SUGGESTIONS = ['Research Infosys', 'How has it performed over 5 years?', 'And its debt?',
-                       'Price of TCS', 'Compare it with Wipro'];
+                       'Price of TCS', 'Compare it with Wipro', 'Which Nifty 50 stocks meet the dividend criteria?'];
   const $ = id => document.getElementById(id);
   const messagesEl = $('messages'), scrollEl = $('chat-scroll'), input = $('chat-input'), sendBtn = $('send');
 
@@ -263,6 +377,9 @@
   document.querySelectorAll('.tabs button').forEach(tab => tab.addEventListener('click', () => {
     document.querySelectorAll('.tabs button').forEach(t => t.setAttribute('aria-selected', String(t === tab)));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab.dataset.view));
+    // the conversation controls belong to the chat
+    document.querySelectorAll('.conv, #new-conv').forEach(e => e.hidden = tab.dataset.view !== 'chat');
+    if (tab.dataset.view === 'screen') loadScreener().then(() => { if (!$('screen-out').hasChildNodes()) runScreen(); });
   }));
 
   // --- report view ---
@@ -289,6 +406,313 @@
       e2.firstChild.textContent = 'Request failed: ' + err.message;
       out.append(e2);
     } finally { clearInterval(timer); }
+  });
+
+  // --- screener view ---
+  const GROUP_LABELS = {
+    BANK: 'Banks', NBFC: 'NBFCs (non-bank lenders)', INSURANCE: 'Insurers', FINANCIAL_OTHER: 'Other financial companies',
+    IT_SERVICES: 'IT services', PHARMA: 'Pharma', MANUFACTURING: 'Manufacturing and industrials',
+    CONSUMER: 'Consumer', OTHER: 'Other industries', UNKNOWN: 'Unclassified'
+  };
+  const SECTION_LABELS = { BANK: 'Banks', NBFC: 'NBFCs (non-bank lenders)', INSURANCE: 'Insurers',
+    FINANCIAL_OTHER: 'Other financial companies' };
+  const OUTCOME = { PASS: ['✓', 'Meets'], FAIL: ['✗', 'Does not meet'], INSUFFICIENT_DATA: ['?', 'Cannot assess'] };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const titleCase = name => name.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+  const groupLabel = g => GROUP_LABELS[g] || g;
+
+  let options = null, preset = null, snapshotTimer = null;
+
+  async function loadScreener() {
+    if (options) return;
+    try {
+      const res = await fetch('/api/screening/options');
+      options = await res.json();
+    } catch (err) {
+      $('screen-out').replaceChildren(el('div', 'notice', 'Could not load the screener: ' + err.message));
+      return;
+    }
+    const groupSelect = $('group');
+    groupSelect.replaceChildren(el('option', null, 'All types of company'));
+    groupSelect.firstChild.value = '';
+    options.industryGroups.forEach(g => { const o = el('option', null, groupLabel(g.value)); o.value = g.value; groupSelect.append(o); });
+    const presetsEl = $('presets');
+    options.presets.forEach(p => {
+      const b = el('button', 'preset');
+      b.type = 'button';
+      b.append(el('strong', null, titleCase(p.name)), el('span', 'desc', p.description || ''),
+        el('span', 'count', p.ruleSets.map(r => r.criteria.length).reduce((a, n) => Math.max(a, n), 0) + ' criteria, set separately for each type of company'));
+      b.addEventListener('click', () => { choosePreset(p); runScreen(); });
+      p.button = b;
+      presetsEl.append(b);
+    });
+    choosePreset(options.presets[0]);
+    refreshSnapshot();
+  }
+
+  function choosePreset(p) {
+    preset = p;
+    options.presets.forEach(o => o.button.setAttribute('aria-pressed', String(o === p)));
+    const body = $('criteria-body');
+    body.replaceChildren();
+    p.ruleSets.forEach(set => {
+      const title = set.title === 'Non-financial companies' ? 'Non-financial companies' : (SECTION_LABELS[set.title] || set.title);
+      body.append(el('h4', null, title + (set.title === 'Non-financial companies'
+        ? ' (' + set.groups.map(groupLabel).join(', ') + ')' : '')));
+      const ul = el('ul');
+      set.criteria.forEach(c => { const li = el('li'); li.append(el('strong', null, c.label), document.createTextNode(' — ' + c.description)); ul.append(li); });
+      body.append(ul);
+    });
+    if (p.notScreened.length) {
+      body.append(el('p', 'muted', 'Not screened by this preset: ' + p.notScreened.map(groupLabel).join(', ')
+        + '. Their accounts need measures this data does not have, so no criteria are applied to them.'));
+    }
+    body.append(el('p', 'muted', 'Ties are broken by ' + p.tieBreak + '. These criteria are common rules of thumb set in the '
+      + 'application\'s configuration, not benchmarks or advice.'));
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit' }) + ' IST';
+  }
+
+  async function refreshSnapshot() {
+    const bar = $('snap-bar');
+    let body = null;
+    try {
+      const res = await fetch('/api/admin/snapshot');
+      if (res.ok) body = await res.json();
+    } catch { /* shown below */ }
+    bar.replaceChildren();
+    const dot = el('span', 'dot');
+    const text = el('span', 'grow');
+    const button = el('button', 'secondary', 'Refresh data now');
+    button.type = 'button';
+    button.addEventListener('click', startSnapshot);
+    if (!body) {
+      dot.classList.add('none');
+      text.append(el('strong', null, 'No data snapshot yet.'),
+        el('small', null, 'Take one to start screening. It collects data for all 50 companies and takes about 3 minutes.'));
+      button.textContent = 'Take the first snapshot';
+    } else if (body.running) {
+      dot.classList.add('busy');
+      text.append(el('strong', null, 'Refreshing data…'),
+        el('small', null, 'Collecting figures for ' + body.run.requested + ' companies. This takes about 3 minutes; results update when it finishes.'));
+      button.disabled = true;
+      button.textContent = 'Refreshing…';
+      clearTimeout(snapshotTimer);
+      snapshotTimer = setTimeout(async () => { await refreshSnapshot(); }, 5000);
+      bar.dataset.running = 'true';
+    } else {
+      if (body.run.status !== 'COMPLETED') dot.classList.add('none');
+      const failed = body.failures.length ? ', ' + body.failures.length + ' could not be collected' : '';
+      text.append(el('strong', null, 'Data as of ' + formatTime(body.run.finishedAt)),
+        el('small', null, body.run.stored + ' of ' + body.run.requested + ' companies collected' + failed
+          + ' · refreshed automatically on weekdays at 6:30 pm IST, after the market closes'));
+      if (bar.dataset.running === 'true') { bar.dataset.running = ''; runScreen(); }
+    }
+    bar.append(dot, text, button);
+  }
+
+  async function startSnapshot() {
+    try {
+      const res = await fetch('/api/admin/snapshot', { method: 'POST' });
+      if (!res.ok && res.status !== 409) throw new Error('HTTP ' + res.status);
+    } catch (err) {
+      alert('Could not start the refresh: ' + err.message);
+    }
+    refreshSnapshot();
+  }
+
+  async function runScreen() {
+    if (!preset) return;
+    const out = $('screen-out');
+    out.replaceChildren(el('p', 'pending', 'Screening…'));
+    const params = new URLSearchParams({ preset: preset.name });
+    if ($('group').value) params.set('industryGroup', $('group').value);
+    let view;
+    try {
+      const res = await fetch('/api/screening/data?' + params);
+      view = await res.json();
+      if (!res.ok && !view.status) throw new Error('HTTP ' + res.status);
+    } catch (err) {
+      out.replaceChildren(el('div', 'notice', 'Could not run the screen: ' + err.message));
+      return;
+    }
+    if (view.status !== 'OK') {
+      out.replaceChildren(el('div', 'notice', view.message));
+      return;
+    }
+    renderResults(view);
+  }
+
+  function renderResults(view) {
+    const out = $('screen-out');
+    out.replaceChildren();
+    out.append(el('p', 'disclaimer', view.disclaimer));
+
+    const s = view.summary;
+    const cards = el('div', 'cards');
+    const pass = el('div', 'card pass');
+    pass.append(el('div', 'big', s.meetEveryCriterion.length + ' of ' + s.screened),
+      el('div', 'label', 'meet every criterion that applies to them'));
+    const names = el('div', 'names');
+    s.meetEveryCriterion.forEach(st => {
+      const b = el('button', null, st.symbol);
+      b.type = 'button'; b.title = st.company + ' — show in the table';
+      b.addEventListener('click', () => jumpTo(st.symbol));
+      names.append(b);
+    });
+    if (!s.meetEveryCriterion.length) names.append(el('span', null, 'None this time.'));
+    pass.append(names);
+    const na = el('div', 'card na');
+    na.append(el('div', 'big', String(s.withUnassessedCriteria)), el('div', 'label', 'have a criterion that could not be assessed'),
+      el('p', null, 'Usually because Yahoo Finance\'s two data feeds disagree about a figure. The application never picks a side, '
+        + 'so that criterion counts as neither met nor failed.'));
+    const skip = el('div', 'card skip');
+    skip.append(el('div', 'big', String(s.notScreened)), el('div', 'label', 'not screened'),
+      el('p', null, 'Companies this preset has no criteria for, such as insurers. Listed at the bottom.'));
+    cards.append(pass, na, skip);
+    out.append(cards);
+
+    const legend = el('div', 'legend');
+    Object.entries(OUTCOME).forEach(([k, [icon, label]]) => {
+      const c = el('span', 'cell ' + k); c.append(el('b', null, icon), document.createTextNode(label)); legend.append(c);
+    });
+    legend.append(document.createTextNode('Click a company for its figures, sources and reasons.'));
+    out.append(legend);
+
+    const toolbar = el('div', 'toolbar');
+    const search = el('input'); search.type = 'text'; search.placeholder = 'Find a company or symbol…';
+    const onlyAll = el('input'); onlyAll.type = 'checkbox';
+    const onlyLabel = el('label'); onlyLabel.append(onlyAll, document.createTextNode('Only companies meeting every criterion'));
+    toolbar.append(search, onlyLabel);
+    out.append(toolbar);
+
+    const rows = [];
+    view.sections.forEach(section => {
+      const title = SECTION_LABELS[section.title] || section.title;
+      out.append(el('h3', 'section-title', title + ' · ' + section.rows.length + ' companies'));
+      out.append(el('p', 'section-sub', 'Criteria: ' + section.criteria.map(c => c.description).join('; ') + '.'));
+      const wrap = el('div', 'table-wrap');
+      const table = el('table', 'screen');
+      const head = el('tr');
+      ['Rank', 'Company', 'Criteria met'].forEach(h => head.append(el('th', null, h)));
+      section.criteria.forEach(c => { const th = el('th', 'crit', c.label); if (c.period) th.append(el('small', null, c.period)); th.title = c.description; head.append(th); });
+      head.append(el('th', null, 'Tie-break'));
+      const thead = el('thead'); thead.append(head); table.append(thead);
+      const tbody = el('tbody');
+      section.rows.forEach(r => {
+        const tr = el('tr', 'stock' + (r.meetsAll ? ' meets-all' : ''));
+        tr.id = 'row-' + r.symbol;
+        tr.append(el('td', null, String(r.rank)));
+        const co = el('td', 'company');
+        co.append(el('strong', null, r.symbol), el('span', null, r.company), el('div', 'grp', groupLabel(r.group)));
+        tr.append(co);
+        const met = el('td');
+        met.append(el('div', 'met', r.met + ' of ' + r.total));
+        const bar = el('div', 'bar'); const fill = el('i'); fill.style.width = (100 * r.met / r.total) + '%'; bar.append(fill); met.append(bar);
+        tr.append(met);
+        r.cells.forEach(c => {
+          const td = el('td');
+          const span = el('span', 'cell ' + c.outcome);
+          span.append(el('b', null, OUTCOME[c.outcome][0]));
+          span.append(document.createTextNode(c.outcome === 'INSUFFICIENT_DATA' ? (c.status === 'DATA_CONFLICT' ? 'Data conflict'
+            : c.status === 'UNAVAILABLE' ? 'Not available' : c.status === 'INVALID' ? 'Failed a check' : 'Not cross-checked') : c.display));
+          if (c.period) span.append(el('small', null, c.period));
+          span.title = OUTCOME[c.outcome][1] + ': ' + c.criterion + (c.reason ? '\n' + c.reason : '');
+          td.append(span);
+          tr.append(td);
+        });
+        tr.append(el('td', 'num', r.tieBreak));
+        const detail = el('tr', 'detail');
+        detail.hidden = true;
+        const dtd = el('td'); dtd.colSpan = 4 + r.cells.length;
+        dtd.append(el('strong', null, r.company + ' — ' + r.met + ' of ' + r.total + ' criteria met'));
+        const ul = el('ul');
+        r.cells.forEach(c => {
+          const li = el('li');
+          li.append(el('b', null, OUTCOME[c.outcome][0] + ' ' + OUTCOME[c.outcome][1] + ': '), document.createTextNode(c.criterion + ' — '));
+          if (c.outcome === 'INSUFFICIENT_DATA') li.append(document.createTextNode('could not be assessed: ' + (c.reason || c.status)));
+          else li.append(document.createTextNode(c.display + (c.period ? ' (' + c.period + ')' : '')));
+          if (c.calculation) li.append(el('div', 'src', (c.outcome === 'INSUFFICIENT_DATA' ? 'Would be calculated as: '
+            : 'Calculated: ') + c.calculation));
+          if (c.source) li.append(el('div', 'src', 'Source: ' + c.source));
+          ul.append(li);
+        });
+        dtd.append(ul);
+        detail.append(dtd);
+        tr.addEventListener('click', () => { detail.hidden = !detail.hidden; });
+        tbody.append(tr, detail);
+        rows.push({ tr, detail, r });
+      });
+      table.append(tbody);
+      wrap.append(table);
+      out.append(wrap);
+    });
+
+    const filter = () => {
+      const q = search.value.trim().toLowerCase();
+      rows.forEach(({ tr, detail, r }) => {
+        const show = (!q || r.symbol.toLowerCase().includes(q) || (r.company || '').toLowerCase().includes(q))
+          && (!onlyAll.checked || r.meetsAll);
+        tr.hidden = !show;
+        if (!show) detail.hidden = true;
+      });
+    };
+    search.addEventListener('input', filter);
+    onlyAll.addEventListener('change', filter);
+
+    const how = el('details', 'more');
+    how.append(el('summary', null, 'How results are decided and ranked'));
+    [
+      '✓ Meets / ✗ Does not meet: decided by the application from a figure that passed every consistency check.',
+      '? Cannot assess: the figure is missing, disputed between data feeds, failed a check, or could not be cross-checked. It never counts as met.',
+      'Ranking: ' + view.ranking,
+      'Growth and cash-flow criteria cover the last 3 fiscal years, because Yahoo Finance supplies 4 years of statements.'
+    ].forEach(t => how.append(el('p', null, t)));
+    out.append(how);
+
+    if (view.notScreened.length) {
+      const d = el('details', 'more');
+      d.append(el('summary', null, 'Not screened (' + view.notScreened.length + ')'));
+      const ul = el('ul');
+      view.notScreened.forEach(n => ul.append(el('li', null, n.symbol + ' — ' + (n.companyName || '') + ' (' + groupLabel(n.industryGroup) + '): ' + n.reason)));
+      d.append(ul);
+      out.append(d);
+    }
+    if (view.notInSnapshot.length) {
+      const d = el('details', 'more');
+      d.append(el('summary', null, 'Missing from the data snapshot (' + view.notInSnapshot.length + ')'));
+      const ul = el('ul');
+      view.notInSnapshot.forEach(n => ul.append(el('li', null, n.symbol + ': ' + n.reason)));
+      d.append(ul);
+      out.append(d);
+    }
+    out.append(el('p', 'muted', 'Snapshot of ' + view.snapshot.date + ' (run ' + view.snapshot.runId + ') · screened in '
+      + view.elapsedMillis + ' ms from stored data, with no live data calls.'));
+  }
+
+  function jumpTo(symbol) {
+    const row = document.getElementById('row-' + symbol);
+    if (!row) return;
+    row.hidden = false;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('flash');
+    setTimeout(() => row.classList.remove('flash'), 1500);
+  }
+
+  $('run-screen').addEventListener('click', runScreen);
+  $('group').addEventListener('change', runScreen);
+  $('ask-chat').addEventListener('click', () => {
+    if (!preset) return;
+    const group = $('group').value;
+    const question = 'Which Nifty 50 ' + (group ? groupLabel(group).toLowerCase() + ' ' : 'stocks ') + 'meet the '
+      + preset.name + ' criteria?';
+    document.querySelector('.tabs button[data-view="chat"]').click();
+    input.value = question;
+    input.focus();
   });
 
   renderAll();

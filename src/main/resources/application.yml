@@ -11,6 +11,16 @@ spring:
       # Request handling and blocking Yahoo calls run on virtual threads, so a
       # thread waiting on Yahoo or on the throttle costs almost nothing.
       enabled: true
+  datasource:
+    # The screening snapshot, in a local file next to where the application is started
+    # (data/ is git-ignored). Screening reads it instead of calling Yahoo.
+    url: jdbc:h2:file:./data/stock-research;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/screening-schema.sql
   ai:
     retry:
       # Spring AI's defaults (10 attempts, waits growing 5x from 2s) suit a
@@ -69,6 +79,74 @@ app:
       # verifiers removed about as many unsupported sentences either way
       # (18 vs 13), and both modes let some through. Off unless that changes.
       thinking: false
+
+  screening:
+    snapshot:
+      # Weekdays at 18:30 India time: after the 15:30 close, once the day's data has settled.
+      cron: "0 30 18 * * MON-FRI"
+      # A gap between companies, on top of the Yahoo request throttle (requests-per-second above).
+      pause-between-symbols: 1s
+    # Common heuristics, not advice: tune them to your own style. Thresholds are in each metric's
+    # unit (15 = 15%, 0.5 = 0.5x). "default" applies to every non-financial industry group; banks,
+    # NBFCs and insurers are screened only by rules of their own. A rule on a metric that is not
+    # primary for its group (a bank's debt-to-equity) stops the application at startup.
+    # Growth and cash-conversion spans are 3 fiscal years: Yahoo Finance supplies four years of
+    # statements, so 5-year rules could never be assessed.
+    presets:
+      quality-compounder:
+        description: "Consistently high returns on capital with growth, cash conversion and low debt."
+        tie-break: ROE_PERCENT
+        rules:
+          default:
+            - { metric: ROE_3Y_AVG_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: ROCE_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: REVENUE_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: OCF_TO_PAT_3Y_MULTIPLE, operator: AT_LEAST, threshold: 0.8 }
+            - { metric: DEBT_TO_EQUITY_MULTIPLE, operator: AT_MOST, threshold: 0.5 }
+          BANK:
+            - { metric: ROA_PERCENT, operator: AT_LEAST, threshold: 1 }
+            - { metric: ROE_PERCENT, operator: AT_LEAST, threshold: 14 }
+          NBFC:
+            - { metric: ROA_PERCENT, operator: AT_LEAST, threshold: 2 }
+            - { metric: ROE_PERCENT, operator: AT_LEAST, threshold: 15 }
+      reasonable-value:
+        # The price rules' thresholds are placeholders to set to your own taste.
+        description: "The quality-compounder criteria plus a price criterion: earnings yield for non-financials, price-to-book for lenders."
+        tie-break: EARNINGS_YIELD_PERCENT
+        rules:
+          default:
+            - { metric: ROE_3Y_AVG_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: ROCE_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: REVENUE_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: OCF_TO_PAT_3Y_MULTIPLE, operator: AT_LEAST, threshold: 0.8 }
+            - { metric: DEBT_TO_EQUITY_MULTIPLE, operator: AT_MOST, threshold: 0.5 }
+            # 4% earnings yield = a trailing P/E of 25
+            - { metric: EARNINGS_YIELD_PERCENT, operator: AT_LEAST, threshold: 4 }
+          BANK:
+            - { metric: ROA_PERCENT, operator: AT_LEAST, threshold: 1 }
+            - { metric: ROE_PERCENT, operator: AT_LEAST, threshold: 14 }
+            - { metric: PRICE_TO_BOOK_MULTIPLE, operator: AT_MOST, threshold: 2.5 }
+          NBFC:
+            - { metric: ROA_PERCENT, operator: AT_LEAST, threshold: 2 }
+            - { metric: ROE_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: PRICE_TO_BOOK_MULTIPLE, operator: AT_MOST, threshold: 3.5 }
+      dividend:
+        description: "A dividend yield of at least 2%, paid out of operating cash flow, with profits that grew."
+        tie-break: DIVIDEND_YIELD_PERCENT
+        rules:
+          default:
+            - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
+            - { metric: DIVIDENDS_TO_OCF_PERCENT, operator: AT_MOST, threshold: 100 }
+            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
+          # A lender's operating cash flow is not a measure of what it can pay out, so no payout rule.
+          BANK:
+            - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
+            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
+          NBFC:
+            - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
+            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
 
   trace:
     # Logs how a question flows through the model and the tools. Development
