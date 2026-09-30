@@ -12,6 +12,12 @@ public enum Intent {
     /** Two or more companies side by side. */
     COMPARE,
 
+    /**
+     * Find, screen or shortlist many stocks against criteria - "find profitable IT companies with low debt".
+     * Names no single company. Answered by {@link ScreenerAgent}'s chain.
+     */
+    SCREEN,
+
     /** A narrower question about a company or stock, answered by the model with the research tools. */
     SPECIFIC_QUESTION,
 

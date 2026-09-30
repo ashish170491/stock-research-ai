@@ -48,6 +48,7 @@ public class RequestRouter {
             - FULL_RESEARCH: a broad overview, analysis, research or report on ONE company.
             - QUOTE: the current, latest or live share price of one or more companies.
             - COMPARE: two or more companies compared side by side.
+            - SCREEN: find, filter, screen or shortlist stocks that meet criteria, naming no single company.
             - SPECIFIC_QUESTION: any narrower question about a company or stock (a metric, a period,
               ownership, performance over time, what the company does).
             - NOT_STOCK_RELATED: anything not about companies, stocks or markets.
@@ -69,14 +70,21 @@ public class RequestRouter {
     private static final Pattern VALUATION = Pattern.compile(
             "\\bp\\s*/\\s*[eb]\\b|\\bpe\\b|\\bprice[- ]to[- ]|\\bvaluation|\\b(?:earnings|dividend) yield|\\bmultiples?\\b",
             Pattern.CASE_INSENSITIVE);
+    /** What a screen returns many of; "banks'" as well as "banks". */
+    private static final String SCREENED_THINGS =
+            "(?:stocks|companies|banks|nbfcs|lenders|insurers)(?![\\w-])";
     /**
-     * A request to screen many stocks against criteria - "which Nifty 50 stocks meet...", "screen for
-     * dividend stocks". It names no single company, so it goes to the tool loop, which has screenStocks.
+     * A request to screen many stocks against criteria - "find profitable IT companies with low debt", "which
+     * stocks meet...", "screen for dividend stocks", "shortlist banks with ROE above 15%". It names no single
+     * company, so it goes to {@link ScreenerAgent}.
      */
     static final Pattern SCREEN = Pattern.compile(
-            "\\bscreen(?:s|ed|ing|er)?\\b|\\bquality[- ]compounders?\\b|\\breasonable[- ]value\\b|\\bnifty\\s*50\\b"
-                    + "|\\b(?:which|find|list|show)\\s+(?:me\\s+)?(?:\\S+\\s+){0,3}?(?:stocks|companies)\\b"
-                    + "|\\b(?:stocks|companies)\\s+(?:that|which)\\s+(?:meet|pass|satisfy|clear)\\b",
+            "\\bscreen(?:s|ed|ing|er)?\\b|\\bshort[- ]?list(?:s|ed|ing)?\\b|\\bquality[- ]compounders?\\b"
+                    + "|\\breasonable[- ]value\\b"
+                    + "|\\b(?:which|find|list|show)\\s+(?:me\\s+)?(?:\\S+\\s+){0,3}?" + SCREENED_THINGS
+                    + "|\\b(?:stocks|companies|shares)\\s+(?:that|which|with)\\s+(?:meet|pass|satisfy|clear|have)\\b"
+                    // the Screener page's question: "Which Nifty 50 other financial companies meet the dividend criteria?"
+                    + "|\\b(?:meet|meets|pass|passes|satisfy|satisfies)\\s+the\\s+[\\w-]+\\s+(?:criteria|preset|screen)\\b",
             Pattern.CASE_INSENSITIVE);
     /** Words around a company name in these requests, removed to leave the name itself. */
     private static final Set<String> FILLER = Set.of(
@@ -148,7 +156,13 @@ public class RequestRouter {
             return Optional.empty();
         }
         if (SCREEN.matcher(message).find()) {
-            return Optional.of(RoutedRequest.specificQuestion());
+            // "Which companies does Reliance Industries own?" is about one company, not a screen
+            Optional<NseSymbolDirectory.Listing> named = directory.namedIn(message);
+            if (named.isEmpty()) {
+                return Optional.of(new RoutedRequest(Intent.SCREEN, List.of()));
+            }
+            log.info("'{}' reads like a screen but names {}; not routed as one by keyword", message,
+                    named.get().symbol());
         }
         Matcher compare = COMPARE.matcher(message);
         if (compare.matches()) {
@@ -237,6 +251,8 @@ public class RequestRouter {
         return switch (routed.intent()) {
             case FULL_RESEARCH, QUOTE, SPECIFIC_QUESTION ->
                     named.isEmpty() ? new RoutedRequest(routed.intent(), earlier) : routed;
+            // a screen is about many stocks, never the one discussed before
+            case SCREEN -> new RoutedRequest(Intent.SCREEN, List.of());
             case COMPARE -> {
                 if (named.size() >= 2) {
                     yield routed;
@@ -262,6 +278,8 @@ public class RequestRouter {
                 case 1 -> new RoutedRequest(Intent.FULL_RESEARCH, routed.companies());
                 default -> routed;
             };
+            // a screen names no company; one the model listed is not screened on its own
+            case SCREEN -> new RoutedRequest(Intent.SCREEN, List.of());
             case SPECIFIC_QUESTION, NOT_STOCK_RELATED -> routed;
         };
     }

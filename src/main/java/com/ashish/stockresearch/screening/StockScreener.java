@@ -39,8 +39,8 @@ public class StockScreener {
             }
             Optional<List<Rule>> rules = criteria.rulesFor(group);
             if (rules.isEmpty()) {
-                notScreened.add(new NotScreened(snapshot.symbol(), snapshot.companyName(), group, whyNot(group,
-                        snapshot)));
+                notScreened.add(new NotScreened(snapshot.symbol(), snapshot.companyName(), group, whyNot(criteria,
+                        group, snapshot)));
                 continue;
             }
             List<RuleResult> results = rules.get().stream()
@@ -72,12 +72,12 @@ public class StockScreener {
         return new RuleResult(rule, outcome, metric, null);
     }
 
-    private static String whyNot(IndustryGroup group, FundamentalsSnapshot snapshot) {
+    private static String whyNot(ScreeningCriteria criteria, IndustryGroup group, FundamentalsSnapshot snapshot) {
         if (group == IndustryGroup.UNKNOWN) {
             return "its industry group is UNKNOWN (%s), so the criteria that apply cannot be chosen"
                     .formatted(snapshot.classificationBasis());
         }
-        return "the preset defines no criteria for %s companies".formatted(group);
+        return criteria.whyNotScreened(group);
     }
 
     private static Comparator<StockScreening> ranking(ScreeningCriteria.TieBreak tieBreak) {

@@ -335,20 +335,79 @@ class RequestRouterTest {
 
     // --- Screening: many stocks, no single company ------------------------------------------
 
+    // S4-1: "find...", "screen...", "shortlist..." and "which stocks..." are screens, routed without the model.
     @ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {
-            "Which Nifty 50 stocks meet the quality-compounder criteria?",
+            "Find profitable IT companies with low debt and ROE above 18%",
+            "find stocks with ROE above 20%",
+            "Find banks with ROA above 1.5%",
             "Screen the Nifty 50 for dividend stocks",
-            "Find stocks with reasonable value",
+            "screen for stocks with D/E below 0.5",
+            "Shortlist companies with revenue growth above 15%",
+            "shortlist banks with ROE above 15%",
+            "Which stocks have ROCE above 20%?",
+            "Which Nifty 50 stocks meet the quality-compounder criteria?",
             "Which banks' stocks pass the quality compounder screen?",
-            "List companies that meet the dividend preset"})
-    void sendsAScreeningRequestToTheToolLoopWithoutAskingTheModel(String message) {
+            "Find stocks with reasonable value",
+            "List companies that meet the dividend preset",
+            // the questions the Screener page's "Ask the assistant" button writes
+            "Which Nifty 50 stocks meet the dividend criteria?",
+            "Which Nifty 50 banks meet the quality-compounder criteria?",
+            "Which Nifty 50 nbfcs (non-bank lenders) meet the quality-compounder criteria?",
+            "Which Nifty 50 insurers meet the dividend criteria?",
+            "Which Nifty 50 other financial companies meet the dividend criteria?",
+            "Which Nifty 50 it services meet the reasonable-value criteria?",
+            "Which Nifty 50 pharma meet the dividend criteria?",
+            "Which Nifty 50 manufacturing and industrials meet the dividend criteria?",
+            "Which Nifty 50 consumer meet the dividend criteria?",
+            "Which Nifty 50 other industries meet the quality-compounder criteria?"})
+    void routesAScreeningRequestToTheScreenerWithoutAskingTheModel(String message) {
         StubModel model = new StubModel("{\"intent\":\"FULL_RESEARCH\",\"companies\":[\"RELIANCE\"]}");
 
         RoutedRequest routed = router(model).route(message);
 
-        assertThat(routed).isEqualTo(RoutedRequest.specificQuestion());
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.SCREEN, List.of()));
         assertThat(model.prompts).isEmpty();
+    }
+
+    // A question about one named company is not a screen, however it is worded.
+    @ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "Which companies does Reliance Industries own?",
+            "Which stocks are in the same group as Tata Steel?",
+            "Find companies similar to Infosys",
+            "Which banks compete with HDFCBANK?"})
+    void leavesAScreenLikeQuestionThatNamesACompanyToTheModel(String message) {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[]}");
+
+        RoutedRequest routed = router(model).route(message);
+
+        assertThat(routed.intent()).isEqualTo(Intent.SPECIFIC_QUESTION);
+        assertThat(model.prompts).hasSize(1);
+    }
+
+    @Test
+    void theModelCanRouteAScreenButNeverWithACompany() {
+        RoutedRequest routed = router(new StubModel("{\"intent\":\"SCREEN\",\"companies\":[\"Infosys\"]}"))
+                .route("Are there Infosys-like names with little debt?");
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.SCREEN, List.of()));
+        assertThat(RequestRouter.ROUTING_PROMPT).contains("SCREEN:");
+    }
+
+    // S4-1: the screen rule does not take requests about one company.
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "Fundamental Overview of ICICI Bank          | FULL_RESEARCH | ICICIBANK",
+            "Research HDFC Bank                          | FULL_RESEARCH | HDFCBANK",
+            "What is the share price of Bharti Airtel?   | QUOTE         | BHARTIARTL",
+            "Infosys stock price                         | QUOTE         | INFY",
+            "Show me the share price of HDFC Bank        | QUOTE         | HDFCBANK",
+    })
+    void doesNotMistakeAQuestionAboutOneCompanyForAScreen(String message, Intent intent, String symbol) {
+        StubModel model = new StubModel("not used");
+
+        assertThat(router(model).route(message)).isEqualTo(new RoutedRequest(intent, List.of(symbol)));
     }
 
     @Test

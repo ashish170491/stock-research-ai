@@ -22,7 +22,9 @@ import java.util.Set;
  * Construction rejects a rule on a metric that is not a primary indicator for its group (for a bank:
  * debt-to-equity, operating margin, ROCE, cash-flow ratios), so no preset can evaluate one.
  *
- * @param industryGroups groups to include; empty for all
+ * @param industryGroups     groups to include; empty for all
+ * @param notScreenedReasons why a group has no rules, where that is more than "the preset defines none" -
+ *                           for criteria read from a request, "D/E is not a primary metric for BANK"
  */
 public record ScreeningCriteria(
         String name,
@@ -30,7 +32,8 @@ public record ScreeningCriteria(
         List<Rule> nonFinancialRules,
         Map<IndustryGroup, List<Rule>> groupRules,
         TieBreak tieBreak,
-        Set<IndustryGroup> industryGroups
+        Set<IndustryGroup> industryGroups,
+        Map<IndustryGroup, String> notScreenedReasons
 ) {
 
     /** Groups the non-financial rules never apply to. */
@@ -54,6 +57,7 @@ public record ScreeningCriteria(
         nonFinancialRules = nonFinancialRules == null ? List.of() : List.copyOf(nonFinancialRules);
         groupRules = groupRules == null ? Map.of() : Map.copyOf(groupRules);
         industryGroups = industryGroups == null || industryGroups.isEmpty() ? Set.of() : Set.copyOf(industryGroups);
+        notScreenedReasons = notScreenedReasons == null ? Map.of() : Map.copyOf(notScreenedReasons);
         if (groupRules.containsKey(IndustryGroup.UNKNOWN)) {
             throw new IllegalArgumentException("%s: no rules can apply to an UNKNOWN industry group".formatted(name));
         }
@@ -72,6 +76,18 @@ public record ScreeningCriteria(
         }
     }
 
+    public ScreeningCriteria(String name, String description, List<Rule> nonFinancialRules,
+                             Map<IndustryGroup, List<Rule>> groupRules, TieBreak tieBreak,
+                             Set<IndustryGroup> industryGroups) {
+        this(name, description, nonFinancialRules, groupRules, tieBreak, industryGroups, Map.of());
+    }
+
+    /** Why a group these criteria have no rules for is not screened. */
+    public String whyNotScreened(IndustryGroup group) {
+        return notScreenedReasons.getOrDefault(group,
+                "the %s criteria define no rules for %s companies".formatted(name, group));
+    }
+
     /** The rules for a group, or empty when the group is not screened by these criteria. */
     public Optional<List<Rule>> rulesFor(IndustryGroup group) {
         List<Rule> rules = rulesOf(group, nonFinancialRules, groupRules);
@@ -83,7 +99,8 @@ public record ScreeningCriteria(
     }
 
     public ScreeningCriteria withIndustryGroups(Set<IndustryGroup> groups) {
-        return new ScreeningCriteria(name, description, nonFinancialRules, groupRules, tieBreak, groups);
+        return new ScreeningCriteria(name, description, nonFinancialRules, groupRules, tieBreak, groups,
+                notScreenedReasons);
     }
 
     private static List<Rule> rulesOf(IndustryGroup group, List<Rule> nonFinancial, Map<IndustryGroup, List<Rule>> byGroup) {

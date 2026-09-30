@@ -147,6 +147,35 @@ app:
           NBFC:
             - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
             - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
+    # A screening request in words ("profitable IT companies with low debt") may name a quality without a
+    # number. Each phrase here is read as the named preset's own rule on each metric, so "low debt" means
+    # whatever D/E threshold quality-compounder uses. Every reading is shown to the user with the answer.
+    # A phrase followed by a number ("growing above 15%") is the user's own criterion, not a vague one.
+    vague-terms:
+      - phrases: ["low debt", "little debt", "low leverage", "low borrowings", "lightly leveraged"]
+        preset: quality-compounder
+        metrics: [DEBT_TO_EQUITY_MULTIPLE]
+      - phrases: ["profitable", "high profitability", "high returns", "high roe", "good roe"]
+        preset: quality-compounder
+        metrics: [ROE_3Y_AVG_PERCENT]
+      - phrases: ["high roce", "good roce", "high return on capital", "high returns on capital"]
+        preset: quality-compounder
+        metrics: [ROCE_PERCENT]
+      - phrases: ["growing", "high growth", "high-growth", "fast growing", "fast-growing", "growth stocks", "growth companies"]
+        preset: quality-compounder
+        metrics: [REVENUE_CAGR_3Y_PERCENT, NET_PROFIT_CAGR_3Y_PERCENT]
+      - phrases: ["good cash conversion", "cash generative", "cash-generative", "strong cash flow", "strong cash flows"]
+        preset: quality-compounder
+        metrics: [OCF_TO_PAT_3Y_MULTIPLE]
+      - phrases: ["dividend paying", "dividend-paying", "high dividend", "high dividends", "good dividend", "good dividends", "high dividend yield", "dividend stocks"]
+        preset: dividend
+        metrics: [DIVIDEND_YIELD_PERCENT]
+    # Judgements, not measurements: the application never judges a stock, so these are never read as a
+    # threshold. The user is told, and shown how to ask with a number instead.
+    judgement-terms: ["cheap", "cheaply valued", "undervalued", "overvalued", "expensive", "bargain", "bargains",
+                      "good value", "attractive", "attractively valued", "best", "safe", "safest", "good stocks",
+                      "good companies", "good investments", "quality stocks", "quality companies", "multibagger",
+                      "multibaggers"]
 
   trace:
     # Logs how a question flows through the model and the tools. Development

@@ -8,7 +8,7 @@ Updated by the `roadmap-verifier` agent (`/verify-step N`). The latest report fo
 | 1 | Conversation memory | NOT_VERIFIED | | | |
 | 2 | Valuation and quality tools | PASSED | 2026-09-28 | 647c27f | [step-02-2026-09-28.md](step-02-2026-09-28.md) |
 | 3 | Deterministic screening engine | PASSED | 2026-09-29 | a5d6146 (HEAD 64b2e1d, clean tree) | [step-03-2026-09-29.md](step-03-2026-09-29.md) |
-| 4 | Screener agent (chain) | NOT_VERIFIED | | | |
+| 4 | Screener agent (chain) | PASSED | 2026-09-30 | 377e905 + uncommitted working tree (re-verified 19:58 IST) | [step-04-2026-09-30.md](step-04-2026-09-30.md) |
 | 5 | Parallel deep-dive and comparison | NOT_VERIFIED | | | |
 | 6 | Critic loop (evaluator-optimizer) | NOT_VERIFIED | | | |
 | 7 | RAG over documents | NOT_VERIFIED | | | |

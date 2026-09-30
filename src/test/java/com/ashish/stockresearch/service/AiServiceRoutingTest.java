@@ -13,7 +13,10 @@ import com.ashish.stockresearch.research.HistoricalPerformanceService;
 import com.ashish.stockresearch.research.StockResearchService;
 import com.ashish.stockresearch.research.provider.UnsupportedShareholdingProvider;
 import com.ashish.stockresearch.research.provider.mock.MockStockResearchProvider;
+import com.ashish.stockresearch.agent.ScreenerAgent;
+import com.ashish.stockresearch.research.report.AnswerChecks;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
+import com.ashish.stockresearch.research.report.ScreeningCountVerifier;
 import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
@@ -119,6 +122,7 @@ class AiServiceRoutingTest {
     private final RequestRouter router = mock(RequestRouter.class);
     private final ResearchReportWriter reportWriter = mock(ResearchReportWriter.class);
     private final StockMarketDataService quotes = mock(StockMarketDataService.class);
+    private final ScreenerAgent screenerAgent = mock(ScreenerAgent.class);
     private final StockResearchService research = new StockResearchService(
             new MockStockResearchProvider(), new MockStockResearchProvider(), new UnsupportedShareholdingProvider(),
             new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService(),
@@ -133,7 +137,8 @@ class AiServiceRoutingTest {
         StockResearchTools tools = new StockResearchTools(research, new ResearchReportRenderer(), new SectorClassifier());
         return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools,
                 new ScreeningTools(mock(ScreeningService.class), new ScreeningRenderer()), new PassThrough(),
-                reportWriter, quotes, new UnsupportedClaimFilter(), new NumericClaimVerifier(),
+                reportWriter, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
+                        new ScreeningCountVerifier(), new UnsupportedClaimFilter()),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions);
     }
 
@@ -204,6 +209,21 @@ class AiServiceRoutingTest {
         assertThat(answer).startsWith("Revenue was ₹").doesNotContain("Net profit was ₹12,345.67 crore")
                 .contains("Removed 1 statement(s) containing figures that do not appear");
         verify(reportWriter, never()).write(anyString());
+    }
+
+    @Test
+    void screenRequestsGoToTheScreenerAgentAndItsTableIsKeptAsEvidenceNotMemory() {
+        String question = "Find profitable IT companies with low debt";
+        routes(question, Intent.SCREEN);
+        when(screenerAgent.answer(question)).thenReturn(new ScreenerAgent.ScreenAnswer("**How I read your request**",
+                "TOOL RESULT: screenStocks - status OK", "[A screen was shown to the user]"));
+
+        AiService.ChatAnswer answer = service(UNUSED).chat(CONVERSATION, question);
+
+        assertThat(answer.intent()).isEqualTo(Intent.SCREEN);
+        assertThat(answer.text()).isEqualTo("**How I read your request**");
+        assertThat(sessions.get(CONVERSATION).earlierEvidence()).contains("TOOL RESULT: screenStocks");
+        assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo("[A screen was shown to the user]");
     }
 
     @Test
