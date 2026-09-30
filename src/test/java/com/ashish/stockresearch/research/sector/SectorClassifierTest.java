@@ -15,6 +15,11 @@ class SectorClassifierTest {
         assertThat(classifier.classify("Financial Services", "Banks - Regional").group()).isEqualTo(IndustryGroup.BANK);
         assertThat(classifier.classify("Financial Services", "Credit Services").group()).isEqualTo(IndustryGroup.NBFC);
         assertThat(classifier.classify("Financial Services", "Insurance - Life").group()).isEqualTo(IndustryGroup.INSURANCE);
+        // Bajaj Finserv and Jio Financial Services on Yahoo Finance
+        assertThat(classifier.classify("Financial Services", "Financial Conglomerates").group())
+                .isEqualTo(IndustryGroup.FINANCIAL_OTHER);
+        assertThat(classifier.classify("Financial Services", "Asset Management").group())
+                .isEqualTo(IndustryGroup.FINANCIAL_OTHER);
         assertThat(classifier.classify("Technology", "Information Technology Services").group())
                 .isEqualTo(IndustryGroup.IT_SERVICES);
         assertThat(classifier.classify("Healthcare", "Drug Manufacturers - Specialty & Generic").group())

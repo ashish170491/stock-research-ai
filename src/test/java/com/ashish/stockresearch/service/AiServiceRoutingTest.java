@@ -17,6 +17,9 @@ import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
+import com.ashish.stockresearch.screening.ScreeningRenderer;
+import com.ashish.stockresearch.screening.ScreeningService;
+import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import org.junit.jupiter.api.Test;
@@ -128,7 +131,8 @@ class AiServiceRoutingTest {
 
     private AiService service(ChatModel model) {
         StockResearchTools tools = new StockResearchTools(research, new ResearchReportRenderer(), new SectorClassifier());
-        return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools, new PassThrough(),
+        return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools,
+                new ScreeningTools(mock(ScreeningService.class), new ScreeningRenderer()), new PassThrough(),
                 reportWriter, quotes, new UnsupportedClaimFilter(), new NumericClaimVerifier(),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions);
     }

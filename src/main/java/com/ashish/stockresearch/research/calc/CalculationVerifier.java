@@ -135,6 +135,9 @@ public final class CalculationVerifier {
                 double basis = in.size() == 5 ? (closing + in.get(3) - in.get(4)) / 2 : closing;
                 yield basis > 0 ? in.get(0) / basis * 100 : null;
             }
+            case MEAN -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).sum() / in.size();
+            case DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT -> in.size() == 2 && in.get(0) <= 0 && in.get(1) > 0
+                    ? -in.get(0) / in.get(1) * 100 : null;
         };
         return result == null || !Double.isFinite(result) ? Optional.empty() : Optional.of(result);
     }

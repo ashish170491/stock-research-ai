@@ -29,6 +29,13 @@ public record ReportedValuation(
         DataProvenance provenance
 ) {
 
+    /** The same figures with the per-share inputs replaced, e.g. by their DATA_CONFLICT versions. */
+    public ReportedValuation withPerShare(FinancialDataPoint eps, FinancialDataPoint bookValue,
+                                          FinancialDataPoint dividend) {
+        return new ReportedValuation(symbol, exchange, companyName, asOf, price, eps, bookValue, dividend, trailingPe,
+                priceToBook, dividendYieldPercent, provenance);
+    }
+
     public List<FinancialDataPoint> points() {
         return List.of(price, trailingEps, bookValuePerShare, dividendPerShare, trailingPe, priceToBook,
                 dividendYieldPercent);

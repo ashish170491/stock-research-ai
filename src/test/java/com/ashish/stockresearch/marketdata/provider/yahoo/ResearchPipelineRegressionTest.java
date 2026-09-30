@@ -59,13 +59,19 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
  */
 class ResearchPipelineRegressionTest {
 
-    private static final Clock SEPT_2026 = Clock.fixed(Instant.parse("2026-09-27T06:00:00Z"), ZoneId.of("Asia/Kolkata"));
+    static final Clock SEPT_2026 = Clock.fixed(Instant.parse("2026-09-27T06:00:00Z"), ZoneId.of("Asia/Kolkata"));
 
     private final ResearchReportRenderer renderer = new ResearchReportRenderer();
     private final UnsupportedClaimFilter filter = new UnsupportedClaimFilter();
 
     /** Runs the full pipeline for one company against its recorded Yahoo responses. */
     private StockResearchReport report(String symbol) {
+        return new ResearchReportService(research(symbol), new FinancialDataValidator(SEPT_2026), new SectorClassifier())
+                .build(symbol);
+    }
+
+    /** The research service for one company, served from its recorded Yahoo responses. */
+    static StockResearchService research(String symbol) {
         String name = symbol.toLowerCase();
         RestClient.Builder builder = RestClient.builder().baseUrl("https://query1.finance.yahoo.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
@@ -93,7 +99,7 @@ class ResearchPipelineRegressionTest {
                 new FinancialMetricsService(), new HistoricalPerformanceService(),
                 new YahooFinanceValuationProvider(resolver, quoteSummary),
                 new ValuationService(java.math.BigDecimal.valueOf(5)));
-        return new ResearchReportService(research, validator, new SectorClassifier()).build(symbol);
+        return research;
     }
 
     private static String fixture(String file) {

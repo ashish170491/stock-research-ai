@@ -354,7 +354,7 @@ class FinancialMetricsServiceTest {
                         crore("annualNetProfit", "f", "70479.34", fy26),
                         missing("a", "f", fy26), missing("b", "f", fy26), missing("c", "f", fy26),
                         missing("d", "f", fy26), missing("e", "f", fy26), missing("g", "f", fy26),
-                        missing("h", "f", fy26))),
+                        missing("h", "f", fy26), missing("i", "f", fy26))),
                 CALENDAR.quarter(LocalDate.of(2026, 6, 30)));
 
         FinancialSummary summary = service.summarize(mixed);
@@ -452,7 +452,7 @@ class FinancialMetricsServiceTest {
         AnnualFinancials fy25 = years.get(2);
         years.set(2, new AnnualFinancials(fy25.period(), fy25.revenue(), fy25.netProfit().inConflict("two feeds disagree"),
                 fy25.operatingIncome(), fy25.shareholdersEquity(), fy25.totalAssets(), fy25.totalDebt(), fy25.ebit(),
-                fy25.currentLiabilities(), fy25.operatingCashFlow()));
+                fy25.currentLiabilities(), fy25.operatingCashFlow(), fy25.cashDividendsPaid()));
 
         FinancialDataPoint ocfToPat = summarizeYears(years).calculated().ocfToPat3yMultiple();
 

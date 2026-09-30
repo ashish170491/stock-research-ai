@@ -2,6 +2,7 @@ package com.ashish.stockresearch.research.model;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A company's valuation at one moment, after checking: trailing P/E, price-to-book, dividend yield
@@ -13,7 +14,10 @@ import java.util.List;
  * <p>These are facts about the price, not judgements: nothing here says whether a multiple is high
  * or low, and there is no fair value, target or recommendation.
  *
- * @param reported the provider's figures, including the price and per-share inputs the checks used
+ * @param reported         the provider's figures, including the price and per-share inputs the checks used;
+ *                         a per-share input whose check failed is DATA_CONFLICT with its multiple
+ * @param uncheckedMetrics metrics that are available but could not be cross-checked, with why - usable
+ *                         for display, never for passing a screening rule
  */
 public record ValuationSnapshot(
         ReportedValuation reported,
@@ -22,8 +26,13 @@ public record ValuationSnapshot(
         FinancialDataPoint dividendYieldPercent,
         FinancialDataPoint earningsYieldPercent,
         List<DataQualityIssue> dataQualityIssues,
-        List<DataGap> dataGaps
+        List<DataGap> dataGaps,
+        Map<String, String> uncheckedMetrics
 ) {
+
+    public ValuationSnapshot {
+        uncheckedMetrics = uncheckedMetrics == null ? Map.of() : Map.copyOf(uncheckedMetrics);
+    }
 
     public LocalDate asOf() {
         return reported.asOf();

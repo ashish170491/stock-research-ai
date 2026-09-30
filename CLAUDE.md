@@ -2,8 +2,8 @@
 - Java 21, Spring Boot 4.1, Spring AI 2.0, Ollama qwen3:8b local.
 - The LLM never calculates, converts units, or judges a stock. All maths lives in
   FinancialCalculator and is verified by CalculationVerifier. Pass/fail judgements
-  will live in StockScreener against explicit criteria (roadmap Step 3; not built
-  yet). Until then, no code or prompt judges a stock.
+  live only in StockScreener, against explicit configured criteria, reading the
+  fundamentals snapshot (never a provider). No other code or prompt judges a stock.
 - Every number is a FinancialDataPoint with unit, period, source and DataStatus.
   Only VALID values are used; non-VALID never passes a screening rule.
 - Every model answer that states figures goes through NumericClaimVerifier and

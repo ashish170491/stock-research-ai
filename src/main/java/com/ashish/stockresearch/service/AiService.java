@@ -10,6 +10,7 @@ import com.ashish.stockresearch.marketdata.model.StockQuote;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
+import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
@@ -102,6 +103,7 @@ public class AiService {
 			RequestRouter router,
 			StockPriceTool stockPriceTool,
 			StockResearchTools stockResearchTools,
+			ScreeningTools screeningTools,
 			Advisor conversationTraceAdvisor,
 			ResearchReportWriter researchReportWriter,
 			StockMarketDataService stockMarketDataService,
@@ -114,7 +116,7 @@ public class AiService {
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
 				.defaultSystem(SYSTEM_PROMPT)
-				.defaultTools(stockPriceTool, stockResearchTools)
+				.defaultTools(stockPriceTool, stockResearchTools, screeningTools)
 				.defaultAdvisors(conversationTraceAdvisor)
 				.build();
 		this.generalClient = chatClientBuilder.clone()

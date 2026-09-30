@@ -386,4 +386,75 @@ class UnsupportedClaimFilterTest {
 
         assertThat(result.text()).isEqualTo("The trailing P/E was 15.13x as of 2026-09-25.");
     }
+
+    // --- Screening: criteria supplied by the screenStocks tool (roadmap Step 3) ----------------
+
+    private static final String SCREEN_EVIDENCE = "TOOL RESULT: screenStocks - status OK\n"
+            + "| 1 | TCS | Tata Consultancy Services | IT_SERVICES | 6 of 6 | PASS 45.12% |";
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "TCS meets the supplied criterion ROE 3y avg ≥ 15.00%, with 45.12% for FY24 to FY26.",
+            "TCS meets all six supplied criteria.",
+            "Infosys does not meet the supplied criterion Revenue CAGR 3y ≥ 10.00%.",
+            "HDFC Bank met one of its two criteria; ROE was INSUFFICIENT_DATA.",
+            "Tech Mahindra fails to meet the ROE 3y avg criterion."})
+    void keepsWhichSuppliedCriteriaAStockMeetsWhenAScreenSuppliedThem(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter(sentence, SCREEN_EVIDENCE);
+
+        assertThat(result.removedSentences()).isEmpty();
+    }
+
+    @Test
+    void removesMeetingCriteriaWhenNoScreenSuppliedAny() {
+        UnsupportedClaimFilter.Result result = filter.filter("TCS meets all six supplied criteria.", EVIDENCE);
+
+        assertThat(result.text()).isEmpty();
+    }
+
+    // Rule 5: meeting criteria is not a label, and criteria are not benchmarks.
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "TCS is a quality compounder.",
+            "TCS meets every criterion, making it a quality company.",
+            "These are the top picks from the Nifty 50.",
+            "TCS meets the criteria and is a good investment.",
+            "TCS appears to meet the supplied criteria.",
+            "TCS meets industry norms for return on equity.",
+            "Meeting all six criteria, TCS is undervalued.",
+            // from a live answer to "Which Nifty 50 stocks meet the quality-compounder criteria?"
+            "The criteria prioritize sustained profitability and capital efficiency, which SUNPHARMA and the two banks "
+                    + "exemplify.",
+            "These stocks demonstrated consistent dividend payouts relative to operating cash flow and positive profit "
+                    + "growth."})
+    void stillRemovesLabelsAndJudgementsAlongsideAScreen(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter(sentence, SCREEN_EVIDENCE);
+
+        assertThat(result.removedSentences()).containsExactly(sentence);
+    }
+
+    // From live answers: a criterion that could not be assessed was reported as failed.
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "- **ONGC**, **INFY**, **COALINDIA**, and **TATASTEEL** failed to meet the profit CAGR criterion "
+                    + "(DATA_CONFLICT or INSUFFICIENT_DATA).",
+            "- **DATA_CONFLICT** and **UNAVAILABLE** data caused failures for over 30 stocks.",
+            "INFY failed the Revenue CAGR 3y criterion due to DATA_CONFLICT in its revenue."})
+    void removesACriterionThatCouldNotBeAssessedReportedAsFailed(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter(sentence, SCREEN_EVIDENCE);
+
+        assertThat(result.removedSentences()).hasSize(1);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "NESTLEIND did not meet the dividend yield criterion, and its profit CAGR is INSUFFICIENT_DATA.",
+            "Other stocks either failed one or more criteria or had insufficient data to assess them.",
+            "Such a criterion is neither met nor failed.",
+            "Earnings yield failed verification and is INVALID."})
+    void keepsFailuresAndUnassessedCriteriaReportedSeparately(String sentence) {
+        UnsupportedClaimFilter.Result result = filter.filter(sentence, SCREEN_EVIDENCE);
+
+        assertThat(result.removedSentences()).isEmpty();
+    }
 }

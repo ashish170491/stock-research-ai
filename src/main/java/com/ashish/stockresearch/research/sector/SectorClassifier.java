@@ -52,6 +52,11 @@ public class SectorClassifier {
         if (industry.isEmpty()) {
             return IndustryGroup.UNKNOWN;
         }
+        // "Financial Conglomerates", "Asset Management", "Capital Markets" and the like: never given the
+        // generic (industrial) reading
+        if (sector.equals("financial services")) {
+            return IndustryGroup.FINANCIAL_OTHER;
+        }
         return IndustryGroup.OTHER;
     }
 

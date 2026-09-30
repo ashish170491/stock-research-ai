@@ -16,7 +16,7 @@ class ResearchInstructionsTest {
     void coversEachRuleArea() {
         assertThat(ResearchInstructions.EVIDENCE_RULES).contains(
                 "1. FACT, OBSERVATION, INTERPRETATION", "2. FACTS AND CALCULATIONS", "3. SOURCE ATTRIBUTION",
-                "4. CAUSALITY", "5. QUALITATIVE LABELS", "6. GROWTH TERMINOLOGY", "7. DATA STATUS, CONFLICTS AND GAPS",
+                "4. CAUSALITY", "5. QUALITATIVE LABELS AND SCREENING CRITERIA", "6. GROWTH TERMINOLOGY", "7. DATA STATUS, CONFLICTS AND GAPS",
                 "8. SECTOR CONTEXT", "9. FINAL INTERPRETATION", "10. VALUATION AND THE COMPANY NAMED", "If it says Yahoo Finance", "grew at a",
                 "NOT SUPPORTED BY CURRENT DATA SOURCE", "does not establish the specific cause");
     }
@@ -25,5 +25,15 @@ class ResearchInstructionsTest {
     void containsNoExampleNumbersAModelCouldQuoteAsData() {
         assertThat(ResearchInstructions.EVIDENCE_RULES.replaceAll("\\n\\s*\\d+\\. ", "\n"))
                 .doesNotContainPattern("\\d");
+    }
+
+    // S3-9
+    @Test
+    void allowsMeetsOrDoesNotMeetTheSuppliedCriterionAndStillForbidsLabels() {
+        assertThat(ResearchInstructions.EVIDENCE_RULES)
+                .contains("\"meets\" or \"does not meet the supplied criterion\"")
+                .contains("INSUFFICIENT_DATA means the criterion could not be assessed")
+                .contains("Meeting criteria is not a label")
+                .contains("Do not use labels such as financially healthy, strong, weak");
     }
 }

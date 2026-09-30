@@ -46,5 +46,13 @@ public enum Formula {
      * Inputs: EBIT, closing total assets, closing current liabilities[, opening total assets,
      * opening current liabilities].
      */
-    RETURN_ON_CAPITAL_EMPLOYED_PERCENT
+    RETURN_ON_CAPITAL_EMPLOYED_PERCENT,
+    /** The arithmetic mean of the inputs, e.g. three fiscal years' return on equity. Inputs: the values. */
+    MEAN,
+    /**
+     * Dividends paid as a percentage of operating cash flow in the same fiscal year:
+     * -(dividends paid) / operating cash flow x 100. Inputs: dividends paid as the cash-flow statement
+     * reports them (an outflow, zero or negative), then operating cash flow (positive).
+     */
+    DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT
 }

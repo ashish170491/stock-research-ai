@@ -104,8 +104,10 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
     private static final String EBIT = "annualEBIT";
     private static final String CURRENT_LIABILITIES = "annualCurrentLiabilities";
     private static final String OPERATING_CASH_FLOW = "annualOperatingCashFlow";
+    /** Reported as an outflow: negative, e.g. INFY FY26 -2133000000 USD. */
+    private static final String CASH_DIVIDENDS_PAID = "annualCashDividendsPaid";
     private static final List<String> ANNUAL_TYPES = List.of(REVENUE, NET_INCOME, OPERATING_INCOME, EQUITY, ASSETS,
-            DEBT, EBIT, CURRENT_LIABILITIES, OPERATING_CASH_FLOW);
+            DEBT, EBIT, CURRENT_LIABILITIES, OPERATING_CASH_FLOW, CASH_DIVIDENDS_PAID);
     private static final String TOTAL_REVENUE = "financialData.totalRevenue";
     private static final String NET_INCOME_TO_COMMON = "defaultKeyStatistics.netIncomeToCommon";
     /**
@@ -368,7 +370,9 @@ class YahooFinanceFinancialDataProvider implements FinancialDataProvider {
                     annualAmount("currentLiabilities", values.get(CURRENT_LIABILITIES), closing, source,
                             CURRENT_LIABILITIES),
                     annualAmount("operatingCashFlow", values.get(OPERATING_CASH_FLOW), period, source,
-                            OPERATING_CASH_FLOW)));
+                            OPERATING_CASH_FLOW),
+                    annualAmount("cashDividendsPaid", values.get(CASH_DIVIDENDS_PAID), period, source,
+                            CASH_DIVIDENDS_PAID)));
         });
         if (years.isEmpty()) {
             gaps.add(new DataGap("Financials", "annualHistory",

@@ -73,9 +73,14 @@ class ValuationServiceTest {
                 .doesNotContain("26.74");
         assertThat(v.dataQualityIssues()).singleElement().satisfies(issue -> {
             assertThat(issue.type()).isEqualTo(DataQualityIssue.Type.DATA_CONFLICT);
-            // Only the multiple is disputed; the price and EPS it was checked against stay usable.
-            assertThat(issue.affectedFields()).containsExactly("summaryDetail.trailingPE");
+            // Nothing says whether the P/E or the EPS is wrong, so both are disputed; the price, whose currency
+            // and date the quote itself confirms, stays usable.
+            assertThat(issue.affectedFields()).containsExactly("summaryDetail.trailingPE",
+                    "defaultKeyStatistics.trailingEps");
         });
+        assertThat(v.reported().trailingEps().status()).isEqualTo(DataStatus.DATA_CONFLICT);
+        assertThat(v.reported().price().status()).isEqualTo(DataStatus.VALID);
+        assertThat(v.reported().bookValuePerShare().status()).isEqualTo(DataStatus.VALID);
         assertThat(v.earningsYieldPercent().status()).isEqualTo(DataStatus.DATA_CONFLICT);
         assertThat(v.earningsYieldPercent().value()).isNull();
         assertThat(v.priceToBook().status()).isEqualTo(DataStatus.VALID);
@@ -122,5 +127,18 @@ class ValuationServiceTest {
         assertThat(v.earningsYieldPercent().status()).isEqualTo(DataStatus.UNAVAILABLE);
         assertThat(v.dataGaps()).extracting(gap -> gap.area() + " / " + gap.item()).containsExactly(
                 "Valuation / trailingPe", "Valuation / dividendYieldPercent", "Valuation / earningsYieldPercent");
+    }
+
+    @Test
+    void namesAMultipleThatCouldNotBeCheckedAsUncheckedWithTheEarningsYieldFromIt() {
+        // No EPS, so the P/E stays as the provider reported it but cannot be checked.
+        ValuationSnapshot v = service.assess(valuation("1548.00", null, "334.41", "51.00", "26.74", "4.63", "0.0329"));
+
+        assertThat(v.trailingPe().status()).isEqualTo(DataStatus.VALID);
+        assertThat(v.uncheckedMetrics()).containsOnlyKeys("trailingPe", "earningsYieldPercent");
+        assertThat(v.uncheckedMetrics().get("trailingPe")).contains("share price / trailing EPS")
+                .contains("trailingEps is UNAVAILABLE");
+        // The checked multiples are not in the list.
+        assertThat(v.uncheckedMetrics()).doesNotContainKeys("priceToBook", "dividendYieldPercent");
     }
 }

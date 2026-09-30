@@ -151,4 +151,21 @@ class FinancialCalculatorTest {
         assertThat(FinancialCalculator.yearsBetween(LocalDate.of(2021, 9, 27), LocalDate.of(2026, 9, 25)))
                 .isEqualByComparingTo("4.9938");
     }
+
+    @Test
+    void averagesValuesToTwoDecimalPlaces() {
+        assertThat(FinancialCalculator.mean(List.of(d("18.20"), d("17.10"), d("16.05")))).contains(d("17.12"));
+        assertThat(FinancialCalculator.mean(List.of())).isEmpty();
+        assertThat(FinancialCalculator.mean(java.util.Arrays.asList(d("18.20"), null))).isEmpty();
+    }
+
+    @Test
+    void expressesDividendsPaidAsAShareOfOperatingCashFlow() {
+        assertThat(FinancialCalculator.dividendsToOperatingCashFlowPercent(d("-4025.50"), d("6172.00")))
+                .contains(d("65.22"));
+        assertThat(FinancialCalculator.dividendsToOperatingCashFlowPercent(d("0"), d("6172.00"))).contains(d("0.00"));
+        // not an outflow, or no positive cash flow to pay it from: no result rather than a misleading one
+        assertThat(FinancialCalculator.dividendsToOperatingCashFlowPercent(d("4025.50"), d("6172.00"))).isEmpty();
+        assertThat(FinancialCalculator.dividendsToOperatingCashFlowPercent(d("-4025.50"), d("-100"))).isEmpty();
+    }
 }

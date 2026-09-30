@@ -299,7 +299,7 @@ class ResearchReportServiceTest {
         String evidence = new ResearchReportRenderer().renderEvidence(report);
 
         assertThat(report.dataQualityIssues()).anySatisfy(i -> assertThat(i.affectedFields())
-                .containsExactly("summaryDetail.trailingPE"));
+                .containsExactly("summaryDetail.trailingPE", "defaultKeyStatistics.trailingEps"));
         assertThat(report.dataGaps()).extracting(gap -> gap.area() + " / " + gap.item())
                 .contains("Valuation / dividendYieldPercent");
         // In the table the model gets no disputed P/E to use, only the conflict explaining why - and no implied
@@ -307,6 +307,8 @@ class ResearchReportServiceTest {
         assertThat(evidence).contains("| trailingPe | WITHHELD").doesNotContain("| trailingPe | 40.00x")
                 .contains("away from share price / trailing EPS").contains("does not choose between them")
                 .doesNotContain("26.74")
-                .contains("| sharePrice | ₹1,548.00 per share |");
+                .contains("| sharePrice | ₹1,548.00 per share |")
+                // the EPS the P/E disagrees with is disputed with it
+                .contains("| trailingEps | WITHHELD");
     }
 }

@@ -118,7 +118,8 @@ public class MockStockResearchProvider
                     crore("totalDebt", String.valueOf(500 + 20 * (3 - i)), closing),
                     crore("ebit", String.valueOf(1700 + 150 * (3 - i)), period),
                     crore("currentLiabilities", String.valueOf(3000 + 200 * (3 - i)), closing),
-                    crore("operatingCashFlow", String.valueOf(1000 + 130 * (3 - i)), period)));
+                    crore("operatingCashFlow", String.valueOf(1000 + 130 * (3 - i)), period),
+                    crore("cashDividendsPaid", String.valueOf(-400 - 40 * (3 - i)), period)));
         }
         return new ReportedFinancials(symbol, "NSE", symbol + " Limited (sample)", "INR", quarter,
                 CALENDAR.fiscalYear(FISCAL_YEAR_END), headline, quarters, annual, List.of(), List.of(),
