@@ -1,5 +1,7 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
+import com.ashish.stockresearch.marketdata.http.RequestThrottle;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -13,13 +15,13 @@ public class YahooFinanceClientConfig {
 
     /** One throttle for both clients: the limit is on what this application sends Yahoo in total. */
     @Bean
-    YahooRequestThrottle yahooRequestThrottle(YahooFinanceProperties properties) {
-        return new YahooRequestThrottle(properties.requestsPerSecond());
+    RequestThrottle yahooRequestThrottle(YahooFinanceProperties properties) {
+        return new RequestThrottle("Yahoo Finance", properties.requestsPerSecond());
     }
 
     @Bean
     public RestClient yahooFinanceRestClient(RestClient.Builder builder, YahooFinanceProperties properties,
-                                             YahooRequestThrottle throttle) {
+                                             @Qualifier("yahooRequestThrottle") RequestThrottle throttle) {
         return yahooClient(builder, properties, properties.baseUrl(), throttle);
     }
 
@@ -29,12 +31,12 @@ public class YahooFinanceClientConfig {
      */
     @Bean
     public RestClient yahooCookieRestClient(RestClient.Builder builder, YahooFinanceProperties properties,
-                                            YahooRequestThrottle throttle) {
+                                            @Qualifier("yahooRequestThrottle") RequestThrottle throttle) {
         return yahooClient(builder, properties, properties.cookieUrl(), throttle);
     }
 
     private RestClient yahooClient(RestClient.Builder builder, YahooFinanceProperties properties, String baseUrl,
-                                   YahooRequestThrottle throttle) {
+                                   RequestThrottle throttle) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         int timeoutMs = (int) properties.timeoutMs();
         requestFactory.setConnectTimeout(timeoutMs);

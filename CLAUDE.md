@@ -18,6 +18,8 @@
 - Each ChatClient sets its own OllamaChatOptions. Thinking is off unless the call
   needs reasoning. Model calls go through OllamaCalls.
 - Yahoo responses are cached (YahooCacheConfiguration) and throttled
-  (YahooRequestThrottle). Never cache a price inside a long-lived entry.
-- Run ./mvnw test before finishing. Use fixtures, never live Yahoo, in tests.
+  (RequestThrottle). Never cache a price inside a long-lived entry.
+- NSE filings (marketdata/provider/nse) share one RequestThrottle; each XBRL document is
+  stored once (NseDocumentStore). A filed figure is used only after FiledStatementChecks.
+- Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md

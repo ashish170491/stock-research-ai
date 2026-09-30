@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <ul>
  *   <li>Runs on weekdays after the market closes and the day's data has settled (18:30 India time by
  *       default, {@code app.screening.snapshot.cron}), and on demand through the admin endpoint.</li>
- *   <li>Throttled: every Yahoo request already goes through {@code YahooRequestThrottle}, and the job
+ *   <li>Throttled: every Yahoo request already goes through the Yahoo {@code RequestThrottle}, and the job
  *       also pauses between companies ({@code pause-between-symbols}).</li>
  *   <li>A company that cannot be captured is recorded as a failure with its reason, and the run goes on.
  *       Only one run happens at a time.</li>
