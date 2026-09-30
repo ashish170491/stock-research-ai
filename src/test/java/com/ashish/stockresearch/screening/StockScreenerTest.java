@@ -134,7 +134,7 @@ class StockScreenerTest {
         assertThat(result.ranked()).isEmpty();
         assertThat(result.notScreened()).extracting(ScreeningResult.NotScreened::symbol)
                 .containsExactly("SBILIFE", "SBIN", "BAJAJFINSV");
-        assertThat(result.notScreened().get(0).reason()).contains("no criteria for INSURANCE");
+        assertThat(result.notScreened().get(0).reason()).contains("define no rules for INSURANCE");
     }
 
     @Test

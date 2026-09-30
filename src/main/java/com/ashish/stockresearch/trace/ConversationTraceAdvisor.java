@@ -24,14 +24,14 @@ import java.util.List;
  * sees a response every tool has already run - the middle of the flow is
  * only visible from the tool-calling manager.
  */
-class ConversationTraceAdvisor implements CallAdvisor {
+public class ConversationTraceAdvisor implements CallAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger("com.ashish.stockresearch.trace.Trace");
     private static final String RULE = "=".repeat(78);
 
     private final TraceProperties properties;
 
-    ConversationTraceAdvisor(TraceProperties properties) {
+    public ConversationTraceAdvisor(TraceProperties properties) {
         this.properties = properties;
     }
 
@@ -50,6 +50,10 @@ class ConversationTraceAdvisor implements CallAdvisor {
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
         if (!properties.enabled()) {
             return chain.nextCall(request);
+        }
+        ConversationTrace outer = TraceContext.current().orElse(null);
+        if (outer != null) {
+            return withinChain(outer, request, chain);
         }
 
         ConversationTrace trace = TraceContext.begin();
@@ -70,6 +74,32 @@ class ConversationTraceAdvisor implements CallAdvisor {
             throw ex;
         } finally {
             TraceContext.end();
+        }
+    }
+
+    /**
+     * A model call made by a chain ({@link ChainTracer}): logged as one call within the chain's trace,
+     * which the chain opened and will close.
+     */
+    private ChatClientResponse withinChain(ConversationTrace trace, ChatClientRequest request, CallAdvisorChain chain) {
+        int call = trace.nextModelCall();
+        long started = System.nanoTime();
+        log.info("[{}]   model call {} > {}", trace.id(), call, userText(request));
+        try {
+            ChatClientResponse response = chain.nextCall(request);
+            ChatResponse chatResponse = response != null ? response.chatResponse() : null;
+            String answer = chatResponse != null && chatResponse.getResult() != null
+                    && chatResponse.getResult().getOutput() != null
+                    ? chatResponse.getResult().getOutput().getText() : null;
+            log.info("[{}]   model call {} < in {}s{} | {}", trace.id(), call,
+                    format((System.nanoTime() - started) / 1_000_000_000.0), tokens(chatResponse),
+                    Payloads.oneLine(answer, properties));
+            log.debug("[{}]   model call {} full answer: {}", trace.id(), call, Payloads.full(answer));
+            return response;
+        } catch (RuntimeException ex) {
+            log.info("[{}]   model call {} FAILED after {}s: {}", trace.id(), call,
+                    format((System.nanoTime() - started) / 1_000_000_000.0), ex.toString());
+            throw ex;
         }
     }
 

@@ -105,6 +105,45 @@ public class NseSymbolDirectory {
         return bestOverlap(tokens(normalised));
     }
 
+    /** Abbreviations a question about metrics or sectors uses that are not companies, even where a symbol matches. */
+    private static final Set<String> NOT_COMPANIES = Set.of("ROE", "ROA", "ROCE", "OCF", "PAT", "EPS", "CAGR", "EBIT",
+            "EBITDA", "NBFC", "NBFCS", "FMCG", "NSE", "BSE", "NIFTY", "IT", "PE", "PB", "DE", "FY", "TTM", "YOY", "INR");
+
+    /**
+     * The first listed company a piece of text names exactly: two to four consecutive words equal to a
+     * company's normalised name ("Reliance Industries"), one capitalised word that is not the first
+     * ("... like Infosys"), or a symbol written in capitals ("TCS"). Never a partial match, so a question
+     * about "IT companies" or "banks" names none.
+     */
+    public Optional<Listing> namedIn(String text) {
+        if (text == null || text.isBlank()) {
+            return Optional.empty();
+        }
+        String[] words = text.strip().split("[^\\p{Alnum}&.'-]+");
+        for (int start = 0; start < words.length; start++) {
+            for (int length = Math.min(4, words.length - start); length >= 1; length--) {
+                String phrase = String.join(" ", Arrays.copyOfRange(words, start, start + length))
+                        .replaceAll("['’]s$", "");
+                if (phrase.isBlank()) {
+                    continue;
+                }
+                if (length >= 2 || (start > 0 && Character.isUpperCase(phrase.charAt(0)))) {
+                    Listing named = byNormalisedName.get(normalise(phrase));
+                    if (named != null) {
+                        return Optional.of(named);
+                    }
+                }
+                String word = phrase.replaceAll("[.'-]+$", "");
+                if (length == 1 && word.length() >= 2 && word.equals(word.toUpperCase(Locale.ROOT))
+                        && word.chars().anyMatch(Character::isLetter) && !NOT_COMPANIES.contains(word)
+                        && bySymbol.containsKey(word)) {
+                    return Optional.of(bySymbol.get(word));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     private Optional<Listing> bestOverlap(Set<String> query) {
         if (query.isEmpty()) {
             return Optional.empty();

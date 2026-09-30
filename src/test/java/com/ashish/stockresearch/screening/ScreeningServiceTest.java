@@ -97,7 +97,7 @@ class ScreeningServiceTest {
                 .contains("- 1 of the 49 have at least one criterion that could not be assessed (INSUFFICIENT_DATA).")
                 .contains("- 1 stocks were not screened")
                 .contains("- ROE: test: DATA_CONFLICT: HDFCBANK")
-                .contains("HDFCLIFE (INSURANCE): the preset defines no criteria for INSURANCE companies");
+                .contains("HDFCLIFE (INSURANCE): the quality-compounder criteria define no rules for INSURANCE companies");
         // Bank rows never show a debt-to-equity or operating-margin result.
         String bankSection = table.substring(table.indexOf("#### BANK"));
         assertThat(bankSection.substring(0, bankSection.indexOf("\n\n", bankSection.indexOf("| Rank"))))

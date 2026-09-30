@@ -5,11 +5,11 @@ import com.ashish.stockresearch.agent.RequestRouter;
 import com.ashish.stockresearch.agent.ResearchSession;
 import com.ashish.stockresearch.agent.ResearchSessions;
 import com.ashish.stockresearch.agent.RoutedRequest;
+import com.ashish.stockresearch.agent.ScreenerAgent;
 import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
-import com.ashish.stockresearch.research.report.NumericClaimVerifier;
-import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
+import com.ashish.stockresearch.research.report.AnswerChecks;
 import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
@@ -84,8 +84,8 @@ public class AiService {
 	private final ChatClient generalClient;
 	private final ResearchReportWriter researchReportWriter;
 	private final StockMarketDataService stockMarketDataService;
-	private final UnsupportedClaimFilter claimFilter;
-	private final NumericClaimVerifier numericVerifier;
+	private final ScreenerAgent screenerAgent;
+	private final AnswerChecks checks;
 	private final OllamaCalls ollama;
 	private final ChatMemory chatMemory;
 	private final ResearchSessions sessions;
@@ -107,8 +107,8 @@ public class AiService {
 			Advisor conversationTraceAdvisor,
 			ResearchReportWriter researchReportWriter,
 			StockMarketDataService stockMarketDataService,
-			UnsupportedClaimFilter claimFilter,
-			NumericClaimVerifier numericVerifier,
+			ScreenerAgent screenerAgent,
+			AnswerChecks checks,
 			OllamaCalls ollama,
 			ChatMemory chatMemory,
 			ResearchSessions sessions) {
@@ -126,8 +126,8 @@ public class AiService {
 		this.router = router;
 		this.researchReportWriter = researchReportWriter;
 		this.stockMarketDataService = stockMarketDataService;
-		this.claimFilter = claimFilter;
-		this.numericVerifier = numericVerifier;
+		this.screenerAgent = screenerAgent;
+		this.checks = checks;
 		this.ollama = ollama;
 		this.chatMemory = chatMemory;
 		this.sessions = sessions;
@@ -140,6 +140,8 @@ public class AiService {
 	 *   <li>QUOTE - the quote service's answer, rendered as text with no model involved;</li>
 	 *   <li>COMPARE - one verified report per company, one after another (no side-by-side
 	 *       analysis yet);</li>
+	 *   <li>SCREEN - {@link ScreenerAgent}'s chain: criteria read from the request and validated in
+	 *       Java, the screen, and a checked summary;</li>
 	 *   <li>SPECIFIC_QUESTION - the model with the research tools, its answer screened against
 	 *       what the tools returned;</li>
 	 *   <li>NOT_STOCK_RELATED - a plain answer without tools.</li>
@@ -170,6 +172,13 @@ public class AiService {
 				answer = companies.stream().map(researchReportWriter::write).collect(Collectors.joining("\n\n---\n\n"));
 				remember(conversationId, message, "[Full research reports on " + String.join(" and ", companies)
 						+ " were shown to the user.]");
+			}
+			case SCREEN -> {
+				ScreenerAgent.ScreenAnswer screen = screenerAgent.answer(message);
+				answer = screen.text();
+				// The table itself stays out of the memory, but follow-up answers may quote it.
+				session.addEvidence(screen.evidence());
+				remember(conversationId, message, screen.memoryNote());
 			}
 			case SPECIFIC_QUESTION -> {
 				if (RequestRouter.needsACompany(message, request, session)) {
@@ -247,21 +256,13 @@ public class AiService {
 		return text.toString();
 	}
 
-	/** Removes statements the tool data does not support, and says what was removed and why. */
+	/**
+	 * Removes statements the tool data does not support, and says what was removed and why:
+	 * {@link AnswerChecks} runs {@link com.ashish.stockresearch.research.report.NumericClaimVerifier},
+	 * {@link com.ashish.stockresearch.research.report.ScreeningCountVerifier} and
+	 * {@link com.ashish.stockresearch.research.report.UnsupportedClaimFilter}.
+	 */
 	private String screened(String answer, String evidence) {
-		NumericClaimVerifier.Result figures = numericVerifier.verify(answer, evidence);
-		UnsupportedClaimFilter.Result claims = claimFilter.filter(figures.text(), evidence);
-		StringBuilder text = new StringBuilder(claims.text());
-		if (!figures.removedStatements().isEmpty()) {
-			text.append("\n\n_Removed %d statement(s) containing figures that do not appear in the data the tools "
-					.formatted(figures.removedStatements().size())
-					+ "returned (the model mistyped, recalculated, converted or invented them): "
-					+ String.join(", ", figures.ungroundedFigures()) + "._");
-		}
-		if (!claims.removedSentences().isEmpty()) {
-			text.append("\n\n_Removed %d statement(s) making claims the data does not support: %s_"
-					.formatted(claims.removedSentences().size(), String.join(" | ", claims.removedSentences())));
-		}
-		return text.toString();
+		return checks.check(answer, evidence).text();
 	}
 }

@@ -4,6 +4,10 @@
   FinancialCalculator and is verified by CalculationVerifier. Pass/fail judgements
   live only in StockScreener, against explicit configured criteria, reading the
   fundamentals snapshot (never a provider). No other code or prompt judges a stock.
+- A screen asked for in words goes through ScreenerAgent: the model only extracts criteria
+  and summarises the result. CriteriaValidator checks every metric, bound and threshold
+  against the user's own words, and the answer shows every assumption.
+- Every model answer about a screen also goes through ScreeningCountVerifier (AnswerChecks).
 - Every number is a FinancialDataPoint with unit, period, source and DataStatus.
   Only VALID values are used; non-VALID never passes a screening rule.
 - Every model answer that states figures goes through NumericClaimVerifier and

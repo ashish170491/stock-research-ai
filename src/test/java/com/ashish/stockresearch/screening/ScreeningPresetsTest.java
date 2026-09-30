@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** The presets exactly as application.yml defines them. */
 public class ScreeningPresetsTest {
 
-    static ScreeningProperties properties() {
+    public static ScreeningProperties properties() {
         try {
             StandardEnvironment environment = new StandardEnvironment();
             for (PropertySource<?> source : new YamlPropertySourceLoader().load("application.yml",

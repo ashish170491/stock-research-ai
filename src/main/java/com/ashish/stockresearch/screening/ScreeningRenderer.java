@@ -96,6 +96,46 @@ public class ScreeningRenderer {
         return md.toString();
     }
 
+    /**
+     * What a summary of the screen is written from: what was screened and with which criteria, the
+     * application's counts, and what was not screened - not the table, so a summary cannot tally or re-rank it.
+     */
+    public String renderSummary(ScreeningOutcome outcome) {
+        if (!outcome.success()) {
+            return render(outcome);
+        }
+        ScreeningResult result = outcome.result();
+        ScreeningCriteria criteria = result.criteria();
+        StringBuilder md = new StringBuilder("Screen: ").append(criteria.name());
+        if (criteria.description() != null && !criteria.description().isBlank()) {
+            md.append(" - ").append(criteria.description().strip());
+        }
+        md.append("\nUniverse: ").append(outcome.universe().displayName()).append(", snapshot of ")
+                .append(outcome.run().snapshotDate()).append(" (figures from that snapshot, not live).\n");
+        if (!criteria.industryGroups().isEmpty()) {
+            md.append("Industry groups: ").append(criteria.industryGroups()).append(".\n");
+        }
+        Map<String, List<StockScreening>> sections = new LinkedHashMap<>();
+        result.ranked().forEach(stock -> sections.computeIfAbsent(section(criteria, stock.industryGroup()),
+                key -> new ArrayList<>()).add(stock));
+        sections.forEach((title, stocks) -> md.append("Criteria for ").append(title).append(" (")
+                .append(stocks.size()).append(" stocks): ").append(String.join("; ", stocks.get(0).results().stream()
+                        .map(r -> r.rule().describe()).toList())).append(".\n"));
+        summary(md, result);
+        if (!result.notScreened().isEmpty()) {
+            md.append("\n#### Not screened\n");
+            result.notScreened().forEach(stock -> md.append("- ").append(stock.symbol()).append(" (")
+                    .append(stock.industryGroup()).append("): ").append(stock.reason()).append('\n'));
+        }
+        return md.toString();
+    }
+
+    /** A rendered screen as a person reads it: without the lines addressed to the model. */
+    public static String forReaders(String rendered) {
+        return rendered.replaceFirst("^TOOL RESULT: screenStocks - status \\w+\\n", "")
+                .replace(" Quote results and figures as given; do not recalculate them or apply other thresholds.", "");
+    }
+
     /** Counted here, so an answer can quote the counts instead of tallying the table itself. */
     private static void summary(StringBuilder md, ScreeningResult result) {
         List<StockScreening> all = result.ranked().stream().filter(StockScreening::meetsAll).toList();

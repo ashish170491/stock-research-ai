@@ -8,9 +8,9 @@ package com.ashish.stockresearch.service;
  * The examples deliberately contain no numbers - a small model will quote an
  * example figure as if it were data.
  */
-final class ResearchInstructions {
+public final class ResearchInstructions {
 
-	static final String EVIDENCE_RULES = """
+	public static final String EVIDENCE_RULES = """
 			EVIDENCE RULES
 
 			1. FACT, OBSERVATION, INTERPRETATION

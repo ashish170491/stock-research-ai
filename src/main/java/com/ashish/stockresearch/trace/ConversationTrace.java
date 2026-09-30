@@ -17,6 +17,7 @@ final class ConversationTrace {
     private final long startedAtNanos;
     private final AtomicInteger modelRounds = new AtomicInteger();
     private final AtomicInteger toolCalls = new AtomicInteger();
+    private final AtomicInteger modelCalls = new AtomicInteger();
 
     ConversationTrace(String id) {
         this.id = id;
@@ -35,6 +36,15 @@ final class ConversationTrace {
         // The model is consulted once more than it requests tools: the last
         // round is the one that produces the answer instead of a tool call.
         return modelRounds.get() + 1;
+    }
+
+    /** A model call made inside a chain's trace; numbered from 1. */
+    int nextModelCall() {
+        return modelCalls.incrementAndGet();
+    }
+
+    int modelCalls() {
+        return modelCalls.get();
     }
 
     void countToolCalls(int count) {

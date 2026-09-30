@@ -2,6 +2,8 @@ package com.ashish.stockresearch.screening;
 
 import com.ashish.stockresearch.research.model.Unit;
 
+import java.math.BigDecimal;
+
 /**
  * The metrics a screening rule may test - a fixed list, never a free string, so a rule can only name a
  * metric the snapshot actually records and the application calculates or checks.
@@ -10,45 +12,75 @@ import com.ashish.stockresearch.research.model.Unit;
  * or cash-conversion span is at most three years. A five-year rule would be INSUFFICIENT_DATA for
  * every stock, so none is offered.
  *
+ * <p>The list is also the whitelist a request in words is checked against (roadmap Step 4): a metric
+ * not named here cannot be screened on, and each metric states the range of thresholds that make sense
+ * for it.
+ *
  * @param sectorKey the application's metric name, used to check it against each industry group's
  *                  non-primary metrics ({@code IndustryGroup#isNonPrimary})
  */
 public enum ScreeningMetric {
 
     ROE_3Y_AVG_PERCENT("ROE 3y avg", "return on equity, average of the last 3 fiscal years", Unit.PERCENT,
-            "returnOnEquityPercent"),
-    ROE_PERCENT("ROE", "return on equity, latest fiscal year", Unit.PERCENT, "returnOnEquityPercent"),
-    ROA_PERCENT("ROA", "return on assets, latest fiscal year", Unit.PERCENT, "returnOnAssetsPercent"),
+            "returnOnEquityPercent", "-100", "100"),
+    ROE_PERCENT("ROE", "return on equity, latest fiscal year", Unit.PERCENT, "returnOnEquityPercent", "-100", "100"),
+    ROA_PERCENT("ROA", "return on assets, latest fiscal year", Unit.PERCENT, "returnOnAssetsPercent", "-50", "50"),
     ROCE_PERCENT("ROCE", "return on capital employed, latest fiscal year", Unit.PERCENT,
-            "returnOnCapitalEmployedPercent"),
+            "returnOnCapitalEmployedPercent", "-100", "100"),
     OPERATING_MARGIN_PERCENT("Operating margin", "operating margin, latest fiscal year", Unit.PERCENT,
-            "operatingMarginPercent"),
-    DEBT_TO_EQUITY_MULTIPLE("D/E", "debt-to-equity, latest fiscal year end", Unit.MULTIPLE, "debtToEquityMultiple"),
+            "operatingMarginPercent", "-100", "100"),
+    DEBT_TO_EQUITY_MULTIPLE("D/E", "debt-to-equity, latest fiscal year end", Unit.MULTIPLE, "debtToEquityMultiple",
+            "0", "10"),
     REVENUE_CAGR_3Y_PERCENT("Revenue CAGR 3y", "revenue CAGR over the last 3 fiscal years", Unit.PERCENT,
-            "revenueCagrPercent"),
+            "revenueCagrPercent", "-50", "100"),
     NET_PROFIT_CAGR_3Y_PERCENT("Profit CAGR 3y", "net profit CAGR over the last 3 fiscal years", Unit.PERCENT,
-            "netProfitCagrPercent"),
+            "netProfitCagrPercent", "-50", "100"),
     OCF_TO_PAT_3Y_MULTIPLE("OCF/PAT 3y", "operating cash flow to net profit over the last 3 fiscal years",
-            Unit.MULTIPLE, "ocfToPat3yMultiple"),
+            Unit.MULTIPLE, "ocfToPat3yMultiple", "-5", "5"),
     DIVIDENDS_TO_OCF_PERCENT("Dividends/OCF", "dividends paid as a share of operating cash flow, latest fiscal year",
-            Unit.PERCENT, "dividendsToOcfPercent"),
-    TRAILING_PE_MULTIPLE("P/E", "trailing P/E at the snapshot's share price", Unit.MULTIPLE, "trailingPe"),
-    PRICE_TO_BOOK_MULTIPLE("P/B", "price-to-book at the snapshot's share price", Unit.MULTIPLE, "priceToBook"),
+            Unit.PERCENT, "dividendsToOcfPercent", "0", "200"),
+    TRAILING_PE_MULTIPLE("P/E", "trailing P/E at the snapshot's share price", Unit.MULTIPLE, "trailingPe",
+            "0", "200"),
+    PRICE_TO_BOOK_MULTIPLE("P/B", "price-to-book at the snapshot's share price", Unit.MULTIPLE, "priceToBook",
+            "0", "50"),
     EARNINGS_YIELD_PERCENT("Earnings yield", "earnings yield (100 / trailing P/E) at the snapshot's share price",
-            Unit.PERCENT, "earningsYieldPercent"),
+            Unit.PERCENT, "earningsYieldPercent", "0", "50"),
     DIVIDEND_YIELD_PERCENT("Dividend yield", "dividend yield at the snapshot's share price", Unit.PERCENT,
-            "dividendYieldPercent");
+            "dividendYieldPercent", "0", "20");
 
     private final String shortLabel;
     private final String description;
     private final Unit unit;
     private final String sectorKey;
+    private final BigDecimal lowestThreshold;
+    private final BigDecimal highestThreshold;
 
-    ScreeningMetric(String shortLabel, String description, Unit unit, String sectorKey) {
+    ScreeningMetric(String shortLabel, String description, Unit unit, String sectorKey, String lowestThreshold,
+                    String highestThreshold) {
         this.shortLabel = shortLabel;
         this.description = description;
         this.unit = unit;
         this.sectorKey = sectorKey;
+        this.lowestThreshold = new BigDecimal(lowestThreshold);
+        this.highestThreshold = new BigDecimal(highestThreshold);
+    }
+
+    /**
+     * The lowest threshold a rule on this metric may use, in the metric's unit. Outside these bounds a
+     * threshold is almost certainly a misreading - 50 for a D/E multiple meant as 50%, 0.18 for an 18% ROE -
+     * so a requested criterion outside them is rejected, never clamped or converted.
+     */
+    public BigDecimal lowestThreshold() {
+        return lowestThreshold;
+    }
+
+    /** The highest threshold a rule on this metric may use; see {@link #lowestThreshold()}. */
+    public BigDecimal highestThreshold() {
+        return highestThreshold;
+    }
+
+    public boolean withinBounds(BigDecimal threshold) {
+        return threshold.compareTo(lowestThreshold) >= 0 && threshold.compareTo(highestThreshold) <= 0;
     }
 
     public String shortLabel() {
