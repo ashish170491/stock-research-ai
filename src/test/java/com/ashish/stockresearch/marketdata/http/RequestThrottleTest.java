@@ -1,4 +1,4 @@
-package com.ashish.stockresearch.marketdata.provider.yahoo;
+package com.ashish.stockresearch.marketdata.http;
 
 import org.junit.jupiter.api.Test;
 
@@ -9,18 +9,18 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class YahooRequestThrottleTest {
+class RequestThrottleTest {
 
     private final AtomicLong now = new AtomicLong(0);
     private final List<Duration> waits = new ArrayList<>();
 
-    private YahooRequestThrottle throttle(double requestsPerSecond) {
-        return new YahooRequestThrottle(requestsPerSecond, now::get, waits::add);
+    private RequestThrottle throttle(double requestsPerSecond) {
+        return new RequestThrottle("Yahoo Finance", requestsPerSecond, now::get, waits::add);
     }
 
     @Test
     void spacesBackToBackRequestsHalfASecondApartAtTwoPerSecond() throws Exception {
-        YahooRequestThrottle throttle = throttle(2);
+        RequestThrottle throttle = throttle(2);
 
         throttle.acquire();
         throttle.acquire();
@@ -31,7 +31,7 @@ class YahooRequestThrottleTest {
 
     @Test
     void doesNotWaitWhenTheRequestsAreAlreadyFarEnoughApart() throws Exception {
-        YahooRequestThrottle throttle = throttle(2);
+        RequestThrottle throttle = throttle(2);
 
         throttle.acquire();
         now.addAndGet(Duration.ofMillis(700).toNanos());
@@ -42,7 +42,7 @@ class YahooRequestThrottleTest {
 
     @Test
     void onlyWaitsForTheRemainderOfTheInterval() throws Exception {
-        YahooRequestThrottle throttle = throttle(2);
+        RequestThrottle throttle = throttle(2);
 
         throttle.acquire();
         now.addAndGet(Duration.ofMillis(200).toNanos());
@@ -53,7 +53,7 @@ class YahooRequestThrottleTest {
 
     @Test
     void neverWaitsWhenTurnedOff() throws Exception {
-        YahooRequestThrottle throttle = throttle(0);
+        RequestThrottle throttle = throttle(0);
 
         throttle.acquire();
         throttle.acquire();

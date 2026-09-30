@@ -133,6 +133,16 @@ public record FinancialDataPoint(
     }
 
     /**
+     * A figure the source stated but that cannot be used: it failed a consistency check, or the source
+     * states it more than once with different values. The reason names the rejected figures; no value is kept.
+     */
+    public static FinancialDataPoint rejected(String metric, Unit unit, ReportingPeriod period, SourceInfo source,
+                                              String reason) {
+        return new FinancialDataPoint(metric, null, unit, DataStatus.INVALID.name(), null, null, null, period, source,
+                DataStatus.INVALID, reason, CalculationStatus.REPORTED, null, null, null, null);
+    }
+
+    /**
      * The provider sent a number, but what it means could not be established.
      * The raw value is kept for traceability only.
      */
