@@ -103,8 +103,10 @@ app:
     # unit (15 = 15%, 0.5 = 0.5x). "default" applies to every non-financial industry group; banks,
     # NBFCs and insurers are screened only by rules of their own. A rule on a metric that is not
     # primary for its group (a bank's debt-to-equity) stops the application at startup.
-    # Growth and cash-conversion spans are 3 fiscal years: Yahoo Finance supplies four years of
-    # statements, so 5-year rules could never be assessed.
+    # Growth is over 5 fiscal years: the company's filings supply six, so a 5-year growth rate has both
+    # its ends. Average ROE and cash conversion stay over 3, which every year of the span must support.
+    # A company whose six years cannot all be read is INSUFFICIENT_DATA on a 5-year rule, never assessed
+    # over fewer years.
     presets:
       quality-compounder:
         description: "Consistently high returns on capital with growth, cash conversion and low debt."
@@ -113,8 +115,8 @@ app:
           default:
             - { metric: ROE_3Y_AVG_PERCENT, operator: AT_LEAST, threshold: 15 }
             - { metric: ROCE_PERCENT, operator: AT_LEAST, threshold: 15 }
-            - { metric: REVENUE_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
-            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: REVENUE_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
             - { metric: OCF_TO_PAT_3Y_MULTIPLE, operator: AT_LEAST, threshold: 0.8 }
             - { metric: DEBT_TO_EQUITY_MULTIPLE, operator: AT_MOST, threshold: 0.5 }
           BANK:
@@ -131,8 +133,8 @@ app:
           default:
             - { metric: ROE_3Y_AVG_PERCENT, operator: AT_LEAST, threshold: 15 }
             - { metric: ROCE_PERCENT, operator: AT_LEAST, threshold: 15 }
-            - { metric: REVENUE_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
-            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: REVENUE_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
             - { metric: OCF_TO_PAT_3Y_MULTIPLE, operator: AT_LEAST, threshold: 0.8 }
             - { metric: DEBT_TO_EQUITY_MULTIPLE, operator: AT_MOST, threshold: 0.5 }
             # 4% earnings yield = a trailing P/E of 25
@@ -152,14 +154,14 @@ app:
           default:
             - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
             - { metric: DIVIDENDS_TO_OCF_PERCENT, operator: AT_MOST, threshold: 100 }
-            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: ABOVE, threshold: 0 }
           # A lender's operating cash flow is not a measure of what it can pay out, so no payout rule.
           BANK:
             - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
-            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: ABOVE, threshold: 0 }
           NBFC:
             - { metric: DIVIDEND_YIELD_PERCENT, operator: AT_LEAST, threshold: 2 }
-            - { metric: NET_PROFIT_CAGR_3Y_PERCENT, operator: ABOVE, threshold: 0 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: ABOVE, threshold: 0 }
     # A screening request in words ("profitable IT companies with low debt") may name a quality without a
     # number. Each phrase here is read as the named preset's own rule on each metric, so "low debt" means
     # whatever D/E threshold quality-compounder uses. Every reading is shown to the user with the answer.
@@ -176,7 +178,7 @@ app:
         metrics: [ROCE_PERCENT]
       - phrases: ["growing", "high growth", "high-growth", "fast growing", "fast-growing", "growth stocks", "growth companies"]
         preset: quality-compounder
-        metrics: [REVENUE_CAGR_3Y_PERCENT, NET_PROFIT_CAGR_3Y_PERCENT]
+        metrics: [REVENUE_CAGR_5Y_PERCENT, NET_PROFIT_CAGR_5Y_PERCENT]
       - phrases: ["good cash conversion", "cash generative", "cash-generative", "strong cash flow", "strong cash flows"]
         preset: quality-compounder
         metrics: [OCF_TO_PAT_3Y_MULTIPLE]

@@ -13,9 +13,9 @@ import static com.ashish.stockresearch.screening.ScreeningFixtures.DATE;
 import static com.ashish.stockresearch.screening.ScreeningFixtures.stock;
 import static com.ashish.stockresearch.screening.ScreeningFixtures.withStatus;
 import static com.ashish.stockresearch.screening.ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE;
-import static com.ashish.stockresearch.screening.ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT;
+import static com.ashish.stockresearch.screening.ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE;
-import static com.ashish.stockresearch.screening.ScreeningMetric.REVENUE_CAGR_3Y_PERCENT;
+import static com.ashish.stockresearch.screening.ScreeningMetric.REVENUE_CAGR_5Y_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.ROA_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.ROCE_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.ROE_3Y_AVG_PERCENT;
@@ -41,7 +41,7 @@ class ScreeningServiceTest {
 
     private static FundamentalsSnapshot quality(String symbol, String roe) {
         return stock(symbol, IndustryGroup.IT_SERVICES).with(ROE_3Y_AVG_PERCENT, roe).with(ROE_PERCENT, roe)
-                .with(ROCE_PERCENT, "25").with(REVENUE_CAGR_3Y_PERCENT, "12").with(NET_PROFIT_CAGR_3Y_PERCENT, "11")
+                .with(ROCE_PERCENT, "25").with(REVENUE_CAGR_5Y_PERCENT, "12").with(NET_PROFIT_CAGR_5Y_PERCENT, "11")
                 .with(OCF_TO_PAT_3Y_MULTIPLE, "1.1").with(DEBT_TO_EQUITY_MULTIPLE, "0.1").build();
     }
 
@@ -153,8 +153,8 @@ class ScreeningServiceTest {
         SnapshotRun run = repository.startRun(Universe.NIFTY50, DATE, NOW, 3);
         repository.save(run.id(), quality("TCS", "40"));
         repository.save(run.id(), stock("INFY", IndustryGroup.IT_SERVICES).with(ROE_3Y_AVG_PERCENT, "30")
-                .with(ROCE_PERCENT, "39").with(withStatus(REVENUE_CAGR_3Y_PERCENT, DataStatus.DATA_CONFLICT, null))
-                .with(NET_PROFIT_CAGR_3Y_PERCENT, "5").with(OCF_TO_PAT_3Y_MULTIPLE, "1.0")
+                .with(ROCE_PERCENT, "39").with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.DATA_CONFLICT, null))
+                .with(NET_PROFIT_CAGR_5Y_PERCENT, "5").with(OCF_TO_PAT_3Y_MULTIPLE, "1.0")
                 .with(DEBT_TO_EQUITY_MULTIPLE, "0.1").with(ROE_PERCENT, "30").build());
         repository.save(run.id(), stock("SBIN", IndustryGroup.BANK).with(ROA_PERCENT, "1.07").with(ROE_PERCENT, "15.38")
                 .build());
@@ -166,7 +166,7 @@ class ScreeningServiceTest {
                         + "TCS (IT_SERVICES), SBIN (BANK).")
                 .contains("- 1 of the 3 have at least one criterion that could not be assessed")
                 // INFY's row names its failed and its unassessed criteria separately
-                .contains("| Profit CAGR 3y | Revenue CAGR 3y (DATA_CONFLICT) |");
+                .contains("| Profit CAGR 5y | Revenue CAGR 5y (DATA_CONFLICT) |");
     }
 
     // The web page's JSON carries the same decisions as the tool's table.
@@ -191,6 +191,8 @@ class ScreeningServiceTest {
         assertThat(hdfc.cells().get(1).status()).isEqualTo("DATA_CONFLICT");
         assertThat(hdfc.cells().get(1).reason()).isEqualTo("test: DATA_CONFLICT");
         assertThat(hdfc.cells().get(0).reason()).isNull();
+        // a passing, checked value is VALID, not "not cross-checked"
+        assertThat(hdfc.cells().get(0).status()).isEqualTo("VALID");
         // every stock meeting every criterion is in the summary, and only those
         assertThat(view.summary().meetEveryCriterion()).extracting(ScreeningView.Stock::symbol)
                 .containsExactlyInAnyOrderElementsOf(view.sections().stream().flatMap(s -> s.rows().stream())

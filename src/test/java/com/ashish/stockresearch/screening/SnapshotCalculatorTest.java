@@ -38,7 +38,7 @@ class SnapshotCalculatorTest {
     void calculatesCagrOverExactlyTheLastThreeFiscalYearsEvenWhenMoreAreAvailable() {
         List<AnnualFinancials> annual = fiveYears();
 
-        FinancialDataPoint cagr = SnapshotCalculator.cagr3y(annual, AnnualFinancials::revenue, "revenue",
+        FinancialDataPoint cagr = SnapshotCalculator.cagr(annual, 3, AnnualFinancials::revenue, "revenue",
                 "revenueCagr3yPercent", sources(annual));
 
         // FY23 100000 -> FY26 133100 is exactly 10% a year; FY22 is not part of the span.
@@ -53,7 +53,7 @@ class SnapshotCalculatorTest {
     void givesNoCagrFromFewerThanFourFiscalYears() {
         List<AnnualFinancials> annual = fiveYears().subList(2, 5);
 
-        FinancialDataPoint cagr = SnapshotCalculator.cagr3y(annual, AnnualFinancials::revenue, "revenue", "x",
+        FinancialDataPoint cagr = SnapshotCalculator.cagr(annual, 3, AnnualFinancials::revenue, "revenue", "x",
                 sources(annual));
 
         assertThat(cagr.status()).isEqualTo(DataStatus.UNAVAILABLE);
@@ -66,7 +66,7 @@ class SnapshotCalculatorTest {
         List<AnnualFinancials> annual = new ArrayList<>(fiveYears());
         annual.remove(2); // FY24
 
-        FinancialDataPoint cagr = SnapshotCalculator.cagr3y(annual, AnnualFinancials::revenue, "revenue", "x",
+        FinancialDataPoint cagr = SnapshotCalculator.cagr(annual, 3, AnnualFinancials::revenue, "revenue", "x",
                 sources(annual));
 
         assertThat(cagr.status()).isEqualTo(DataStatus.UNAVAILABLE);
@@ -80,7 +80,7 @@ class SnapshotCalculatorTest {
         annual.set(2, fy24.map(point -> point.metric().equals("annualRevenue") ? point.inConflict("feeds disagree")
                 : point));
 
-        FinancialDataPoint cagr = SnapshotCalculator.cagr3y(annual, AnnualFinancials::revenue, "revenue", "x",
+        FinancialDataPoint cagr = SnapshotCalculator.cagr(annual, 3, AnnualFinancials::revenue, "revenue", "x",
                 sources(annual));
 
         assertThat(cagr.status()).isEqualTo(DataStatus.DATA_CONFLICT);
@@ -94,7 +94,7 @@ class SnapshotCalculatorTest {
                 ResearchFixtures.consistentReported().headline(), List.of(), annual,
                 ResearchFixtures.consistentReported().latestReportedQuarter())).calculated().annual();
 
-        FinancialDataPoint mean = SnapshotCalculator.roe3yAverage(ratios, sources(annual));
+        FinancialDataPoint mean = SnapshotCalculator.roeAverage(ratios, 3, sources(annual));
 
         List<FinancialDataPoint> lastThree = ratios.subList(2, 5).stream().map(AnnualRatios::returnOnEquityPercent).toList();
         BigDecimal expected = lastThree.stream().map(FinancialDataPoint::value).reduce(BigDecimal.ZERO, BigDecimal::add)
@@ -118,10 +118,69 @@ class SnapshotCalculatorTest {
         ratios.set(3, fy25.map(point -> point.metric().equals("returnOnEquityPercent")
                 ? point.invalid("failed verification") : point));
 
-        FinancialDataPoint mean = SnapshotCalculator.roe3yAverage(ratios, sources(annual));
+        FinancialDataPoint mean = SnapshotCalculator.roeAverage(ratios, 3, sources(annual));
 
         assertThat(mean.status()).isEqualTo(DataStatus.INVALID);
         assertThat(mean.value()).isNull();
+    }
+
+    /** Six fiscal years, as the filings supply them: FY21 to FY26, revenue growing 10% a year from FY21. */
+    private static List<AnnualFinancials> sixYears() {
+        List<AnnualFinancials> annual = new ArrayList<>(List.of(year(2021, "82645", "7000", "35000", "85000")));
+        annual.addAll(List.of(year(2022, "90910", "8000", "40000", "90000"), year(2023, "100000", "10000", "50000",
+                "100000"), year(2024, "110000", "12000", "55000", "110000"), year(2025, "121000", "13000", "60000",
+                "120000"), year(2026, "133100", "14641", "65000", "130000")));
+        return annual;
+    }
+
+    private static List<AnnualRatios> ratios(List<AnnualFinancials> annual) {
+        return new FinancialMetricsService().summarize(ResearchFixtures.reported(
+                ResearchFixtures.consistentReported().headline(), List.of(), annual,
+                ResearchFixtures.consistentReported().latestReportedQuarter())).calculated().annual();
+    }
+
+    @Test
+    void calculatesAFiveYearCagrFromSixFiscalYears() {
+        List<AnnualFinancials> annual = sixYears();
+
+        FinancialDataPoint cagr = SnapshotCalculator.cagr(annual, 5, AnnualFinancials::revenue, "revenue",
+                "revenueCagr5yPercent", sources(annual));
+
+        // FY21 82,645 -> FY26 1,33,100: (133100 / 82645)^(1/5) - 1 = 10.00%
+        assertThat(cagr.status()).isEqualTo(DataStatus.VALID);
+        assertThat(cagr.value()).isEqualByComparingTo("10.00");
+        assertThat(cagr.period().label()).isEqualTo("FY21 to FY26 (5 years)");
+        assertThat(cagr.calculation()).isEqualTo("((FY26 revenue / FY21 revenue)^(1/5) - 1) x 100");
+        assertThat(CalculationVerifier.problem(cagr, sources(annual))).isEmpty();
+    }
+
+    @Test
+    void neverMeasuresAFiveYearCagrOverFewerYears() {
+        List<AnnualFinancials> annual = fiveYears();
+
+        FinancialDataPoint cagr = SnapshotCalculator.cagr(annual, 5, AnnualFinancials::revenue, "revenue", "x",
+                sources(annual));
+
+        assertThat(cagr.status()).isEqualTo(DataStatus.UNAVAILABLE);
+        assertThat(cagr.statusReason()).isEqualTo("a 5-year revenue CAGR needs 6 fiscal years; 5 available");
+    }
+
+    @Test
+    void averagesFiveYearsOfRoeOnlyWhenEveryYearIsOnAverageEquity() {
+        List<AnnualFinancials> six = sixYears();
+        FinancialDataPoint mean = SnapshotCalculator.roeAverage(ratios(six), 5, sources(six));
+
+        assertThat(mean.status()).isEqualTo(DataStatus.VALID);
+        assertThat(mean.inputs()).hasSize(5);
+        assertThat(mean.period().label()).isEqualTo("FY22 to FY26 (5 years)");
+        assertThat(CalculationVerifier.problem(mean, sources(six))).isEmpty();
+
+        // with five years, the first has no opening balance sheet: its ROE is on closing equity
+        List<AnnualFinancials> five = fiveYears();
+        FinancialDataPoint mixed = SnapshotCalculator.roeAverage(ratios(five), 5, sources(five));
+        assertThat(mixed.status()).isEqualTo(DataStatus.UNAVAILABLE);
+        assertThat(mixed.statusReason()).isEqualTo("FY22 return on equity is on closing equity (no prior-year balance "
+                + "sheet), so the 5 years are not on one basis");
     }
 
     @Test

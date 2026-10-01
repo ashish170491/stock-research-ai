@@ -670,7 +670,7 @@
       '✓ Meets / ✗ Does not meet: decided by the application from a figure that passed every consistency check.',
       '? Cannot assess: the figure is missing, disputed between data feeds, failed a check, or could not be cross-checked. It never counts as met.',
       'Ranking: ' + view.ranking,
-      'Growth and cash-flow criteria cover the last 3 fiscal years, because Yahoo Finance supplies 4 years of statements.'
+      'Each criterion covers exactly the fiscal years its name says (3y or 5y). A company without every year of the span is ? Cannot assess, never measured over fewer years.'
     ].forEach(t => how.append(el('p', null, t)));
     out.append(how);
 

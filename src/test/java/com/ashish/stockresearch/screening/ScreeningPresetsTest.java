@@ -52,6 +52,7 @@ public class ScreeningPresetsTest {
                 assertThat(rules).as("%s / %s", name, group).extracting(Rule::metric)
                         .doesNotContain(ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE, ScreeningMetric.OPERATING_MARGIN_PERCENT,
                                 ScreeningMetric.ROCE_PERCENT, ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE,
+                                ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE,
                                 ScreeningMetric.DIVIDENDS_TO_OCF_PERCENT);
                 assertThat(rules).isNotEqualTo(criteria.nonFinancialRules());
             }
@@ -61,11 +62,11 @@ public class ScreeningPresetsTest {
     }
 
     @Test
-    void qualityCompounderHasTheRoadmapRulesOverThreeYearSpans() {
+    void qualityCompounderHasTheRoadmapRulesWithFiveYearGrowth() {
         ScreeningCriteria quality = presets().find("quality-compounder").orElseThrow();
 
         assertThat(quality.rulesFor(IndustryGroup.IT_SERVICES).orElseThrow()).extracting(Rule::label).containsExactly(
-                "ROE 3y avg ≥ 15.00%", "ROCE ≥ 15.00%", "Revenue CAGR 3y ≥ 10.00%", "Profit CAGR 3y ≥ 10.00%",
+                "ROE 3y avg ≥ 15.00%", "ROCE ≥ 15.00%", "Revenue CAGR 5y ≥ 10.00%", "Profit CAGR 5y ≥ 10.00%",
                 "OCF/PAT 3y ≥ 0.80x", "D/E ≤ 0.50x");
         assertThat(quality.rulesFor(IndustryGroup.BANK).orElseThrow()).extracting(Rule::label)
                 .containsExactly("ROA ≥ 1.00%", "ROE ≥ 14.00%");

@@ -18,9 +18,9 @@ import static com.ashish.stockresearch.screening.ScreeningFixtures.DATE;
 import static com.ashish.stockresearch.screening.ScreeningFixtures.stock;
 import static com.ashish.stockresearch.screening.ScreeningFixtures.withStatus;
 import static com.ashish.stockresearch.screening.ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE;
-import static com.ashish.stockresearch.screening.ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT;
+import static com.ashish.stockresearch.screening.ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE;
-import static com.ashish.stockresearch.screening.ScreeningMetric.REVENUE_CAGR_3Y_PERCENT;
+import static com.ashish.stockresearch.screening.ScreeningMetric.REVENUE_CAGR_5Y_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.ROA_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.ROCE_PERCENT;
 import static com.ashish.stockresearch.screening.ScreeningMetric.ROE_3Y_AVG_PERCENT;
@@ -36,11 +36,11 @@ class ScreeningCountVerifierTest {
     static String screen() {
         List<FundamentalsSnapshot> snapshots = List.of(
                 stock("TCS", IndustryGroup.IT_SERVICES).with(ROE_3Y_AVG_PERCENT, "40").with(ROE_PERCENT, "40")
-                        .with(ROCE_PERCENT, "50").with(REVENUE_CAGR_3Y_PERCENT, "12").with(NET_PROFIT_CAGR_3Y_PERCENT, "11")
+                        .with(ROCE_PERCENT, "50").with(REVENUE_CAGR_5Y_PERCENT, "12").with(NET_PROFIT_CAGR_5Y_PERCENT, "11")
                         .with(OCF_TO_PAT_3Y_MULTIPLE, "1.1").with(DEBT_TO_EQUITY_MULTIPLE, "0.1").build(),
                 stock("INFY", IndustryGroup.IT_SERVICES).with(ROE_3Y_AVG_PERCENT, "30").with(ROE_PERCENT, "30")
-                        .with(ROCE_PERCENT, "39").with(withStatus(REVENUE_CAGR_3Y_PERCENT, DataStatus.DATA_CONFLICT, null))
-                        .with(NET_PROFIT_CAGR_3Y_PERCENT, "5").with(OCF_TO_PAT_3Y_MULTIPLE, "1.0")
+                        .with(ROCE_PERCENT, "39").with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.DATA_CONFLICT, null))
+                        .with(NET_PROFIT_CAGR_5Y_PERCENT, "5").with(OCF_TO_PAT_3Y_MULTIPLE, "1.0")
                         .with(DEBT_TO_EQUITY_MULTIPLE, "0.1").build(),
                 stock("SBIN", IndustryGroup.BANK).with(ROA_PERCENT, "1.07").with(ROE_PERCENT, "15.38").build(),
                 stock("HDFCLIFE", IndustryGroup.INSURANCE).with(ROE_PERCENT, "12").build());
