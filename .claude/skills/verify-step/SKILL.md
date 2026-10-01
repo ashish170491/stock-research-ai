@@ -1,7 +1,7 @@
 ---
 name: verify-step
 description: Verify that a step of docs/AGENT_ROADMAP.md is correctly implemented, using the roadmap-verifier subagent against docs/specs. Use when the user says "verify step N", "check step N", or asks whether a roadmap phase is done.
-argument-hint: "[step-number 0-10 | invariants]"
+argument-hint: "[step-number 0-13 | invariants]"
 arguments: [step]
 context: fork
 agent: roadmap-verifier

@@ -266,6 +266,8 @@ NumericClaimVerifier. Log each chain stage in the conversation trace.
 
 **Build:**
 - `ComparisonBuilder` (Java) puts two to five companies side by side on the same metrics and periods. It must refuse to compare figures from different periods or currencies. The LLM writes the narrative from that table only. This replaces the current COMPARE behaviour.
+- The comparison's rows are grouped by the Step 11 questions, each with the glossary's line on how to read
+  it, and each company's figure sits beside its industry group's median from Step 13.
 - `ShortlistDeepDive`: for the top N screener results, fetch data in parallel on virtual threads. Run the LLM interpretation calls **one after another** unless you raise `OLLAMA_NUM_PARALLEL`. On a MacBook Air, sequential is realistic.
 
 **Claude Code prompt:**
@@ -343,6 +345,70 @@ Add `spring-ai-starter-mcp-server-webmvc` and register your tool beans with a `M
 - **Golden set:** 20 to 30 questions with expected tool calls and the facts each answer must contain. Run it as a slow test profile (`@Tag("llm")`) against the real model. You already have the fixtures pattern for this.
 - Spring AI evaluators (`RelevancyEvaluator`, `FactCheckingEvaluator`) for automated grading.
 - Micrometer observations (`spring.ai.chat.observations.*`) exported to Prometheus/Grafana or Zipkin. Track latency and tokens per step, which will matter from Step 8 on.
+
+---
+
+### Steps 11 to 13: Helping a new investor read the numbers
+
+A new investor sees ROE, ROCE and CAGR in every answer without knowing what they measure or what a usual
+value looks like. The application must not answer that with "ideal" values: there is no reliable source
+for them, they shift with the cycle and within a sector, and a table of good and bad values would be a
+judgement hidden outside StockScreener. Instead each number gets three kinds of context, all fixed text
+or calculated and verified like every other figure:
+
+1. **What it measures**: a glossary written once in Java and reviewed by a person (Step 11).
+2. **Is it usual for this company?**: its own filed years (the six years from the NSE filings).
+3. **Is it usual for this kind of company?**: the same metric across companies in its industry group in
+   the latest snapshot (Step 13), which needs a universe wider than the Nifty 50 (Step 12).
+
+Do them in order 11, 12, 13, and before Step 5, whose comparison uses all three.
+
+#### Step 11: Glossary and question-based grouping (1 evening)
+
+**Build:**
+- `MetricGlossary`: one entry per metric the application shows - every `ScreeningMetric` and every
+  metric in the research report. Each entry states what the metric measures in plain words, how this
+  application calculates it (its real inputs and source), how to read it (what raises or lowers it, what
+  distorts it), what to read it with, and the sector notes, which come from `IndustryGroup` rather than
+  being written again.
+- No entry gives a benchmark, an ideal value, or calls a value good, bad, strong or weak. Where a preset
+  uses a threshold, the entry shows it as that screen's setting, read from `ScreeningPresets`.
+- Metrics are grouped under five questions: Is it profitable? Is it growing? Are the profits real cash?
+  Is it financially stretched? How much does the market charge for it? Reports and screens use these
+  groups.
+- An "Explain the terms" section, rendered by Java after the verifiers, lists the entries for the terms
+  in that answer only. "What is ROCE?" is answered with the entry itself; no model call writes a
+  definition.
+
+#### Step 12: A wider universe (1 to 2 evenings)
+
+**Build:** a Nifty 500 universe, screened and snapshotted like the Nifty 50, within the Yahoo and NSE
+throttles. Filings already stored are not fetched again. Requests in words may name it; the default stays
+the Nifty 50.
+
+#### Step 13: Context beside each ratio (2 evenings)
+
+**Build:**
+- `PeerContext`: for a metric and an industry group in the latest snapshot - the number of peers with a
+  usable value, their median and range, and the company's rank - calculated by `FinancialCalculator` and
+  verified, with the snapshot date and the peers listed. Too few peers (configurable, default 5) gives
+  UNAVAILABLE with the count, never a statistic of two companies. A metric that is not primary for the
+  group (a bank's ROCE) has none.
+- Own history: the company's value for each filed year, its range, and where the latest year sits ("the
+  lowest of the six years"). A year that is not VALID is shown as such and left out of the range.
+- The words are neutral: median, range, rank, highest and lowest of the years shown. Never good, strong,
+  cheap or attractive.
+
+**Claude Code prompt:**
+```
+Implement docs/AGENT_ROADMAP.md Step 11: a MetricGlossary with an entry for
+every ScreeningMetric and report metric (meaning, this app's calculation,
+how to read it, what to read it with, sector notes from IndustryGroup), no
+benchmarks or judgements in any entry (test the text), preset thresholds
+read from ScreeningPresets and labelled as the screen's setting, the five
+question groups, a Java-rendered "Explain the terms" section, and "what is X"
+answered from the glossary without a model call.
+```
 
 ---
 
