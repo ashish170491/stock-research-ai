@@ -323,4 +323,23 @@ class ScreenerAgentTest {
         // one trace, not one per model call
         assertThat(lines).filteredOn(l -> l.contains("USER > ")).hasSize(1);
     }
+
+    // Progress: the four stages are reported as they happen.
+    @Test
+    void reportsEachStageOfTheChainAsItHappens() {
+        snapshot();
+        ScriptedModel model = new ScriptedModel(p -> EXTRACTED, p -> GOOD_SUMMARY);
+        List<com.ashish.stockresearch.trace.Progress.Event> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        try (com.ashish.stockresearch.trace.Progress.Scope scope = com.ashish.stockresearch.trace.Progress.open(events::add)) {
+            agent(model).answer(REQUEST);
+        }
+
+        assertThat(events).filteredOn(e -> e.status() != com.ashish.stockresearch.trace.Progress.Status.STARTED)
+                .extracting(com.ashish.stockresearch.trace.Progress.Event::label).containsExactly(
+                        "Read the criteria in your request",
+                        "Checked the criteria against your words",
+                        "Screened 3 stocks from the snapshot of " + DATE,
+                        "Wrote the summary; every count checked");
+    }
 }

@@ -1,6 +1,7 @@
 package com.ashish.stockresearch.service;
 
 import com.ashish.stockresearch.glossary.MetricGlossary;
+import com.ashish.stockresearch.trace.Progress;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.report.ResearchReportService;
@@ -74,10 +75,14 @@ public class ResearchReportWriter {
 	public String write(String symbol) {
 		StockResearchReport report = researchReportService.build(symbol);
 		String evidence = renderer.renderEvidence(report);
-		String interpretation = ollama.call(
-				() -> stripThinking(interpretationClient.prompt().user(evidence).call().content()));
+		String interpretation = Progress.step("Writing the interpretation (local model)", () -> ollama.call(
+				() -> stripThinking(interpretationClient.prompt().user(evidence).call().content())));
+		Progress.Step checking = Progress.start("Checking every figure and claim in the interpretation against the data");
 		NumericClaimVerifier.Result figures = numericVerifier.verify(interpretation, evidence);
 		UnsupportedClaimFilter.Result screened = claimFilter.filter(figures.text(), evidence, report.withheldTopics());
+		int removed = figures.removedStatements().size() + screened.removedSentences().size();
+		checking.done(removed == 0 ? "Checked the interpretation: every figure and claim is supported by the data"
+				: "Checked the interpretation: %d sentence(s) removed as unsupported".formatted(removed));
 		String text = screened.text();
 		if (!figures.removedStatements().isEmpty()) {
 			text += "\n\n_%d sentence(s) were removed from this interpretation because their figures do not appear in the evidence (%s)._"

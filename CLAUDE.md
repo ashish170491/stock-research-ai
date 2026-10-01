@@ -17,6 +17,9 @@
 - What a term means comes only from MetricGlossary (fixed, reviewed text): never a model-written
   definition, and never an ideal value or a good/bad judgement. Industry notes come from
   IndustryGroup and screen thresholds from ScreeningPresets, not written a second time.
+- Long work reports its steps with trace.Progress (streamed by /api/ai/chat/stream). A step names
+  what is being done, for which company and from which source - never a figure, and never the
+  model's draft text.
 - New tools: description states what the tool does NOT return; return compact
   rendered text, record the call on ToolUsage.
 - Each ChatClient sets its own OllamaChatOptions. Thinking is off unless the call

@@ -15,6 +15,7 @@ import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
+import com.ashish.stockresearch.trace.Progress;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -162,7 +163,11 @@ public class AiService {
 	 */
 	public ChatAnswer chat(String conversationId, String message) {
 		ResearchSession session = sessions.get(conversationId);
-		RoutedRequest request = router.route(message, session);
+		RoutedRequest request;
+		try (Progress.Step understanding = Progress.start("Understanding your question")) {
+			request = router.route(message, session);
+			understanding.done("Understood: " + understood(request));
+		}
 		List<String> companies = request.companies();
 		String answer;
 		switch (request.intent()) {
@@ -172,12 +177,18 @@ public class AiService {
 						+ " was shown to the user.]");
 			}
 			case QUOTE -> {
-				answer = companies.stream().map(this::quote).collect(Collectors.joining("\n\n"));
+				answer = companies.stream().map(company -> Progress.step(
+						"Fetching the latest price of %s (Yahoo Finance)".formatted(company), () -> quote(company)))
+						.collect(Collectors.joining("\n\n"));
 				session.addEvidence(answer);
 				remember(conversationId, message, answer);
 			}
 			case COMPARE -> {
-				answer = companies.stream().map(researchReportWriter::write).collect(Collectors.joining("\n\n---\n\n"));
+				List<String> compared = companies;
+				answer = java.util.stream.IntStream.range(0, compared.size()).mapToObj(i -> Progress.step(
+								"Building the report on %s (%d of %d)".formatted(compared.get(i), i + 1, compared.size()),
+								() -> researchReportWriter.write(compared.get(i))))
+						.collect(Collectors.joining("\n\n---\n\n"));
 				remember(conversationId, message, "[Full research reports on " + String.join(" and ", companies)
 						+ " were shown to the user.]");
 			}
@@ -209,13 +220,13 @@ public class AiService {
 				}
 			}
 			case EXPLAIN_TERM -> {
-				answer = glossary.answer(message);
+				answer = Progress.step("Looking the term up in the application's glossary", () -> glossary.answer(message));
 				remember(conversationId, message, "[The application's glossary entry was shown to the user.]");
 			}
 			case NOT_STOCK_RELATED -> {
 				List<Message> history = chatMemory.get(conversationId);
-				answer = ollama.call(() -> ResearchReportWriter.stripThinking(
-						generalClient.prompt().messages(history).user(message).call().content()));
+				answer = Progress.step("Answering (local model)", () -> ollama.call(() -> ResearchReportWriter.stripThinking(
+						generalClient.prompt().messages(history).user(message).call().content())));
 				remember(conversationId, message, answer);
 			}
 			default -> throw new IllegalStateException("Unhandled intent " + request.intent());
@@ -228,6 +239,21 @@ public class AiService {
 	private String withTermsSection(String answer) {
 		String section = glossary.section(glossary.termsIn(answer));
 		return section.isBlank() ? answer : answer + "\n\n" + section;
+	}
+
+	/** What the request was understood as, for the progress shown while it is answered. */
+	static String understood(RoutedRequest request) {
+		List<String> companies = request.companies();
+		String named = String.join(" and ", companies);
+		return switch (request.intent()) {
+			case FULL_RESEARCH -> "a research report on " + named;
+			case QUOTE -> "the latest price of " + named;
+			case COMPARE -> "a comparison of " + named;
+			case SCREEN -> "a screen of the Nifty 50";
+			case SPECIFIC_QUESTION -> companies.isEmpty() ? "a question for the research tools" : "a question about " + named;
+			case EXPLAIN_TERM -> "what a term means";
+			case NOT_STOCK_RELATED -> "a general question, not about stocks";
+		};
 	}
 
 	private void remember(String conversationId, String question, String shown) {
@@ -250,13 +276,15 @@ public class AiService {
 		// A follow-up such as "and its debt?" names no company; say which one the router resolved.
 		String prompt = companies.isEmpty() ? message
 				: message + "\n\n(This question is about: " + String.join(", ", companies) + ".)";
-		String draft = ollama.call(() -> ResearchReportWriter.stripThinking(toolClient.prompt()
-				.messages(history)
-				.user(prompt)
-				.toolContext(usage.asToolContext())
-				.call()
-				.content()));
-		String answer = screened(draft, usage.evidence() + "\n" + session.earlierEvidence());
+		String draft = Progress.step("Answering with the research tools (local model)",
+				() -> ollama.call(() -> ResearchReportWriter.stripThinking(toolClient.prompt()
+						.messages(history)
+						.user(prompt)
+						.toolContext(usage.asToolContext())
+						.call()
+						.content())));
+		String answer = Progress.step("Checking every figure in the answer against the data the tools returned",
+				() -> screened(draft, usage.evidence() + "\n" + session.earlierEvidence()));
 		session.addEvidence(usage.evidence());
 		remember(conversationId, message, answer);
 		return answer;

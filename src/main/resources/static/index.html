@@ -66,6 +66,19 @@
   .chip.plain { background: var(--code); color: var(--muted); font-weight: 500; }
   .error .bubble { background: var(--err-bg); color: var(--err-text); border-color: transparent; }
   .pending { color: var(--muted); font-style: italic; }
+  .steps-live { font-style: normal; min-width: 320px; }
+  .steps-live .total { font-size: 12px; margin-bottom: 4px; }
+  .step-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .step-list .step { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+  .step-list .icon { width: 1em; text-align: center; flex: none; }
+  .step-list .label { flex: 1; }
+  .step-list .time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+  .step-list .step.done .icon { color: var(--ok, #2e7d32); }
+  .step-list .step.failed .icon, .step-list .step.failed .label { color: var(--bad, #c62828); }
+  .step-list .step.started .icon { animation: spin 1.2s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  details.steps { margin: 2px 0 4px; font-size: 12px; color: var(--muted); }
+  details.steps summary { cursor: pointer; }
   .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
   .md h1 { font-size: 20px; } .md h2 { font-size: 17px; margin-top: 22px; } .md h3 { font-size: 15px; }
   .md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; font-size: 13px; margin: 10px 0; }
@@ -307,6 +320,14 @@
       meta.append(document.createTextNode((m.elapsedMillis / 1000).toFixed(m.elapsedMillis < 10000 ? 2 : 1) + 's'));
       row.append(meta);
     }
+    if (m.role === 'assistant' && m.steps && m.steps.length) {
+      const d = document.createElement('details');
+      d.className = 'steps done';
+      const s = document.createElement('summary');
+      s.textContent = 'How this answer was built (' + m.steps.length + ' steps)';
+      d.append(s, stepList(m.steps));
+      row.append(d);
+    }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     if (m.role === 'assistant' && !m.error) bubble.append(markdown(m.text));
@@ -329,6 +350,52 @@
     scrollEl.scrollTop = scrollEl.scrollHeight;
   }
 
+  // --- progress: the steps the application reports while it works ---
+  const seconds = ms => ms < 1000 ? (ms / 1000).toFixed(1) + 's' : (ms < 10000 ? (ms / 1000).toFixed(1) : Math.round(ms / 1000)) + 's';
+  function stepList(steps, now) {
+    const ul = document.createElement('ul');
+    ul.className = 'step-list';
+    steps.forEach(st => {
+      const li = document.createElement('li');
+      li.className = 'step ' + st.status.toLowerCase();
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = st.status === 'DONE' ? '✓' : st.status === 'FAILED' ? '!' : '◌';
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = st.label;
+      const time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = st.status === 'STARTED' ? (now ? seconds(now - st.startedAt) : '') : seconds(st.elapsedMillis);
+      li.append(icon, label, time);
+      ul.append(li);
+    });
+    return ul;
+  }
+
+  /** Reads a server-sent event stream from a fetch response, calling onEvent(name, data) per event. */
+  async function readEvents(res, onEvent) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let end;
+      while ((end = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        let name = 'message', data = '';
+        block.split('\n').forEach(line => {
+          if (line.startsWith('event:')) name = line.slice(6).trim();
+          else if (line.startsWith('data:')) data += line.slice(5).replace(/^ /, '');
+        });
+        if (data) onEvent(name, JSON.parse(data));
+      }
+    }
+  }
+
   // --- sending ---
   async function send(text) {
     text = text.trim();
@@ -340,21 +407,49 @@
 
     const pending = document.createElement('div');
     pending.className = 'msg assistant';
-    pending.innerHTML = '<div class="bubble pending">Working… <span>0</span>s</div>';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble pending steps-live';
+    const total = document.createElement('div');
+    total.className = 'total';
+    bubble.append(total);
+    pending.append(bubble);
     messagesEl.append(pending);
     scrollEl.scrollTop = scrollEl.scrollHeight;
     const started = Date.now();
-    const timer = setInterval(() => pending.querySelector('span').textContent = Math.round((Date.now() - started) / 1000), 1000);
+    const steps = [];
+    const draw = () => {
+      total.textContent = 'Working… ' + Math.round((Date.now() - started) / 1000) + 's';
+      const list = stepList(steps, Date.now());
+      if (bubble.children.length > 1) bubble.replaceChild(list, bubble.children[1]); else bubble.append(list);
+    };
+    draw();
+    const timer = setInterval(draw, 500);
 
     try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch('/api/ai/chat/stream', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
         body: JSON.stringify({ conversationId: state.conversationId, message: text })
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || body.error || ('HTTP ' + res.status));
-      state.messages.push({ role: 'assistant', text: body.answer, intent: body.intent,
-                            companies: body.companies, elapsedMillis: body.elapsedMillis });
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || body.error || ('HTTP ' + res.status));
+      }
+      let reply = null, failure = null;
+      await readEvents(res, (name, data) => {
+        if (name === 'step') {
+          const known = steps.find(st => st.id === data.id);
+          if (known) Object.assign(known, data);
+          else steps.push(Object.assign({ startedAt: Date.now() }, data));
+          draw();
+          scrollEl.scrollTop = scrollEl.scrollHeight;
+        } else if (name === 'answer') reply = data;
+        else if (name === 'error') failure = data;
+      });
+      if (failure) throw new Error(failure.message || ('HTTP ' + failure.status));
+      if (!reply) throw new Error('the answer did not arrive');
+      state.messages.push({ role: 'assistant', text: reply.answer, intent: reply.intent, companies: reply.companies,
+                            elapsedMillis: reply.elapsedMillis,
+                            steps: steps.map(({ id, status, label, elapsedMillis }) => ({ id, status, label, elapsedMillis })) });
     } catch (err) {
       state.messages.push({ role: 'assistant', error: true, text: 'Request failed: ' + err.message });
     } finally {
