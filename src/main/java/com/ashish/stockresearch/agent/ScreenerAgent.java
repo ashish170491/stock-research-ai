@@ -17,6 +17,7 @@ import com.ashish.stockresearch.service.OllamaCalls;
 import com.ashish.stockresearch.service.ResearchInstructions;
 import com.ashish.stockresearch.service.ResearchReportWriter;
 import com.ashish.stockresearch.trace.ChainTracer;
+import com.ashish.stockresearch.trace.Progress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -173,6 +174,7 @@ public class ScreenerAgent {
             // Stage 1: the model reads the request.
             ExtractedCriteria extracted;
             boolean extractionFailed = false;
+            Progress.Step reading = Progress.start("Reading the criteria in your request (local model)");
             try {
                 extracted = ollama.call(() -> extractionClient.prompt().user(message).call()
                         .entity(ExtractedCriteria.class));
@@ -185,11 +187,16 @@ public class ScreenerAgent {
                 extractionFailed = true;
                 extracted = ExtractedCriteria.none();
             }
+            reading.done(extractionFailed ? "The local model gave no usable reading, so only your own words are read"
+                    : "Read the criteria in your request");
             chain.stage(1, "extract criteria", extractionFailed
                     ? "no usable answer from the model; reading the request's own words only" : extracted.toString());
 
             // Stage 2: Java decides what can be screened, and records every assumption.
+            Progress.Step checking = Progress.start("Checking every criterion against your own words");
             ScreenInterpretation interpretation = validator.interpret(message, extracted, extractionFailed);
+            checking.done(interpretation.criteria().isPresent() ? "Checked the criteria against your words"
+                    : "Checked the criteria: no screen can be run (the answer says why)");
             chain.stage(2, "validate", interpretation.criteria().map(ScreenerAgent::rules)
                     .orElse("no screen: " + interpretation.refusal())
                     + " | readings: " + interpretation.readings() + " | not applied: " + interpretation.notApplied());
@@ -199,7 +206,14 @@ public class ScreenerAgent {
             }
 
             // Stage 3: StockScreener makes every pass/fail decision.
+            Progress.Step screening = Progress.start("Screening the stored Nifty 50 snapshot");
             ScreeningOutcome outcome = screeningService.screen(interpretation.criteria().get(), null);
+            if (outcome.success()) {
+                screening.done("Screened %d stocks from the snapshot of %s".formatted(outcome.result().ranked().size(),
+                        outcome.run().snapshotDate()));
+            } else {
+                screening.failed(outcome.message());
+            }
             String result = renderer.render(outcome);
             chain.stage(3, "screen", outcome.success() ? "%s: %d screened, %d meet every criterion, in %d ms"
                     .formatted(outcome.status(), outcome.result().ranked().size(), meetingAll(outcome).size(),
@@ -211,16 +225,20 @@ public class ScreenerAgent {
 
             // Stage 4: the model summarises the result it is shown, and nothing else; the checks screen it.
             String summary;
+            Progress.Step summarising = Progress.start("Writing the summary (local model), then checking its counts");
             try {
                 String draft = ollama.call(() -> ResearchReportWriter.stripThinking(
                         summaryClient.prompt().user(renderer.renderSummary(outcome)).call().content()));
                 AnswerChecks.Checked checked = checks.check(draft, result);
                 summary = checked.text();
                 chain.stage(4, "summarise", checked.removed() + " statement(s) removed by the checks");
+                summarising.done(checked.removed() == 0 ? "Wrote the summary; every count checked"
+                        : "Wrote the summary; %d statement(s) removed by the checks".formatted(checked.removed()));
             } catch (RuntimeException ex) {
                 log.warn("Screen summary could not be written: {}", ex.toString());
                 summary = NO_SUMMARY;
                 chain.stage(4, "summarise", "no summary: " + ex.getMessage());
+                summarising.failed("the local model did not answer");
             }
             return new ScreenAnswer(compose(interpretation, summary, ScreeningRenderer.forReaders(result)), result,
                     memoryNote(interpretation.criteria().get(), outcome), interpretation.criteria().get());

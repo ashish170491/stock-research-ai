@@ -437,4 +437,46 @@ class AiServiceRoutingTest {
                 + glossary.termsUsed(List.of(glossary.byKey("eps").orElseThrow())));
         assertThat(answer).contains("- **Earnings per share (EPS)**: The profit attributable to shareholders");
     }
+
+    // Progress: each step of a tool-loop answer is reported as it starts and ends.
+    @Test
+    void reportsTheStepsOfAToolLoopAnswerAsTheyHappen() {
+        String question = "What was ICICI Bank's revenue?";
+        routes(question, Intent.SPECIFIC_QUESTION, "ICICIBANK");
+        ScriptedModel model = new ScriptedModel(messages -> text("Revenue is shown in the filings."));
+        List<com.ashish.stockresearch.trace.Progress.Event> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        try (com.ashish.stockresearch.trace.Progress.Scope scope = com.ashish.stockresearch.trace.Progress.open(events::add)) {
+            service(model).chat(CONVERSATION, question);
+        }
+
+        assertThat(events).filteredOn(e -> e.status() == com.ashish.stockresearch.trace.Progress.Status.DONE)
+                .extracting(com.ashish.stockresearch.trace.Progress.Event::label).containsExactly(
+                        "Understood: a question about ICICIBANK",
+                        "Answering with the research tools (local model)",
+                        "Checking every figure in the answer against the data the tools returned");
+        // no step carries a figure
+        assertThat(events).extracting(com.ashish.stockresearch.trace.Progress.Event::label)
+                .noneMatch(label -> label.contains("₹"));
+    }
+
+    @Test
+    void reportsTheStepsOfAQuoteAndOfAGlossaryAnswer() {
+        routes("Price of TCS", Intent.QUOTE, "TCS");
+        when(quotes.getQuote("TCS")).thenReturn(StockQuoteResult.error("Market data is currently unavailable"));
+        routes("What is ROCE?", Intent.EXPLAIN_TERM);
+        List<com.ashish.stockresearch.trace.Progress.Event> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        try (com.ashish.stockresearch.trace.Progress.Scope scope = com.ashish.stockresearch.trace.Progress.open(events::add)) {
+            service(UNUSED).chat(CONVERSATION, "Price of TCS");
+            service(UNUSED).chat(CONVERSATION, "What is ROCE?");
+        }
+
+        assertThat(events).filteredOn(e -> e.status() == com.ashish.stockresearch.trace.Progress.Status.DONE)
+                .extracting(com.ashish.stockresearch.trace.Progress.Event::label).containsExactly(
+                        "Understood: the latest price of TCS",
+                        "Fetching the latest price of TCS (Yahoo Finance)",
+                        "Understood: what a term means",
+                        "Looking the term up in the application's glossary");
+    }
 }

@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.research.report;
 
+import com.ashish.stockresearch.trace.Progress;
 import com.ashish.stockresearch.research.StockResearchService;
 import com.ashish.stockresearch.research.calc.FinancialDataValidator;
 import com.ashish.stockresearch.research.model.AnnualRatios;
@@ -16,6 +17,7 @@ import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformance;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
+import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
 import com.ashish.stockresearch.research.model.ValuationResult;
 import com.ashish.stockresearch.research.model.ValuationSnapshot;
@@ -74,19 +76,52 @@ public class ResearchReportService {
      */
     public StockResearchReport build(String symbol) {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            CompletableFuture<CompanyProfileResult> profile =
-                    CompletableFuture.supplyAsync(() -> research.getCompanyProfile(symbol), executor);
-            CompletableFuture<FinancialSummaryResult> financials =
-                    CompletableFuture.supplyAsync(() -> research.getFinancialSummary(symbol), executor);
-            CompletableFuture<HistoricalPerformanceResult> history =
-                    CompletableFuture.supplyAsync(() -> research.getHistoricalPerformance(symbol, HISTORY_YEARS), executor);
-            CompletableFuture<ShareholdingResult> shareholding =
-                    CompletableFuture.supplyAsync(() -> research.getShareholding(symbol), executor);
-            CompletableFuture<ValuationResult> valuation =
-                    CompletableFuture.supplyAsync(() -> research.getValuation(symbol), executor);
-            return assemble(symbol, profile.join(), financials.join(), history.join(), shareholding.join(),
-                    valuation.join());
+            // each fetch is a step of its own, reported from the thread that runs it
+            CompletableFuture<CompanyProfileResult> profile = CompletableFuture.supplyAsync(fetch(
+                    "Fetching the company profile of %s (Yahoo Finance)".formatted(symbol),
+                    () -> research.getCompanyProfile(symbol), CompanyProfileResult::success,
+                    CompanyProfileResult::message), executor);
+            CompletableFuture<FinancialSummaryResult> financials = CompletableFuture.supplyAsync(fetch(
+                    "Fetching the results %s filed with NSE, cross-checked with Yahoo Finance".formatted(symbol),
+                    () -> research.getFinancialSummary(symbol), FinancialSummaryResult::success,
+                    FinancialSummaryResult::message), executor);
+            CompletableFuture<HistoricalPerformanceResult> history = CompletableFuture.supplyAsync(fetch(
+                    "Fetching %d years of share prices of %s (Yahoo Finance)".formatted(HISTORY_YEARS, symbol),
+                    () -> research.getHistoricalPerformance(symbol, HISTORY_YEARS),
+                    HistoricalPerformanceResult::success, HistoricalPerformanceResult::message), executor);
+            // no source supplies shareholding yet: a known gap, not a failure of this request
+            CompletableFuture<ShareholdingResult> shareholding = CompletableFuture.supplyAsync(fetch(
+                    "Checking for shareholding data on %s".formatted(symbol),
+                    () -> research.getShareholding(symbol),
+                    result -> result.success() || result.status() == ResearchStatus.CAPABILITY_NOT_SUPPORTED,
+                    ShareholdingResult::message), executor);
+            CompletableFuture<ValuationResult> valuation = CompletableFuture.supplyAsync(fetch(
+                    "Fetching the valuation of %s (Yahoo Finance, checked against filed EPS)".formatted(symbol),
+                    () -> research.getValuation(symbol), ValuationResult::success, ValuationResult::message), executor);
+            CompanyProfileResult p = profile.join();
+            FinancialSummaryResult f = financials.join();
+            HistoricalPerformanceResult h = history.join();
+            ShareholdingResult s = shareholding.join();
+            ValuationResult v = valuation.join();
+            return Progress.step("Checking data quality and drawing the observations",
+                    () -> assemble(symbol, p, f, h, s, v));
         }
+    }
+
+    /** One fetch as a progress step, ended as failed (with the reason) when it brought back nothing usable. */
+    private static <T> java.util.function.Supplier<T> fetch(String label, java.util.function.Supplier<T> work,
+                                                           java.util.function.Predicate<T> success,
+                                                           java.util.function.Function<T, String> message) {
+        return Progress.propagate(() -> {
+            Progress.Step step = Progress.start(label);
+            T result = work.get();
+            if (result != null && success.test(result)) {
+                step.close();
+            } else {
+                step.failed(result == null ? "nothing was returned" : message.apply(result));
+            }
+            return result;
+        });
     }
 
     StockResearchReport assemble(String requested, CompanyProfileResult profile, FinancialSummaryResult financials,

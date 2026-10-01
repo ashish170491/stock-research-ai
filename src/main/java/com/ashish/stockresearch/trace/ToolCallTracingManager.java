@@ -52,6 +52,39 @@ class ToolCallTracingManager implements ToolCallingManager {
 
     @Override
     public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
+        try (Progress.Step step = Progress.start(fetching(requestedToolCalls(chatResponse)))) {
+            return traced(prompt, chatResponse);
+        }
+    }
+
+    private static final java.util.regex.Pattern SYMBOL =
+            java.util.regex.Pattern.compile("\"symbol\"\\s*:\\s*\"([^\"]+)\"");
+
+    /** "Fetching the financial results of TCS and the valuation of TCS": what the model asked for, in words. */
+    static String fetching(List<AssistantMessage.ToolCall> calls) {
+        if (calls.isEmpty()) {
+            return "Fetching the data the local model asked for";
+        }
+        List<String> parts = calls.stream().map(call -> {
+            java.util.regex.Matcher symbol = SYMBOL.matcher(call.arguments() == null ? "" : call.arguments());
+            String of = symbol.find() ? " of " + symbol.group(1) : "";
+            return switch (call.name()) {
+                case "getStockQuote" -> "the latest price" + of + " (Yahoo Finance)";
+                case "getCompanyProfile" -> "the company profile" + of + " (Yahoo Finance)";
+                case "getFinancialSummary" -> "the financial results" + of
+                        + " (NSE filings, cross-checked with Yahoo Finance)";
+                case "getHistoricalPerformance" -> "the share-price history" + of + " (Yahoo Finance)";
+                case "getShareholding" -> "the shareholding" + of;
+                case "getValuation" -> "the valuation" + of + " (Yahoo Finance, checked against filed EPS)";
+                case "screenStocks" -> "a screen of the stored snapshot";
+                default -> call.name() + of;
+            };
+        }).distinct().toList();
+        return "Fetching " + (parts.size() == 1 ? parts.get(0)
+                : String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1));
+    }
+
+    private ToolExecutionResult traced(Prompt prompt, ChatResponse chatResponse) {
         if (!properties.enabled()) {
             return delegate.executeToolCalls(prompt, chatResponse);
         }

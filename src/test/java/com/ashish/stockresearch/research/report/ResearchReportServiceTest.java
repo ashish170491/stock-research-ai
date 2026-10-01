@@ -312,4 +312,45 @@ class ResearchReportServiceTest {
                 // the EPS the P/E disagrees with is disputed with it
                 .contains("| trailingEps | WITHHELD");
     }
+
+    // Progress: each of the parallel fetches is a step of its own, failed when it brought nothing back.
+    @Test
+    void reportsEachFetchAsAStepFromTheThreadThatRunsIt() {
+        MockStockResearchProvider provider = new MockStockResearchProvider();
+        StockResearchService research = new StockResearchService(provider,
+                symbol -> {
+                    throw new IllegalStateException("financials provider crashed");
+                },
+                new UnsupportedShareholdingProvider(), provider,
+                new FinancialMetricsService(), new HistoricalPerformanceService(), provider,
+                new ValuationService(BigDecimal.valueOf(5)),
+                com.ashish.stockresearch.research.TestFilings.none());
+        List<com.ashish.stockresearch.trace.Progress.Event> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        try (com.ashish.stockresearch.trace.Progress.Scope scope = com.ashish.stockresearch.trace.Progress.open(events::add)) {
+            new ResearchReportService(research, validator, new SectorClassifier()).build("INFY");
+        }
+
+        java.util.Map<String, com.ashish.stockresearch.trace.Progress.Status> ended = new java.util.LinkedHashMap<>();
+        java.util.Map<Integer, String> started = new java.util.HashMap<>();
+        events.forEach(e -> {
+            if (e.status() == com.ashish.stockresearch.trace.Progress.Status.STARTED) {
+                started.put(e.id(), e.label());
+            } else {
+                ended.put(started.get(e.id()), e.status());
+            }
+        });
+        assertThat(ended).containsEntry("Fetching the company profile of INFY (Yahoo Finance)",
+                        com.ashish.stockresearch.trace.Progress.Status.DONE)
+                .containsEntry("Fetching the results INFY filed with NSE, cross-checked with Yahoo Finance",
+                        com.ashish.stockresearch.trace.Progress.Status.FAILED)
+                .containsEntry("Fetching 5 years of share prices of INFY (Yahoo Finance)",
+                        com.ashish.stockresearch.trace.Progress.Status.DONE)
+                // no shareholding source yet: a known gap, not a failure
+                .containsEntry("Checking for shareholding data on INFY", com.ashish.stockresearch.trace.Progress.Status.DONE)
+                .containsKey("Fetching the valuation of INFY (Yahoo Finance, checked against filed EPS)");
+        // the report is assembled only after every fetch has ended
+        assertThat(events).last().satisfies(e -> assertThat(e.label())
+                .isEqualTo("Checking data quality and drawing the observations"));
+    }
 }
