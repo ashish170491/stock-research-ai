@@ -14,6 +14,9 @@
 - Every model answer that states figures goes through NumericClaimVerifier and
   UnsupportedClaimFilter.
 - No buy/sell/hold, price targets, or fair values anywhere in prompts or output.
+- What a term means comes only from MetricGlossary (fixed, reviewed text): never a model-written
+  definition, and never an ideal value or a good/bad judgement. Industry notes come from
+  IndustryGroup and screen thresholds from ScreeningPresets, not written a second time.
 - New tools: description states what the tool does NOT return; return compact
   rendered text, record the call on ToolUsage.
 - Each ChatClient sets its own OllamaChatOptions. Thinking is off unless the call

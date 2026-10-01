@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.service;
 
+import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.report.ResearchReportService;
@@ -18,6 +19,8 @@ import org.springframework.stereotype.Service;
  * evidence, and that text is screened before it is included: unsupported
  * claims are removed, and so is any conclusion about a topic whose values
  * were withheld (DATA_CONFLICT, INVALID or not relevant to the sector).
+ * The report ends with the glossary's entries for the terms it uses, rendered
+ * by Java from {@link MetricGlossary} after the checks, never by the model.
  */
 @Service
 public class ResearchReportWriter {
@@ -40,6 +43,7 @@ public class ResearchReportWriter {
 	private final UnsupportedClaimFilter claimFilter;
 	private final NumericClaimVerifier numericVerifier;
 	private final OllamaCalls ollama;
+	private final MetricGlossary glossary;
 
 	public ResearchReportWriter(ChatClient.Builder chatClientBuilder,
 			Advisor conversationTraceAdvisor,
@@ -48,6 +52,7 @@ public class ResearchReportWriter {
 			UnsupportedClaimFilter claimFilter,
 			NumericClaimVerifier numericVerifier,
 			OllamaCalls ollama,
+			MetricGlossary glossary,
 			@Value("${app.research.interpretation.thinking:false}") boolean thinking) {
 		// No tools: interpretation must see only the evidence it is handed,
 		// with no way to fetch or invent more. Whether the model reasons before
@@ -63,6 +68,7 @@ public class ResearchReportWriter {
 		this.claimFilter = claimFilter;
 		this.numericVerifier = numericVerifier;
 		this.ollama = ollama;
+		this.glossary = glossary;
 	}
 
 	public String write(String symbol) {
@@ -81,7 +87,8 @@ public class ResearchReportWriter {
 			text += "\n\n_%d sentence(s) were removed from this interpretation because they made claims not supported by the data: %s_"
 					.formatted(screened.removedSentences().size(), String.join(" | ", screened.removedSentences()));
 		}
-		return renderer.render(report, text);
+		String rendered = renderer.render(report, text, glossary);
+		return rendered + "\n" + glossary.section(glossary.termsIn(rendered));
 	}
 
 	/** Qwen3 can emit its reasoning inline; it is not part of the report. */

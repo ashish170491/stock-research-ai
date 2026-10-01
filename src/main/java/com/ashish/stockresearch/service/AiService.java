@@ -6,6 +6,7 @@ import com.ashish.stockresearch.agent.ResearchSession;
 import com.ashish.stockresearch.agent.ResearchSessions;
 import com.ashish.stockresearch.agent.RoutedRequest;
 import com.ashish.stockresearch.agent.ScreenerAgent;
+import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
@@ -89,6 +90,7 @@ public class AiService {
 	private final OllamaCalls ollama;
 	private final ChatMemory chatMemory;
 	private final ResearchSessions sessions;
+	private final MetricGlossary glossary;
 
 	/**
 	 * What a chat turn produced.
@@ -111,7 +113,8 @@ public class AiService {
 			AnswerChecks checks,
 			OllamaCalls ollama,
 			ChatMemory chatMemory,
-			ResearchSessions sessions) {
+			ResearchSessions sessions,
+			MetricGlossary glossary) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -131,6 +134,7 @@ public class AiService {
 		this.ollama = ollama;
 		this.chatMemory = chatMemory;
 		this.sessions = sessions;
+		this.glossary = glossary;
 	}
 
 	/**
@@ -144,8 +148,12 @@ public class AiService {
 	 *       Java, the screen, and a checked summary;</li>
 	 *   <li>SPECIFIC_QUESTION - the model with the research tools, its answer screened against
 	 *       what the tools returned;</li>
+	 *   <li>EXPLAIN_TERM - the glossary's entry, rendered in Java with no model call;</li>
 	 *   <li>NOT_STOCK_RELATED - a plain answer without tools.</li>
 	 * </ul>
+	 *
+	 * Screen and tool answers end with the glossary's explanation of the terms they use, added by Java after
+	 * the answer checks; a report carries its own ({@link ResearchReportWriter}).
 	 *
 	 * The conversation's history is passed to the two model paths. What is remembered is what the
 	 * user was shown - the screened answer, never the model's draft, so a removed claim cannot come
@@ -175,7 +183,9 @@ public class AiService {
 			}
 			case SCREEN -> {
 				ScreenerAgent.ScreenAnswer screen = screenerAgent.answer(message);
-				answer = screen.text();
+				answer = screen.criteria() == null ? screen.text()
+						: screen.text() + "\n\n" + glossary.criteriaByQuestion(screen.criteria());
+				answer = withTermsSection(answer);
 				// The table itself stays out of the memory, but follow-up answers may quote it.
 				session.addEvidence(screen.evidence());
 				remember(conversationId, message, screen.memoryNote());
@@ -189,10 +199,18 @@ public class AiService {
 				}
 				ToolUsage usage = new ToolUsage();
 				answer = answerWithTools(conversationId, message, companies, usage, session);
+				String terms = glossary.termsUsed(glossary.termsIn(answer));
+				if (!terms.isBlank()) {
+					answer = answer + "\n\n" + terms;
+				}
 				if (companies.isEmpty()) {
 					companies = usage.calls().stream().map(ToolUsage.Call::symbol)
 							.filter(symbol -> symbol != null && !symbol.isBlank()).distinct().toList();
 				}
+			}
+			case EXPLAIN_TERM -> {
+				answer = glossary.answer(message);
+				remember(conversationId, message, "[The application's glossary entry was shown to the user.]");
 			}
 			case NOT_STOCK_RELATED -> {
 				List<Message> history = chatMemory.get(conversationId);
@@ -204,6 +222,12 @@ public class AiService {
 		}
 		session.rememberCompanies(companies);
 		return new ChatAnswer(request.intent(), companies, answer);
+	}
+
+	/** The answer, followed by the glossary's entries for the terms it uses, if any. */
+	private String withTermsSection(String answer) {
+		String section = glossary.section(glossary.termsIn(answer));
+		return section.isBlank() ? answer : answer + "\n\n" + section;
 	}
 
 	private void remember(String conversationId, String question, String shown) {

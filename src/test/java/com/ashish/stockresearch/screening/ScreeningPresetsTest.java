@@ -98,4 +98,16 @@ public class ScreeningPresetsTest {
         assertThat(properties().snapshot().cron()).isEqualTo("0 30 18 * * MON-FRI");
         assertThat(properties().snapshot().pauseBetweenSymbols()).isPositive();
     }
+
+    // S11-5: every screen's criteria read in the order of the questions they answer.
+    @Test
+    void ordersEveryScreensCriteriaByTheQuestionTheyAnswer() {
+        ScreeningCriteria dividend = presets().find("dividend").orElseThrow();
+
+        // configured as yield, payout, growth; read as growing, cash, price
+        assertThat(dividend.rulesFor(IndustryGroup.CONSUMER).orElseThrow()).extracting(Rule::label)
+                .containsExactly("Profit CAGR 5y > 0.00%", "Dividends/OCF ≤ 100.00%", "Dividend yield ≥ 2.00%");
+        assertThat(dividend.rulesFor(IndustryGroup.BANK).orElseThrow()).extracting(Rule::label)
+                .containsExactly("Profit CAGR 5y > 0.00%", "Dividend yield ≥ 2.00%");
+    }
 }

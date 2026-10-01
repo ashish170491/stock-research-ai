@@ -77,7 +77,8 @@ class RequestRouterTest {
     }
 
     private static RequestRouter router(StubModel model) {
-        return new RequestRouter(ChatClient.builder(model), NSE, new PassThrough());
+        return new RequestRouter(ChatClient.builder(model), NSE, com.ashish.stockresearch.glossary.TestGlossary.glossary(),
+                new PassThrough());
     }
 
     // --- The model's classification, one test per intent -------------------------------------
@@ -260,10 +261,13 @@ class RequestRouterTest {
     void aMessageThatDoesNotReferBackGetsNoEarlierCompany() {
         StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[]}");
 
-        RoutedRequest routed = router(model).route("What is a P/E ratio?", about("INFY"));
+        RoutedRequest routed = router(model).route("What is a stock split?", about("INFY"));
 
         assertThat(routed.companies()).isEmpty();
         assertThat(model.prompts.get(0).getContents()).doesNotContain("Company discussed earlier");
+        // a term the glossary explains is about no company either, whatever was discussed before
+        assertThat(router(model).route("What is a P/E ratio?", about("INFY")))
+                .isEqualTo(new RoutedRequest(Intent.EXPLAIN_TERM, List.of()));
     }
 
     @Test
@@ -424,5 +428,40 @@ class RequestRouterTest {
         StubModel model = new StubModel("not used");
 
         assertThat(router(model).route("Infosys stock price")).isEqualTo(new RoutedRequest(Intent.QUOTE, List.of("INFY")));
+    }
+
+    // S11-7: a question about a term is answered from the glossary, routed without any model call.
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "What is ROCE?",
+            "what does P/E mean",
+            "Explain CAGR",
+            "What is a good ROE for banks?",
+            "How do I read debt to equity?",
+    })
+    void routesAQuestionAboutATermToTheGlossaryWithoutTheModel(String message) {
+        StubModel model = new StubModel("not used", new IllegalStateException("the model must not be called"));
+
+        assertThat(router(model).route(message)).isEqualTo(new RoutedRequest(Intent.EXPLAIN_TERM, List.of()));
+        assertThat(model.prompts).isEmpty();
+    }
+
+    @Test
+    void aQuestionAboutACompanysFigureIsNotAQuestionAboutTheTerm() {
+        StubModel model = new StubModel("{\"intent\":\"EXPLAIN_TERM\",\"companies\":[\"TCS\"]}");
+
+        // not routed by keyword, and the model's EXPLAIN_TERM with a company is a question about that company
+        assertThat(router(model).byKeywords("What is TCS's ROE?")).isEmpty();
+        assertThat(router(model).route("What is TCS's ROE?"))
+                .isEqualTo(new RoutedRequest(Intent.SPECIFIC_QUESTION, List.of("TCS")));
+    }
+
+    @Test
+    void theModelCanRouteAQuestionAboutATermTheKeywordsMiss() {
+        RoutedRequest routed = router(new StubModel("{\"intent\":\"EXPLAIN_TERM\",\"companies\":[]}"))
+                .route("I keep seeing ROCE everywhere, what is that about?");
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.EXPLAIN_TERM, List.of()));
+        assertThat(RequestRouter.ROUTING_PROMPT).contains("EXPLAIN_TERM:");
     }
 }

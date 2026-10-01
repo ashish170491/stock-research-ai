@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.screening;
 
+import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
 
 import java.util.EnumSet;
@@ -36,6 +37,15 @@ public record ScreeningCriteria(
         Map<IndustryGroup, String> notScreenedReasons
 ) {
 
+    /**
+     * The rules in the order of the questions they answer (profitable, growing, cash, stretched, price), and
+     * otherwise as given, so every screen's output reads in the same order. Only the order changes.
+     */
+    private static List<Rule> byQuestion(List<Rule> rules) {
+        return rules.stream().sorted(java.util.Comparator.comparingInt(rule -> MetricGlossary.questionOf(rule.metric())
+                .map(Enum::ordinal).orElse(Integer.MAX_VALUE))).toList();
+    }
+
     /** Groups the non-financial rules never apply to. */
     public static final Set<IndustryGroup> FINANCIAL = EnumSet.of(IndustryGroup.BANK, IndustryGroup.NBFC,
             IndustryGroup.INSURANCE, IndustryGroup.FINANCIAL_OTHER);
@@ -54,8 +64,9 @@ public record ScreeningCriteria(
         if (name == null || name.isBlank() || tieBreak == null) {
             throw new IllegalArgumentException("screening criteria need a name and a tie-break");
         }
-        nonFinancialRules = nonFinancialRules == null ? List.of() : List.copyOf(nonFinancialRules);
-        groupRules = groupRules == null ? Map.of() : Map.copyOf(groupRules);
+        nonFinancialRules = nonFinancialRules == null ? List.of() : byQuestion(nonFinancialRules);
+        groupRules = groupRules == null ? Map.of() : groupRules.entrySet().stream().collect(
+                java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> byQuestion(entry.getValue())));
         industryGroups = industryGroups == null || industryGroups.isEmpty() ? Set.of() : Set.copyOf(industryGroups);
         notScreenedReasons = notScreenedReasons == null ? Map.of() : Map.copyOf(notScreenedReasons);
         if (groupRules.containsKey(IndustryGroup.UNKNOWN)) {

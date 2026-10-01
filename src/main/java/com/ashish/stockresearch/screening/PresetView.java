@@ -13,7 +13,8 @@ public record PresetView(String name, String description, String tieBreak, List<
     public record RuleSet(String title, List<IndustryGroup> groups, List<Criterion> criteria) {
     }
 
-    public record Criterion(String label, String description) {
+    /** @param metric the metric's name, by which the page finds its glossary entry */
+    public record Criterion(String label, String description, ScreeningMetric metric) {
     }
 
     public static PresetView from(ScreeningCriteria criteria) {
@@ -37,6 +38,6 @@ public record PresetView(String name, String description, String tieBreak, List<
     }
 
     private static List<Criterion> criteria(List<Rule> rules) {
-        return rules.stream().map(rule -> new Criterion(rule.label(), rule.describe())).toList();
+        return rules.stream().map(rule -> new Criterion(rule.label(), rule.describe(), rule.metric())).toList();
     }
 }
