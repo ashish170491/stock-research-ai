@@ -190,6 +190,38 @@ public final class FinancialCalculator {
         return ratioPercent(dividendsPaid.negate(), operatingCashFlow);
     }
 
+    /**
+     * The number of equity shares: paid-up equity capital (in crore) x 1,00,00,000 / face value per share.
+     * Empty unless the face value is positive.
+     */
+    public static Optional<BigDecimal> shareCount(BigDecimal paidUpCapitalCrore, BigDecimal faceValue) {
+        if (paidUpCapitalCrore == null || faceValue == null || faceValue.signum() <= 0) {
+            return Optional.empty();
+        }
+        return Optional.of(paidUpCapitalCrore.multiply(FinancialUnits.RUPEES_PER_CRORE)
+                .divide(faceValue, 0, RoundingMode.HALF_UP));
+    }
+
+    /** The sum of statement lines, e.g. EBIT as profit before tax plus finance costs. Empty if any is missing. */
+    public static Optional<BigDecimal> sum(List<BigDecimal> values) {
+        if (values == null || values.isEmpty() || values.stream().anyMatch(java.util.Objects::isNull)) {
+            return Optional.empty();
+        }
+        return Optional.of(values.stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    /**
+     * Operating profit from an Ind-AS statement of profit and loss: revenue from operations less the
+     * expenses other than finance costs, so before interest and without other income or exceptional items.
+     */
+    public static Optional<BigDecimal> operatingProfit(BigDecimal revenue, BigDecimal totalExpenses,
+                                                       BigDecimal financeCosts) {
+        if (revenue == null || totalExpenses == null || financeCosts == null) {
+            return Optional.empty();
+        }
+        return Optional.of(revenue.subtract(totalExpenses.subtract(financeCosts)));
+    }
+
     /** Capital employed: total assets minus current liabilities, at the same balance-sheet date. */
     public static Optional<BigDecimal> capitalEmployed(BigDecimal totalAssets, BigDecimal currentLiabilities) {
         if (totalAssets == null || currentLiabilities == null) {

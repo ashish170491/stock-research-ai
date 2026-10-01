@@ -120,7 +120,11 @@ public class ResearchReportService {
             issues.addAll(f.dataQualityIssues());
             currencyWarning(f).ifPresent(issues::add);
             candidates.addAll(financialObservations(f, sector, withheld));
-            sources.add(reference(f.reported().provenance(), "Financial statements, quarterly results and ratios"));
+            Optional<SourceReference> filed = filedResults(f.reported());
+            sources.add(reference(f.reported().provenance(), filed.isPresent()
+                    ? "Trailing-twelve-month figures, quarterly results and ratios; the cross-check of filed net profit"
+                    : "Financial statements, quarterly results and ratios"));
+            filed.ifPresent(sources::add);
         } else {
             gaps.add(new DataGap("Financials", "financial summary", financials.message()));
         }
@@ -359,6 +363,24 @@ public class ResearchReportService {
             fields.addAll(point.dependsOnFields());
         }
         return List.copyOf(fields);
+    }
+
+    /** The company's filed results, when they are the source of the fiscal-year figures. */
+    private static Optional<SourceReference> filedResults(com.ashish.stockresearch.research.model.ReportedFinancials reported) {
+        List<com.ashish.stockresearch.research.model.FinancialDataPoint> filed = reported.annualHistory().stream()
+                .map(com.ashish.stockresearch.research.model.AnnualFinancials::netProfit)
+                .filter(point -> point.source() != null
+                        && point.source().sourceType() == com.ashish.stockresearch.research.model.SourceType.OFFICIAL_FILING)
+                .toList();
+        if (filed.isEmpty()) {
+            return Optional.empty();
+        }
+        com.ashish.stockresearch.research.model.FinancialDataPoint latest = filed.get(filed.size() - 1);
+        return Optional.of(new SourceReference(latest.source().source(),
+                com.ashish.stockresearch.research.model.SourceType.OFFICIAL_FILING,
+                "Fiscal-year results (%s to %s), as the company filed them with NSE".formatted(
+                        filed.get(0).period().label(), latest.period().label()),
+                latest.source().publishedAt(), latest.source().asOf(), latest.source().asOf()));
     }
 
     private SourceReference reference(DataProvenance provenance, String covers) {

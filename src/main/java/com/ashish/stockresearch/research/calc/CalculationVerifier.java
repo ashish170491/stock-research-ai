@@ -138,6 +138,9 @@ public final class CalculationVerifier {
             case MEAN -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).sum() / in.size();
             case DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT -> in.size() == 2 && in.get(0) <= 0 && in.get(1) > 0
                     ? -in.get(0) / in.get(1) * 100 : null;
+            case SUM -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).sum();
+            case OPERATING_PROFIT -> in.size() == 3 ? in.get(0) - in.get(1) + in.get(2) : null;
+            case SHARE_COUNT -> in.size() == 2 && in.get(1) > 0 ? in.get(0) * 1e7 / in.get(1) : null;
         };
         return result == null || !Double.isFinite(result) ? Optional.empty() : Optional.of(result);
     }

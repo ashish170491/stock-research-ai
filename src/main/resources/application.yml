@@ -76,6 +76,8 @@ app:
       timeout-ms: 20000
       requests-per-second: 1
       document-directory: ./data/nse-filings
+      # A filing never changes once made; a company's listings are asked for again after this long.
+      listing-ttl: 12h
 
   research:
     valuation:

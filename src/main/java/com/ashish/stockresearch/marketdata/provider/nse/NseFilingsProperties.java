@@ -3,6 +3,7 @@ package com.ashish.stockresearch.marketdata.provider.nse;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 /**
  * {@code app.market-data.nse-filings}: where NSE's results filings are listed and archived, and how gently
@@ -13,6 +14,7 @@ import java.nio.file.Path;
  * @param archiveHost       the only host documents are downloaded from; any other link is refused
  * @param referer           the page the listings are requested from, as a browser would
  * @param documentDirectory where fetched documents are kept
+ * @param listingTtl        how long a company's listings are reused before NSE is asked again
  */
 @ConfigurationProperties("app.market-data.nse-filings")
 public record NseFilingsProperties(
@@ -22,7 +24,8 @@ public record NseFilingsProperties(
         String referer,
         long timeoutMs,
         double requestsPerSecond,
-        Path documentDirectory
+        Path documentDirectory,
+        Duration listingTtl
 ) {
 
     public NseFilingsProperties {
@@ -30,5 +33,6 @@ public record NseFilingsProperties(
         archiveHost = archiveHost == null ? "nsearchives.nseindia.com" : archiveHost;
         timeoutMs = timeoutMs <= 0 ? 20_000 : timeoutMs;
         documentDirectory = documentDirectory == null ? Path.of("data", "nse-filings") : documentDirectory;
+        listingTtl = listingTtl == null ? Duration.ofHours(12) : listingTtl;
     }
 }

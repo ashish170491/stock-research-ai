@@ -53,10 +53,35 @@ public class ResearchReportRenderer {
      * Which fields are in a DATA_CONFLICT, and who the facts are for: the reader sees conflicting
      * values tagged, the model sees them withheld.
      */
-    private record Mask(Set<String> fields, boolean forModel) {
+    /**
+     * Which values to tag (or, for the model, withhold) as depending on a conflict: every value in DATA_CONFLICT,
+     * and any value depending on a conflicting field - in the periods the conflict is confined to, if it is.
+     */
+    private record Mask(List<DataQualityIssue> conflicts, boolean forModel) {
+
+        Mask {
+            conflicts = conflicts.stream().filter(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT).toList();
+        }
 
         boolean covers(FinancialDataPoint p) {
-            return p.status() == DataStatus.DATA_CONFLICT || p.dependsOnFields().stream().anyMatch(fields::contains);
+            if (p.status() == DataStatus.DATA_CONFLICT) {
+                return true;
+            }
+            for (DataQualityIssue conflict : conflicts) {
+                if (conflict.affectedPeriods().isEmpty()) {
+                    if (p.dependsOnFields().stream().anyMatch(conflict.affectedFields()::contains)) {
+                        return true;
+                    }
+                } else if (p.calculationStatus() == CalculationStatus.CALCULATED) {
+                    if (p.inputs() != null && p.inputs().stream().anyMatch(input -> input.sourceField() != null
+                            && conflict.covers(input.sourceField(), input.period()))) {
+                        return true;
+                    }
+                } else if (p.dependsOnFields().stream().anyMatch(field -> conflict.covers(field, p.period().label()))) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -68,7 +93,7 @@ public class ResearchReportRenderer {
             + "never recalculate them, derive new figures from them, or convert their units or currency.";
 
     public String render(StockResearchReport report, String interpretation) {
-        Mask conflicted = new Mask(report.conflictedFields(), false);
+        Mask conflicted = new Mask(report.dataQualityIssues(), false);
         StringBuilder md = new StringBuilder();
         md.append("# Research report: ").append(report.companyName())
                 .append(" (").append(report.symbol()).append(")\n\n");
@@ -141,7 +166,7 @@ public class ResearchReportRenderer {
 
     /** What the model is given to interpret: conflicts first, then facts, observations, withheld topics and gaps. */
     public String renderEvidence(StockResearchReport report) {
-        Mask conflicted = new Mask(report.conflictedFields(), true);
+        Mask conflicted = new Mask(report.dataQualityIssues(), true);
         StringBuilder md = new StringBuilder();
         md.append("Company: ").append(report.companyName()).append(" (").append(report.symbol()).append(")\n");
         md.append("Today: ").append(report.generatedOn()).append("; latest reported quarter: ")
@@ -175,7 +200,7 @@ public class ResearchReportRenderer {
         md.append("Company: ").append(p.companyName()).append(" (").append(p.symbol()).append(", ")
                 .append(p.exchange()).append(")\n\n");
         renderConflicts(md, p.dataQualityIssues());
-        renderCompany(md, p, new Mask(conflictedFields(p.dataQualityIssues()), true));
+        renderCompany(md, p, new Mask(p.dataQualityIssues(), true));
         renderSector(md, sector);
         md.append("This tool returns no revenue, profit, growth, return, leverage, share-price history or shareholding "
                 + "data. A fundamental overview needs getFinancialSummary, getHistoricalPerformance and "
@@ -196,7 +221,7 @@ public class ResearchReportRenderer {
                 .append("Latest reported quarter: ").append(reported.latestReportedQuarter().label())
                 .append(" - never describe a later quarter as reported.\n\n");
         renderConflicts(md, summary.dataQualityIssues());
-        renderFinancials(md, summary, new Mask(conflictedFields(summary.dataQualityIssues()), true));
+        renderFinancials(md, summary, new Mask(summary.dataQualityIssues(), true));
         md.append(CALCULATION_NOTE).append("\n\n");
         List<FinancialDataPoint> notUsable = summary.calculated().points().stream()
                 .filter(p -> p.status() == DataStatus.DATA_CONFLICT || p.status() == DataStatus.INVALID).toList();
@@ -220,7 +245,7 @@ public class ResearchReportRenderer {
         ReportedValuation r = v.reported();
         md.append("Company: ").append(r.companyName()).append(" (").append(r.symbol()).append(")\n\n");
         renderConflicts(md, v.dataQualityIssues());
-        renderValuation(md, result, new Mask(conflictedFields(v.dataQualityIssues()), true));
+        renderValuation(md, result, new Mask(v.dataQualityIssues(), true));
         md.append(CALCULATION_NOTE).append("\n\n");
         renderIssuesAndGaps(md, v.dataQualityIssues(), v.dataGaps());
         md.append("\n").append(r.provenance().note()).append("\n");
@@ -235,7 +260,7 @@ public class ResearchReportRenderer {
         HistoricalPerformance p = result.historicalPerformance();
         md.append("Symbol: ").append(p.symbol()).append(" (").append(p.exchange()).append(")\n")
                 .append("This is price HISTORY; endPrice is the last close in the window, not a live quote.\n\n");
-        renderHistory(md, p, new Mask(Set.of(), true));
+        renderHistory(md, p, new Mask(List.of(), true));
         md.append(CALCULATION_NOTE).append("\n\n");
         md.append(p.provenance().note()).append("\n");
         return md.toString();
@@ -263,13 +288,6 @@ public class ResearchReportRenderer {
     }
 
     // --- Shared sections ---------------------------------------------------------------------
-
-    private static Set<String> conflictedFields(List<DataQualityIssue> issues) {
-        Set<String> fields = new LinkedHashSet<>();
-        issues.stream().filter(i -> i.type() == DataQualityIssue.Type.DATA_CONFLICT)
-                .forEach(i -> fields.addAll(i.affectedFields()));
-        return fields;
-    }
 
     private void renderConflicts(StringBuilder md, List<DataQualityIssue> issues) {
         List<DataQualityIssue> conflicts = issues.stream()
@@ -416,7 +434,10 @@ public class ResearchReportRenderer {
 
         List<AnnualFinancials> annual = reported.annualHistory();
         if (!annual.isEmpty()) {
-            md.append("### Fiscal years (source fields: fundamentals-timeseries)\n\n")
+            boolean filed = annual.stream().map(AnnualFinancials::netProfit).anyMatch(point -> point.source() != null
+                    && point.source().sourceType() == com.ashish.stockresearch.research.model.SourceType.OFFICIAL_FILING);
+            md.append(filed ? "### Fiscal years (as the company filed them with NSE; source fields: nse-xbrl)\n\n"
+                            : "### Fiscal years (source fields: fundamentals-timeseries)\n\n")
                     .append("| Fiscal year | Period end | Revenue | Net profit | Shareholders' equity | Total assets | Total debt "
                             + "| EBIT | Current liabilities | Operating cash flow |\n")
                     .append("|---|---|---|---|---|---|---|---|---|---|\n");
@@ -477,16 +498,28 @@ public class ResearchReportRenderer {
                         + "target or recommendation, and no benchmark is supplied to call any of them high or low._\n\n");
         md.append("| Metric | Value | As of | Status | Raw value (provider unit) | Source field |\n")
                 .append("|---|---|---|---|---|---|\n");
-        for (FinancialDataPoint p : List.of(r.price(), v.trailingPe(), r.trailingEps(), v.priceToBook(),
-                r.bookValuePerShare(), v.dividendYieldPercent(), r.dividendPerShare(), v.earningsYieldPercent())) {
+        List<FinancialDataPoint> rows = new ArrayList<>(List.of(r.price(), v.trailingPe(), r.trailingEps(),
+                v.priceToBook(), r.bookValuePerShare(), v.dividendYieldPercent(), r.dividendPerShare(),
+                v.earningsYieldPercent()));
+        if (v.filedFiguresUsed()) {
+            rows.addAll(List.of(v.peOnFiledEps(), v.filedShareCount(), r.sharesOutstanding()));
+        }
+        for (FinancialDataPoint p : rows) {
             md.append("| ").append(p.metric()).append(" | ").append(value(p, conflicted)).append(" | ")
                     .append(p.period().label()).append(" | ").append(status(p)).append(" | ")
                     .append(raw(p, conflicted)).append(" | ").append(fields(p)).append(" |\n");
         }
         md.append("\nTrailing P/E, price-to-book and dividend yield are REPORTED by the provider, not calculated by the "
                 + "application; each was checked against the share price and per-share figure shown, and DATA_CONFLICT "
-                + "means they disagree and the multiple is not usable. Only earnings yield is CALCULATED, as 100 / "
-                + "trailing P/E.\n\n");
+                + "means they disagree and the multiple is not usable. Earnings yield is CALCULATED, as 100 / trailing "
+                + "P/E.");
+        if (v.filedFiguresUsed()) {
+            md.append(" P/E on filed EPS is CALCULATED as the share price over the latest fiscal year's basic EPS as "
+                    + "the company filed it, and only while the filing's share count matches today's; it is over a "
+                    + "fiscal year, not the trailing twelve months.");
+        }
+        md.append("\n\n");
+
     }
 
     private void renderHistory(StringBuilder md, HistoricalPerformance p, Mask conflicted) {
@@ -540,7 +573,8 @@ public class ResearchReportRenderer {
                     .filter(p -> p.calculationStatus() == CalculationStatus.CALCULATED).forEach(points::add);
         }
         if (report.valuation().success()) {
-            Stream.of(report.valuation().valuation().earningsYieldPercent())
+            Stream.of(report.valuation().valuation().earningsYieldPercent(), report.valuation().valuation().peOnFiledEps(),
+                            report.valuation().valuation().filedShareCount())
                     .filter(p -> p.calculationStatus() == CalculationStatus.CALCULATED).forEach(points::add);
         }
         if (report.historicalPerformance().success()) {

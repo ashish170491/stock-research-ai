@@ -8,9 +8,12 @@ import com.ashish.stockresearch.research.model.FiledFinancials;
 import com.ashish.stockresearch.research.model.FiledYear;
 import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.StatementScope;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.MonthDay;
 import java.util.ArrayList;
@@ -46,22 +49,40 @@ class NseFiledFinancialsProvider implements FiledFinancialsProvider {
     private final NseDocumentStore store;
     private final NseXbrlReader reader;
     private final FiledStatementChecks checks;
+    /** Each company's two listings; null when not cached. A failure to list is never kept. */
+    private final Cache<String, Listings> listings;
+
+    /** Both of a company's listings, as NSE served them. */
+    private record Listings(List<NseFilingListing> annual, List<NseFilingListing> integrated) {
+    }
 
     NseFiledFinancialsProvider(NseFilingsClient client, NseDocumentStore store, NseXbrlReader reader,
                                FiledStatementChecks checks) {
+        this(client, store, reader, checks, Duration.ZERO);
+    }
+
+    /**
+     * @param listingTtl how long a company's listings are reused; zero to list every time. A filing never
+     *                   changes once made, so only a new filing can be missed, and only for this long.
+     */
+    NseFiledFinancialsProvider(NseFilingsClient client, NseDocumentStore store, NseXbrlReader reader,
+                               FiledStatementChecks checks, Duration listingTtl) {
         this.client = client;
         this.store = store;
         this.reader = reader;
         this.checks = checks;
+        this.listings = listingTtl.isZero() ? null
+                : Caffeine.newBuilder().expireAfterWrite(listingTtl).maximumSize(2_000).build();
     }
 
     @Override
     public FiledFinancials getFiledFinancials(String symbol, int fiscalYears) {
         String nseSymbol = symbol.strip().toUpperCase(Locale.ROOT);
-        List<NseFilingListing> annual = client.annualResults(nseSymbol);
+        Listings listed = this.listings == null ? list(nseSymbol) : this.listings.get(nseSymbol, this::list);
+        List<NseFilingListing> annual = listed.annual();
         MonthDay fiscalYearEnd = fiscalYearEnd(annual);
         List<NseFilingListing> listings = new ArrayList<>(annual);
-        client.integratedFinancials(nseSymbol).stream()
+        listed.integrated().stream()
                 .filter(listing -> MonthDay.from(listing.periodEnd()).equals(fiscalYearEnd))
                 .forEach(listings::add);
         if (listings.isEmpty()) {
@@ -104,6 +125,10 @@ class NseFiledFinancialsProvider implements FiledFinancialsProvider {
             }
         }
         return new FiledFinancials(nseSymbol, NseXbrlReader.SOURCE, scope, years.reversed(), gaps.reversed());
+    }
+
+    private Listings list(String nseSymbol) {
+        return new Listings(client.annualResults(nseSymbol), client.integratedFinancials(nseSymbol));
     }
 
     /** A year read, and what is known of the security once its filing has been read. */

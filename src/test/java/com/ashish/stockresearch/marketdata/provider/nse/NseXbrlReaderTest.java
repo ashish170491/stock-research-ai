@@ -70,6 +70,7 @@ class NseXbrlReaderTest {
         assertThat(crore(year, FiledItem.PROFIT_ATTRIBUTABLE_TO_NON_CONTROLLING_INTERESTS)).isEqualByComparingTo("14979");
         assertThat(crore(year, FiledItem.PROFIT_BEFORE_TAX)).isEqualByComparingTo("123162");
         assertThat(crore(year, FiledItem.FINANCE_COSTS)).isEqualByComparingTo("27061");
+        assertThat(crore(year, FiledItem.TOTAL_EXPENSES)).isEqualByComparingTo("981475");
         assertThat(crore(year, FiledItem.EQUITY_ATTRIBUTABLE_TO_OWNERS)).isEqualByComparingTo("904030");
         assertThat(crore(year, FiledItem.TOTAL_ASSETS)).isEqualByComparingTo("2178140");
         assertThat(crore(year, FiledItem.CURRENT_LIABILITIES)).isEqualByComparingTo("541254");
@@ -147,6 +148,24 @@ class NseXbrlReaderTest {
         // 17,399 = 17,390 + 9
         assertThat(crore(year, FiledItem.PROFIT_ATTRIBUTABLE_TO_OWNERS)).isEqualByComparingTo("17390");
         assertThat(year.checks()).allMatch(check -> check.outcome() == FiledYear.Check.Outcome.PASSED);
+    }
+
+    // An NBFC's statement states interest earned, as a bank's does, but it is an Ind-AS statement.
+    @Test
+    void readsAnNbfcAsTheIndAsStatementItIsNotAsABank() {
+        FiledYear year = read("bajfinance-fy26-consolidated-nbfc.xml", "BAJFINANCE", 2026,
+                NseFilingListing.Format.INTEGRATED);
+
+        assertThat(crore(year, FiledItem.REVENUE_FROM_OPERATIONS)).isEqualByComparingTo("81982.38");
+        assertThat(crore(year, FiledItem.PROFIT_FOR_PERIOD)).isEqualByComparingTo("19332.36");
+        assertThat(crore(year, FiledItem.PROFIT_ATTRIBUTABLE_TO_OWNERS)).isEqualByComparingTo("19017.39");
+        assertThat(crore(year, FiledItem.BASIC_EPS)).isEqualByComparingTo("30.6");
+        assertThat(crore(year, FiledItem.EQUITY_ATTRIBUTABLE_TO_OWNERS)).isEqualByComparingTo("113999.02");
+        assertThat(crore(year, FiledItem.TOTAL_ASSETS)).isEqualByComparingTo("559952.36");
+        // so the profit split is checked, as for any Ind-AS consolidated statement
+        assertThat(year.checks()).allMatch(check -> check.outcome() == FiledYear.Check.Outcome.PASSED)
+                .extracting(FiledYear.Check::name).containsExactly(FiledStatementChecks.PROFIT_SPLIT,
+                        FiledStatementChecks.BALANCE_SHEET, FiledStatementChecks.EQUITY_SPLIT);
     }
 
     @Test

@@ -148,7 +148,8 @@ class ResearchReportServiceTest {
                 },
                 new UnsupportedShareholdingProvider(), provider,
                 new FinancialMetricsService(), new HistoricalPerformanceService(), provider,
-                new ValuationService(BigDecimal.valueOf(5)));
+                new ValuationService(BigDecimal.valueOf(5)),
+                com.ashish.stockresearch.research.TestFilings.none());
 
         StockResearchReport report = new ResearchReportService(research, validator, new SectorClassifier()).build("INFY");
 

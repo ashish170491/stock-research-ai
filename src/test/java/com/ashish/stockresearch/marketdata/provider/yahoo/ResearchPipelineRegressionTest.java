@@ -98,7 +98,8 @@ class ResearchPipelineRegressionTest {
                 new YahooFinanceHistoricalMarketDataProvider(client, resolver),
                 new FinancialMetricsService(), new HistoricalPerformanceService(),
                 new YahooFinanceValuationProvider(resolver, quoteSummary),
-                new ValuationService(java.math.BigDecimal.valueOf(5)));
+                new ValuationService(java.math.BigDecimal.valueOf(5)),
+                com.ashish.stockresearch.research.TestFilings.none());
         return research;
     }
 

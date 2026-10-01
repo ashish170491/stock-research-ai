@@ -11,6 +11,7 @@ import java.util.Map;
  *
  * @param period       the fiscal year, as the filing's own reporting-period dates state it
  * @param scope        consolidated or standalone
+ * @param format       the statement format filed: a company's (Ind-AS) or a bank's
  * @param audited      whether the filing says the results are audited
  * @param filedOn      when the filing was made; null when the source does not say
  * @param documentUrl  the filed document the figures were read from
@@ -21,6 +22,7 @@ import java.util.Map;
 public record FiledYear(
         ReportingPeriod period,
         StatementScope scope,
+        StatementFormat format,
         boolean audited,
         LocalDate filedOn,
         String documentUrl,
@@ -41,8 +43,8 @@ public record FiledYear(
     }
 
     public FiledYear {
-        if (period == null || scope == null || documentUrl == null) {
-            throw new IllegalArgumentException("a filed year needs its period, scope and document");
+        if (period == null || scope == null || format == null || documentUrl == null) {
+            throw new IllegalArgumentException("a filed year needs its period, scope, format and document");
         }
         EnumMap<FiledItem, FinancialDataPoint> all = new EnumMap<>(FiledItem.class);
         if (items != null) {
@@ -66,10 +68,10 @@ public record FiledYear(
     public FiledYear with(FiledItem item, FinancialDataPoint point) {
         EnumMap<FiledItem, FinancialDataPoint> copy = new EnumMap<>(items);
         copy.put(item, point);
-        return new FiledYear(period, scope, audited, filedOn, documentUrl, copy, checks);
+        return new FiledYear(period, scope, format, audited, filedOn, documentUrl, copy, checks);
     }
 
     public FiledYear withChecks(List<Check> results) {
-        return new FiledYear(period, scope, audited, filedOn, documentUrl, items, results);
+        return new FiledYear(period, scope, format, audited, filedOn, documentUrl, items, results);
     }
 }

@@ -30,7 +30,7 @@ class NseFilingsConfiguration {
                 .build();
         RestClient archive = client(builder, properties, throttle).build();
         return new NseFiledFinancialsProvider(new NseFilingsClient(api, archive, properties.archiveHost()),
-                new NseDocumentStore(properties.documentDirectory()), new NseXbrlReader(), checks);
+                new NseDocumentStore(properties.documentDirectory()), new NseXbrlReader(), checks, properties.listingTtl());
     }
 
     private static RestClient.Builder client(RestClient.Builder builder, NseFilingsProperties properties,

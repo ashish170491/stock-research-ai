@@ -21,5 +21,8 @@
   (RequestThrottle). Never cache a price inside a long-lived entry.
 - NSE filings (marketdata/provider/nse) share one RequestThrottle; each XBRL document is
   stored once (NseDocumentStore). A filed figure is used only after FiledStatementChecks.
+- Fiscal-year figures come from the filings (FiledAnnualHistoryService); Yahoo's net profit
+  is the cross-check, and a year they disagree on is a DATA_CONFLICT for that year only.
+  Years are never mixed across sources.
 - Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md
