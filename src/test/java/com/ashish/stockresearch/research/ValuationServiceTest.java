@@ -38,7 +38,8 @@ class ValuationServiceTest {
         assertThat(v.dividendYieldPercent().display()).isEqualTo("3.29%");
         assertThat(v.earningsYieldPercent().unit()).isEqualTo(Unit.PERCENT);
         assertThat(v.dataQualityIssues()).isEmpty();
-        assertThat(v.dataGaps()).isEmpty();
+        // with no filed results, the one metric measured on them is a gap
+        assertThat(v.dataGaps()).extracting(gap -> gap.item()).containsExactly("peOnFiledEps");
     }
 
     @Test
@@ -126,7 +127,8 @@ class ValuationServiceTest {
         assertThat(v.trailingPe().status()).isEqualTo(DataStatus.UNAVAILABLE);
         assertThat(v.earningsYieldPercent().status()).isEqualTo(DataStatus.UNAVAILABLE);
         assertThat(v.dataGaps()).extracting(gap -> gap.area() + " / " + gap.item()).containsExactly(
-                "Valuation / trailingPe", "Valuation / dividendYieldPercent", "Valuation / earningsYieldPercent");
+                "Valuation / trailingPe", "Valuation / dividendYieldPercent", "Valuation / earningsYieldPercent",
+                "Valuation / peOnFiledEps");
     }
 
     @Test

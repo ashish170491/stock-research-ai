@@ -17,12 +17,17 @@ public enum FiledItem {
     INTEREST_EARNED(Kind.DURATION, Unit.INR_CRORE, "interest earned"),
     PROFIT_BEFORE_TAX(Kind.DURATION, Unit.INR_CRORE, "profit before tax"),
     FINANCE_COSTS(Kind.DURATION, Unit.INR_CRORE, "finance costs"),
+    /** Total expenses, finance costs and depreciation included; exceptional items are separate. */
+    TOTAL_EXPENSES(Kind.DURATION, Unit.INR_CRORE, "total expenses"),
     /** Profit for the period, before it is split between the parent's owners and minority holders. */
     PROFIT_FOR_PERIOD(Kind.DURATION, Unit.INR_CRORE, "profit for the period"),
     PROFIT_ATTRIBUTABLE_TO_OWNERS(Kind.DURATION, Unit.INR_CRORE, "profit attributable to owners of the parent"),
     PROFIT_ATTRIBUTABLE_TO_NON_CONTROLLING_INTERESTS(Kind.DURATION, Unit.INR_CRORE,
             "profit attributable to non-controlling interests"),
     BASIC_EPS(Kind.DURATION, Unit.INR_PER_SHARE, "basic earnings per share"),
+    /** Paid-up equity share capital, stated with the results; with the face value, the number of shares. */
+    PAID_UP_EQUITY_CAPITAL(Kind.DURATION, Unit.INR_CRORE, "paid-up equity share capital"),
+    FACE_VALUE_PER_SHARE(Kind.DURATION, Unit.INR_PER_SHARE, "face value per equity share"),
     OPERATING_CASH_FLOW(Kind.DURATION, Unit.INR_CRORE, "net cash from operating activities"),
     /** Dividends paid in cash, as the cash-flow statement's financing activities report them. */
     DIVIDENDS_PAID(Kind.DURATION, Unit.INR_CRORE, "dividends paid"),

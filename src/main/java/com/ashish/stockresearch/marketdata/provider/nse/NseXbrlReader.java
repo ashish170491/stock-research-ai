@@ -10,6 +10,7 @@ import com.ashish.stockresearch.research.model.ProviderUnit;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
 import com.ashish.stockresearch.research.model.SourceInfo;
 import com.ashish.stockresearch.research.model.SourceType;
+import com.ashish.stockresearch.research.model.StatementFormat;
 import com.ashish.stockresearch.research.model.StatementScope;
 
 import java.time.LocalDate;
@@ -25,9 +26,9 @@ import java.util.Set;
  * Reads one fiscal year of results from an NSE XBRL filing: each {@link FiledItem} exactly as filed, for
  * the twelve months ending at the filing's period end. Nothing is derived; consistency is checked later.
  *
- * <p>Two statement formats are read. Companies file under Ind-AS Schedule III; banks under the banking
- * format, whose lines differ (interest earned, capital and reserves, deposits). An item the format has no
- * line for is UNAVAILABLE with that reason.
+ * <p>Two statement formats are read. Companies, NBFCs among them, file under Ind-AS Schedule III; banks
+ * under the banking format, whose lines differ (interest earned, capital and reserves, deposits). An item
+ * the format has no line for is UNAVAILABLE with that reason.
  */
 final class NseXbrlReader {
 
@@ -46,11 +47,14 @@ final class NseXbrlReader {
             Map.entry(FiledItem.REVENUE_FROM_OPERATIONS, "RevenueFromOperations"),
             Map.entry(FiledItem.PROFIT_BEFORE_TAX, "ProfitBeforeTax"),
             Map.entry(FiledItem.FINANCE_COSTS, "FinanceCosts"),
+            Map.entry(FiledItem.TOTAL_EXPENSES, "Expenses"),
             Map.entry(FiledItem.PROFIT_FOR_PERIOD, "ProfitLossForPeriod"),
             Map.entry(FiledItem.PROFIT_ATTRIBUTABLE_TO_OWNERS, "ProfitOrLossAttributableToOwnersOfParent"),
             Map.entry(FiledItem.PROFIT_ATTRIBUTABLE_TO_NON_CONTROLLING_INTERESTS,
                     "ProfitOrLossAttributableToNonControllingInterests"),
             Map.entry(FiledItem.BASIC_EPS, "BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations"),
+            Map.entry(FiledItem.PAID_UP_EQUITY_CAPITAL, "PaidUpValueOfEquityShareCapital"),
+            Map.entry(FiledItem.FACE_VALUE_PER_SHARE, "FaceValueOfEquityShareCapital"),
             Map.entry(FiledItem.OPERATING_CASH_FLOW, "CashFlowsFromUsedInOperatingActivities"),
             Map.entry(FiledItem.DIVIDENDS_PAID, "DividendsPaidClassifiedAsFinancingActivities"),
             Map.entry(FiledItem.EQUITY_ATTRIBUTABLE_TO_OWNERS, "EquityAttributableToOwnersOfParent"),
@@ -70,6 +74,8 @@ final class NseXbrlReader {
                     "ProfitLossAfterTaxesMinorityInterestAndShareOfProfitLossOfAssociates"),
             Map.entry(FiledItem.PROFIT_ATTRIBUTABLE_TO_NON_CONTROLLING_INTERESTS, "ProfitLossOfMinorityInterest"),
             Map.entry(FiledItem.BASIC_EPS, "BasicEarningsPerShareAfterExtraordinaryItems"),
+            Map.entry(FiledItem.PAID_UP_EQUITY_CAPITAL, "PaidUpValueOfEquityShareCapital"),
+            Map.entry(FiledItem.FACE_VALUE_PER_SHARE, "FaceValueOfEquityShareCapital"),
             Map.entry(FiledItem.OPERATING_CASH_FLOW, "CashFlowsFromUsedInOperatingActivities"),
             Map.entry(FiledItem.DIVIDENDS_PAID, "DividendsPaidClassifiedAsFinancingActivities"),
             Map.entry(FiledItem.SHARE_CAPITAL, "Capital"),
@@ -133,8 +139,7 @@ final class NseXbrlReader {
                     ? "%s reports no figures for the twelve months %s to %s".formatted(listing.xbrlUrl(), start, end)
                     : unplaced(xbrl, listing));
         }
-        Taxonomy taxonomy = xbrl.hasConcept("InterestEarned") || xbrl.hasConcept("CapitalAndLiabilities")
-                ? Taxonomy.BANKING : Taxonomy.IND_AS;
+        Taxonomy taxonomy = taxonomy(xbrl);
         ReportingPeriod fiscalYear = FiscalCalendar.forFiscalYearEnd(end).fiscalYear(end);
         ReportingPeriod closing = ReportingPeriod.pointInTime(end);
         LocalDate filedOn = listing.filedAt() == null ? null : listing.filedAt().toLocalDate();
@@ -143,7 +148,8 @@ final class NseXbrlReader {
             ReportingPeriod period = item.kind() == FiledItem.Kind.DURATION ? fiscalYear : closing;
             items.put(item, point(xbrl, taxonomy, scope, item, start, end, period, filedOn));
         }
-        return new FiledYear(fiscalYear, scope, listing.audited(), filedOn, listing.xbrlUrl(), items, List.of());
+        return new FiledYear(fiscalYear, scope, taxonomy == Taxonomy.BANKING ? StatementFormat.BANK : StatementFormat.COMPANY,
+                listing.audited(), filedOn, listing.xbrlUrl(), items, List.of());
     }
 
     private static FinancialDataPoint point(XbrlInstance xbrl, Taxonomy taxonomy, StatementScope scope, FiledItem item,
@@ -165,7 +171,8 @@ final class NseXbrlReader {
                 : xbrl.instant(concept, end);
         return switch (found) {
             case XbrlInstance.Lookup.Missing ignored -> FinancialDataPoint.unavailable(metric, item.unit(), period,
-                    source, "the filing does not report %s (%s) for %s".formatted(item.label(), concept, period.label()));
+                    source, "the filing does not report %s (%s) %s".formatted(item.label(), concept,
+                    item.kind() == FiledItem.Kind.DURATION ? "for " + period.label() : "at " + period.end()));
             case XbrlInstance.Lookup.Ambiguous ambiguous -> FinancialDataPoint.rejected(metric, item.unit(), period,
                     source, "the filing reports %s (%s) for %s more than once with different values (%s); neither is used"
                             .formatted(item.label(), concept, period.label(), ambiguous.values().stream()
@@ -198,6 +205,16 @@ final class NseXbrlReader {
                         normalized.value(), normalized.unit(), period, source).withCurrency(normalized.currency()))
                 .orElseGet(() -> FinancialDataPoint.unavailable(metric, item.unit(), period, source,
                         "the amount could not be normalised"));
+    }
+
+    /**
+     * A bank's statement is known by its balance sheet, "capital and liabilities". An NBFC files Ind-AS
+     * statements that also state interest earned, beside revenue from operations; it is not a bank.
+     */
+    static Taxonomy taxonomy(XbrlInstance xbrl) {
+        return xbrl.hasConcept("CapitalAndLiabilities")
+                || (xbrl.hasConcept("InterestEarned") && !xbrl.hasConcept("RevenueFromOperations"))
+                ? Taxonomy.BANKING : Taxonomy.IND_AS;
     }
 
     private static String unplaced(XbrlInstance xbrl, NseFilingListing listing) {

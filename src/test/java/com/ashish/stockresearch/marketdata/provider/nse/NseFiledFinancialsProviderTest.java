@@ -277,6 +277,27 @@ class NseFiledFinancialsProviderTest {
     }
 
     @Test
+    void asksNseForACompanysListingsOnceWhileTheyAreCached() {
+        api.expect(org.springframework.test.web.client.ExpectedCount.once(), requestToUriTemplate(
+                        "https://www.nseindia.com/api/corporates-financial-results?index=equities&symbol={s}&period=Annual",
+                        "RELIANCE"))
+                .andRespond(withSuccess(fixture("reliance-annual-results.json"), MediaType.APPLICATION_JSON));
+        api.expect(org.springframework.test.web.client.ExpectedCount.once(), requestToUriTemplate(
+                        "https://www.nseindia.com/api/integrated-filing-results?index=equities&symbol={s}&size=100&page=1",
+                        "RELIANCE"))
+                .andRespond(withSuccess(fixture("reliance-integrated-filings.json"), MediaType.APPLICATION_JSON));
+        document("INTEGRATED_FILING_INDAS_1658776_24042026105714_WEB.xml", "reliance-fy26-consolidated.xml");
+        NseFiledFinancialsProvider cached = new NseFiledFinancialsProvider(client(), new NseDocumentStore(documents),
+                new NseXbrlReader(), new FiledStatementChecks(), java.time.Duration.ofHours(12));
+
+        cached.getFiledFinancials("RELIANCE", 1);
+        FiledFinancials again = cached.getFiledFinancials("reliance", 1);
+
+        api.verify();
+        assertThat(again.years()).extracting(y -> y.period().label()).containsExactly("FY26");
+    }
+
+    @Test
     void saysSoWhenNseListsNothingForACompany() {
         api.expect(manyTimes(), requestTo(org.hamcrest.Matchers.containsString("corporates-financial-results")))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));

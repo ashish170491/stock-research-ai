@@ -37,6 +37,12 @@ public final class ValuationFixtures {
      */
     public static ReportedValuation valuation(String price, String eps, String book, String dividend, String pe,
                                               String pb, String dividendYieldFraction) {
+        return valuation(price, eps, book, dividend, pe, pb, dividendYieldFraction, null);
+    }
+
+    /** @param shares the provider's shares outstanding; null for none published */
+    public static ReportedValuation valuation(String price, String eps, String book, String dividend, String pe,
+                                              String pb, String dividendYieldFraction, String shares) {
         return new ReportedValuation("TECHM", "NSE", "Tech Mahindra Limited", AS_OF,
                 perShare("sharePrice", price, "price.regularMarketPrice"),
                 perShare("trailingEps", eps, "defaultKeyStatistics.trailingEps"),
@@ -51,6 +57,12 @@ public final class ValuationFixtures {
                                 ProviderUnit.FRACTION, new BigDecimal(dividendYieldFraction).movePointRight(2)
                                         .setScale(2, RoundingMode.HALF_UP), Unit.PERCENT, AT,
                                 SOURCE.withField("summaryDetail.dividendYield")),
+                shares == null
+                        ? FinancialDataPoint.unavailable("sharesOutstanding", Unit.SHARES, AT,
+                                SOURCE.withField("defaultKeyStatistics.sharesOutstanding"),
+                                "Yahoo Finance did not publish defaultKeyStatistics.sharesOutstanding")
+                        : FinancialDataPoint.reported("sharesOutstanding", new BigDecimal(shares), ProviderUnit.SHARE_COUNT,
+                                new BigDecimal(shares), Unit.SHARES, AT, SOURCE.withField("defaultKeyStatistics.sharesOutstanding")),
                 new DataProvenance("Yahoo Finance", SourceType.MARKET_DATA_PROVIDER, DataFreshness.DELAYED,
                         Instant.parse("2026-09-27T06:00:00Z"), null, AS_OF, null, "Point-in-time valuation."));
     }

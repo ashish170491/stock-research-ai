@@ -151,6 +151,8 @@ public class MockStockResearchProvider
                 perShare("bookValuePerShare", "400.00", at), perShare("dividendPerShare", "20.00", at),
                 multiple("trailingPe", "20.00", at), multiple("priceToBook", "2.50", at),
                 percent("dividendYieldPercent", "2.00", at),
+                FinancialDataPoint.reported("sharesOutstanding", new BigDecimal("1000000000"), ProviderUnit.SHARE_COUNT,
+                        new BigDecimal("1000000000"), Unit.SHARES, at, source(asOf)),
                 provenance(DataFreshness.DELAYED, asOf, null));
     }
 

@@ -3,6 +3,7 @@ package com.ashish.stockresearch.research;
 import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
 import com.ashish.stockresearch.research.model.HistoricalPerformanceResult;
+import com.ashish.stockresearch.research.model.ReportedValuation;
 import com.ashish.stockresearch.research.model.ResearchStatus;
 import com.ashish.stockresearch.research.model.ShareholdingResult;
 import com.ashish.stockresearch.research.model.ValuationResult;
@@ -40,6 +41,7 @@ public class StockResearchService {
     private final HistoricalPerformanceService historicalPerformanceService;
     private final ValuationDataProvider valuationDataProvider;
     private final ValuationService valuationService;
+    private final FiledAnnualHistoryService filedAnnualHistory;
 
     public StockResearchService(CompanyProfileProvider companyProfileProvider,
                                 FinancialDataProvider financialDataProvider,
@@ -48,7 +50,8 @@ public class StockResearchService {
                                 FinancialMetricsService financialMetricsService,
                                 HistoricalPerformanceService historicalPerformanceService,
                                 ValuationDataProvider valuationDataProvider,
-                                ValuationService valuationService) {
+                                ValuationService valuationService,
+                                FiledAnnualHistoryService filedAnnualHistory) {
         this.companyProfileProvider = companyProfileProvider;
         this.financialDataProvider = financialDataProvider;
         this.shareholdingProvider = shareholdingProvider;
@@ -57,6 +60,7 @@ public class StockResearchService {
         this.historicalPerformanceService = historicalPerformanceService;
         this.valuationDataProvider = valuationDataProvider;
         this.valuationService = valuationService;
+        this.filedAnnualHistory = filedAnnualHistory;
     }
 
     public CompanyProfileResult getCompanyProfile(String rawSymbol) {
@@ -67,8 +71,9 @@ public class StockResearchService {
 
     public FinancialSummaryResult getFinancialSummary(String rawSymbol) {
         return execute("financial summary", rawSymbol,
-                symbol -> FinancialSummaryResult.success(
-                        financialMetricsService.summarize(financialDataProvider.getReportedFinancials(symbol))),
+                // Fiscal years from the company's filings where there are any, the provider's figures as the check.
+                symbol -> FinancialSummaryResult.success(financialMetricsService.summarize(
+                        filedAnnualHistory.withFiledAnnualHistory(financialDataProvider.getReportedFinancials(symbol)))),
                 FinancialSummaryResult::failure);
     }
 
@@ -81,7 +86,11 @@ public class StockResearchService {
     /** Point-in-time valuation multiples, each checked against the share price it is quoted against. */
     public ValuationResult getValuation(String rawSymbol) {
         return execute("valuation", rawSymbol,
-                symbol -> ValuationResult.success(valuationService.assess(valuationDataProvider.getReportedValuation(symbol))),
+                symbol -> {
+                    ReportedValuation reported = valuationDataProvider.getReportedValuation(symbol);
+                    return ValuationResult.success(valuationService.assess(reported,
+                            filedAnnualHistory.latestFiledPerShare(reported.symbol(), reported.exchange())));
+                },
                 ValuationResult::failure);
     }
 

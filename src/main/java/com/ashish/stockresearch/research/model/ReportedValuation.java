@@ -13,6 +13,8 @@ import java.util.List;
  * @param bookValuePerShare    book value per share, in the listing currency
  * @param dividendPerShare     the indicated annual dividend per share, in the listing currency
  * @param dividendYieldPercent the indicated annual dividend as a percentage of the price
+ * @param sharesOutstanding    the number of shares the provider states now, to tell whether a per-share
+ *                             figure from an earlier date is still on today's share count
  */
 public record ReportedValuation(
         String symbol,
@@ -26,6 +28,7 @@ public record ReportedValuation(
         FinancialDataPoint trailingPe,
         FinancialDataPoint priceToBook,
         FinancialDataPoint dividendYieldPercent,
+        FinancialDataPoint sharesOutstanding,
         DataProvenance provenance
 ) {
 
@@ -33,11 +36,11 @@ public record ReportedValuation(
     public ReportedValuation withPerShare(FinancialDataPoint eps, FinancialDataPoint bookValue,
                                           FinancialDataPoint dividend) {
         return new ReportedValuation(symbol, exchange, companyName, asOf, price, eps, bookValue, dividend, trailingPe,
-                priceToBook, dividendYieldPercent, provenance);
+                priceToBook, dividendYieldPercent, sharesOutstanding, provenance);
     }
 
     public List<FinancialDataPoint> points() {
         return List.of(price, trailingEps, bookValuePerShare, dividendPerShare, trailingPe, priceToBook,
-                dividendYieldPercent);
+                dividendYieldPercent, sharesOutstanding);
     }
 }

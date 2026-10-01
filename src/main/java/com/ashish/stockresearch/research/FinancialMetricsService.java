@@ -9,6 +9,7 @@ import com.ashish.stockresearch.research.model.AnnualFinancials;
 import com.ashish.stockresearch.research.model.AnnualRatios;
 import com.ashish.stockresearch.research.model.CalculatedFinancials;
 import com.ashish.stockresearch.research.model.CalculationInput;
+import com.ashish.stockresearch.research.model.CalculationStatus;
 import com.ashish.stockresearch.research.model.DataGap;
 import com.ashish.stockresearch.research.model.DataQualityIssue;
 import com.ashish.stockresearch.research.model.DataStatus;
@@ -21,16 +22,15 @@ import com.ashish.stockresearch.research.model.QuarterlyResult;
 import com.ashish.stockresearch.research.model.ReportedFinancials;
 import com.ashish.stockresearch.research.model.ReportingPeriod;
 import com.ashish.stockresearch.research.model.SourceInfo;
+import com.ashish.stockresearch.research.model.SourceType;
 import com.ashish.stockresearch.research.model.Unit;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -156,9 +156,11 @@ public class FinancialMetricsService {
         FinancialDataPoint ttmRevenue = headline.revenue();
         Optional<FinancialDataPoint> latestAnnualRevenue = annual.isEmpty()
                 ? Optional.empty() : Optional.of(annual.get(annual.size() - 1).revenue());
+        // Only figures from one source: a filing's revenue from operations and Yahoo's TTM revenue are
+        // defined differently, and a gap between them says nothing about either.
         latestAnnualRevenue
                 .filter(fy -> fy.value() != null && ttmRevenue.value() != null && fy.unit() == ttmRevenue.unit()
-                        && fy.value().signum() > 0)
+                        && fy.value().signum() > 0 && sameSource(fy, ttmRevenue))
                 .filter(fy -> FinancialDataValidator.divergencePercent(ttmRevenue.value(), fy.value())
                         .compareTo(REVENUE_DEFINITION_TOLERANCE_PERCENT) > 0)
                 .ifPresent(fy -> issues.add(DataQualityIssue.conflict(("TTM revenue (%s, %s, %s) and %s annual revenue "
@@ -170,11 +172,15 @@ public class FinancialMetricsService {
                                 FinancialDataValidator.divergencePercent(ttmRevenue.value(), fy.value()).toPlainString()),
                         List.of(ttmRevenue.source().sourceField(), fy.source().sourceField()))));
 
-        sameYearConflicts(annual, reported.annualCrossCheckFigures(), AnnualFinancials::revenue,
-                AnnualCrossCheckFigures::revenue, "revenue").ifPresent(issues::add);
-        sameYearConflicts(annual, reported.annualCrossCheckFigures(), AnnualFinancials::netProfit,
-                AnnualCrossCheckFigures::netProfit, "net profit").ifPresent(issues::add);
+        issues.addAll(sameYearConflicts(annual, reported.annualCrossCheckFigures(), AnnualFinancials::revenue,
+                AnnualCrossCheckFigures::revenue, "revenue"));
+        issues.addAll(sameYearConflicts(annual, reported.annualCrossCheckFigures(), AnnualFinancials::netProfit,
+                AnnualCrossCheckFigures::netProfit, "net profit"));
         return issues;
+    }
+
+    private static boolean sameSource(FinancialDataPoint a, FinancialDataPoint b) {
+        return a.source() != null && b.source() != null && java.util.Objects.equals(a.source().source(), b.source().source());
     }
 
     private record QuarterSum(BigDecimal value, Unit unit, List<FinancialDataPoint> points, String labels) {
@@ -221,13 +227,19 @@ public class FinancialMetricsService {
                 List.of(ttm.source().sourceField(), quarters.points().get(0).source().sourceField())));
     }
 
-    /** Every fiscal year both feeds report, compared; one conflict listing each year that disagrees. */
-    private Optional<DataQualityIssue> sameYearConflicts(List<AnnualFinancials> annual,
-                                                         List<AnnualCrossCheckFigures> crossCheck,
-                                                         Function<AnnualFinancials, FinancialDataPoint> primary,
-                                                         Function<AnnualCrossCheckFigures, FinancialDataPoint> secondary,
-                                                         String name) {
+    /**
+     * Every fiscal year both sources report, compared. Two feeds of one provider that disagree about a year
+     * disagree about their definitions, so one conflict lists every such year and covers the field in every
+     * year. A company's filing is its own document for each year: a year the second source disagrees with
+     * (a later restatement, or a tagging error in that year's filing) is disputed on its own.
+     */
+    private List<DataQualityIssue> sameYearConflicts(List<AnnualFinancials> annual,
+                                                     List<AnnualCrossCheckFigures> crossCheck,
+                                                     Function<AnnualFinancials, FinancialDataPoint> primary,
+                                                     Function<AnnualCrossCheckFigures, FinancialDataPoint> secondary,
+                                                     String name) {
         List<String> disagreements = new ArrayList<>();
+        List<DataQualityIssue> perYear = new ArrayList<>();
         String primaryField = null;
         String secondaryField = null;
         for (AnnualCrossCheckFigures other : crossCheck) {
@@ -241,54 +253,95 @@ public class FinancialMetricsService {
                     continue;
                 }
                 BigDecimal gap = FinancialDataValidator.divergencePercent(a.value(), b.value());
-                if (gap.compareTo(SAME_YEAR_TOLERANCE_PERCENT) > 0) {
-                    disagreements.add("%s: %s vs %s (%s%%)".formatted(year.period().label(), a.display(), b.display(),
-                            gap.toPlainString()));
-                    primaryField = a.source().sourceField();
-                    secondaryField = b.source().sourceField();
+                if (gap.compareTo(SAME_YEAR_TOLERANCE_PERCENT) <= 0) {
+                    continue;
                 }
+                String label = year.period().label();
+                if (a.source().sourceType() == SourceType.OFFICIAL_FILING) {
+                    perYear.add(DataQualityIssue.conflict(("The company's filing and %s report different %s %s: "
+                            + "%s filed (%s, %s) vs %s (%s), %s%% apart. A later restatement, or a tagging error in the "
+                            + "filing, can cause this; the source does not say which. Neither is chosen, and nothing "
+                            + "is calculated or concluded from %s %s.").formatted(b.source().source(), label, name,
+                            a.display(), a.source().source(), a.source().sourceField(), b.display(),
+                            b.source().sourceField(), gap.toPlainString(), label, name),
+                            List.of(a.source().sourceField(), b.source().sourceField()), List.of(label)));
+                    continue;
+                }
+                disagreements.add("%s: %s vs %s (%s%%)".formatted(label, a.display(), b.display(), gap.toPlainString()));
+                primaryField = a.source().sourceField();
+                secondaryField = b.source().sourceField();
             }
         }
-        if (disagreements.isEmpty()) {
-            return Optional.empty();
+        if (!disagreements.isEmpty()) {
+            perYear.add(DataQualityIssue.conflict(("Two Yahoo Finance feeds report different fiscal-year %s for the "
+                    + "same years (%s vs %s): %s. Neither is chosen, and nothing is calculated or concluded from %s.")
+                    .formatted(name, primaryField, secondaryField, String.join("; ", disagreements), name),
+                    List.of(primaryField, secondaryField)));
         }
-        return Optional.of(DataQualityIssue.conflict(("Two Yahoo Finance feeds report different fiscal-year %s for the "
-                + "same years (%s vs %s): %s. Neither is chosen, and nothing is calculated or concluded from %s.")
-                .formatted(name, primaryField, secondaryField, String.join("; ", disagreements), name),
-                List.of(primaryField, secondaryField)));
+        return perYear;
     }
 
     // --- Step 2: conflict marking ------------------------------------------------------------
 
-    private static Map<String, String> conflictedFields(List<DataQualityIssue> issues) {
-        Map<String, String> fields = new LinkedHashMap<>();
-        issues.stream().filter(issue -> issue.type() == DataQualityIssue.Type.DATA_CONFLICT)
-                .forEach(issue -> issue.affectedFields().forEach(field -> fields.putIfAbsent(field,
-                        "%s disagrees with another source field for the same figure; neither value is chosen"
-                                .formatted(field))));
-        return fields;
+    private static List<DataQualityIssue> conflicts(List<DataQualityIssue> issues) {
+        return issues.stream().filter(issue -> issue.type() == DataQualityIssue.Type.DATA_CONFLICT).toList();
     }
 
-    private static FinancialDataPoint mark(FinancialDataPoint point, Map<String, String> conflicted) {
-        return point.dependsOnFields().stream().filter(conflicted::containsKey).findFirst()
-                .map(field -> point.inConflict(conflicted.get(field)))
-                .orElse(point);
+    /**
+     * Why a value is in conflict, if it is. A conflict over a field in every period covers every value that
+     * depends on the field. A conflict confined to some periods - one fiscal year's filing disputed - covers
+     * a reported value of that field in those periods, and a calculated value only if one of its recorded
+     * inputs is that field in one of those periods.
+     */
+    private static Optional<String> conflictReason(FinancialDataPoint point, List<DataQualityIssue> conflicts) {
+        for (DataQualityIssue issue : conflicts) {
+            if (issue.affectedPeriods().isEmpty()) {
+                Optional<String> field = point.dependsOnFields().stream().filter(issue.affectedFields()::contains)
+                        .findFirst();
+                if (field.isPresent()) {
+                    return Optional.of("%s disagrees with another source field for the same figure; neither value "
+                            .formatted(field.get()) + "is chosen");
+                }
+            } else if (point.calculationStatus() == CalculationStatus.CALCULATED) {
+                for (CalculationInput input : point.inputs() == null ? List.<CalculationInput>of() : point.inputs()) {
+                    if (input.sourceField() != null && issue.covers(input.sourceField(), input.period())) {
+                        return Optional.of(periodReason(input.sourceField(), input.period()));
+                    }
+                }
+            } else {
+                Optional<String> field = point.dependsOnFields().stream()
+                        .filter(f -> issue.covers(f, point.period().label())).findFirst();
+                if (field.isPresent()) {
+                    return Optional.of(periodReason(field.get(), point.period().label()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static String periodReason(String field, String period) {
+        return "%s for %s disagrees with another source for the same figure; neither value is chosen"
+                .formatted(field, period);
+    }
+
+    private static FinancialDataPoint mark(FinancialDataPoint point, List<DataQualityIssue> conflicts) {
+        return conflictReason(point, conflicts).map(point::inConflict).orElse(point);
     }
 
     private ReportedFinancials markConflicts(ReportedFinancials reported, List<DataQualityIssue> issues) {
-        Map<String, String> conflicted = conflictedFields(issues);
-        if (conflicted.isEmpty()) {
+        List<DataQualityIssue> conflicts = conflicts(issues);
+        if (conflicts.isEmpty()) {
             return reported;
         }
         return reported.withFigures(
-                reported.headline().map(p -> mark(p, conflicted)),
-                reported.recentQuarters().stream().map(q -> q.map(p -> mark(p, conflicted))).toList(),
-                reported.annualHistory().stream().map(y -> y.map(p -> mark(p, conflicted))).toList());
+                reported.headline().map(p -> mark(p, conflicts)),
+                reported.recentQuarters().stream().map(q -> q.map(p -> mark(p, conflicts))).toList(),
+                reported.annualHistory().stream().map(y -> y.map(p -> mark(p, conflicts))).toList());
     }
 
     private CalculatedFinancials markConflicts(CalculatedFinancials calculated, List<DataQualityIssue> issues) {
-        Map<String, String> conflicted = conflictedFields(issues);
-        return calculated.map(p -> mark(p, conflicted));
+        List<DataQualityIssue> conflicts = conflicts(issues);
+        return calculated.map(p -> mark(p, conflicts));
     }
 
     // --- Step 3: calculation -----------------------------------------------------------------

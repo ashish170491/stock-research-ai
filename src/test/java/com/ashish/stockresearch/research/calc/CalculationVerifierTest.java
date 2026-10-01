@@ -203,4 +203,21 @@ class CalculationVerifierTest {
                 Unit.PERCENT, value("FY26 dividends paid", "4025.50"), value("FY26 OCF", "6172.00")), sources()))
                 .get().asString().contains("cannot be recomputed");
     }
+
+    @Test
+    void recomputesSumsAndOperatingProfitFromFiledLines() {
+        // Reliance FY26: profit before tax 1,23,162 + finance costs 27,061 crore
+        assertThat(CalculationVerifier.problem(calculated(Formula.SUM, "150223", Unit.INR_CRORE,
+                value("FY26 profit before tax", "123162"), value("FY26 finance costs", "27061")), sources())).isEmpty();
+        assertThat(CalculationVerifier.problem(calculated(Formula.SUM, "150224", Unit.INR_CRORE,
+                value("FY26 profit before tax", "123162"), value("FY26 finance costs", "27061")), sources())).isPresent();
+        // revenue 10,75,675 - (total expenses 9,81,475 - finance costs 27,061)
+        CalculationInput[] lines = {value("FY26 revenue from operations", "1075675"),
+                value("FY26 total expenses", "981475"), value("FY26 finance costs", "27061")};
+        assertThat(CalculationVerifier.problem(calculated(Formula.OPERATING_PROFIT, "121261", Unit.INR_CRORE, lines),
+                sources())).isEmpty();
+        // subtracting the finance costs instead of adding them back is caught
+        assertThat(CalculationVerifier.problem(calculated(Formula.OPERATING_PROFIT, "67139", Unit.INR_CRORE, lines),
+                sources())).isPresent();
+    }
 }

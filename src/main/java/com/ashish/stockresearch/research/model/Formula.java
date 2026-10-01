@@ -54,5 +54,17 @@ public enum Formula {
      * -(dividends paid) / operating cash flow x 100. Inputs: dividends paid as the cash-flow statement
      * reports them (an outflow, zero or negative), then operating cash flow (positive).
      */
-    DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT
+    DIVIDENDS_TO_OPERATING_CASH_FLOW_PERCENT,
+    /** The sum of the inputs, e.g. EBIT as profit before tax plus finance costs. Inputs: the values. */
+    SUM,
+    /**
+     * Operating profit: revenue from operations - (total expenses - finance costs).
+     * Inputs: revenue from operations, total expenses, finance costs.
+     */
+    OPERATING_PROFIT,
+    /**
+     * The number of equity shares: paid-up equity capital (crore) x 10,000,000 / face value per share.
+     * Inputs: paid-up equity capital in crore, face value per share.
+     */
+    SHARE_COUNT
 }

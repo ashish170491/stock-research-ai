@@ -126,7 +126,8 @@ class AiServiceRoutingTest {
     private final StockResearchService research = new StockResearchService(
             new MockStockResearchProvider(), new MockStockResearchProvider(), new UnsupportedShareholdingProvider(),
             new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService(),
-            new MockStockResearchProvider(), new ValuationService(BigDecimal.valueOf(5)));
+            new MockStockResearchProvider(), new ValuationService(BigDecimal.valueOf(5)),
+            com.ashish.stockresearch.research.TestFilings.none());
 
     private static final String CONVERSATION = "c1";
     private final ChatMemory chatMemory = MessageWindowChatMemory.builder()

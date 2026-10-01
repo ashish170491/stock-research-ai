@@ -7,6 +7,8 @@ import com.ashish.stockresearch.research.model.DataGap;
 import com.ashish.stockresearch.research.model.DataQualityIssue;
 import com.ashish.stockresearch.research.model.DataStatus;
 import com.ashish.stockresearch.research.model.FinancialDataPoint;
+import com.ashish.stockresearch.research.model.ReportingPeriod;
+import com.ashish.stockresearch.research.model.FiledPerShare;
 import com.ashish.stockresearch.research.model.Formula;
 import com.ashish.stockresearch.research.model.ReportedValuation;
 import com.ashish.stockresearch.research.model.Unit;
@@ -30,6 +32,11 @@ import java.util.Optional;
  *       the provider's figure and its own.</li>
  *   <li>Earnings yield (100 / P/E) is calculated only from a VALID, positive P/E and is reproduced by
  *       {@link CalculationVerifier} before it is used.</li>
+ *   <li>P/E on filed EPS is the share price over the basic EPS of the company's latest filed fiscal year,
+ *       calculated here. That EPS is per share of the year's end; after a bonus issue, split or new issue it is
+ *       not per share of today, so the number of shares the filing states (paid-up equity capital / face value)
+ *       must match the provider's shares outstanding within {@link #SHARE_COUNT_TOLERANCE_PERCENT}%, or no P/E is
+ *       given. Without the provider's count the P/E is shown but unchecked.</li>
  * </ul>
  * A failed check disputes the multiple and its per-share input alike; the share price stays usable.
  * A multiple whose check cannot run (a per-share input missing) keeps its status, the gap in the
@@ -39,6 +46,9 @@ import java.util.Optional;
 @Service
 public class ValuationService {
 
+    /** Share counts from two sources, a few months apart, agree this closely unless the share count changed. */
+    static final BigDecimal SHARE_COUNT_TOLERANCE_PERCENT = BigDecimal.valueOf(2);
+
     private final BigDecimal tolerancePercent;
 
     public ValuationService(@Value("${app.research.valuation.cross-check-tolerance-percent:5}")
@@ -47,6 +57,11 @@ public class ValuationService {
     }
 
     public ValuationSnapshot assess(ReportedValuation reported) {
+        return assess(reported, FiledPerShare.unavailable("no filed results are available to this application"));
+    }
+
+    /** @param filed the latest filed fiscal year's per-share figures, for the P/E on filed EPS */
+    public ValuationSnapshot assess(ReportedValuation reported, FiledPerShare filed) {
         List<DataQualityIssue> issues = new ArrayList<>();
         Checked pe = crossChecked(reported.trailingPe(), "trailing P/E", reported.price(),
                 reported.trailingEps(), Side.DENOMINATOR, "share price / trailing EPS", issues,
@@ -69,8 +84,16 @@ public class ValuationService {
                     + earningsYield.statusReason(), earningsYield.dependsOnFields()));
         }
 
+        FinancialDataPoint shareCount = filedShareCount(filed);
+        OnFiledEps onFiledEps = peOnFiledEps(reported, filed, shareCount, sources);
+        if (onFiledEps.pe().status() == DataStatus.INVALID) {
+            issues.add(DataQualityIssue.invalidCalculation("peOnFiledEps failed verification and is withheld. "
+                    + onFiledEps.pe().statusReason(), onFiledEps.pe().dependsOnFields()));
+        }
+
         List<DataGap> gaps = new ArrayList<>();
-        for (FinancialDataPoint metric : List.of(pe.multiple(), pb.multiple(), dividendYield.multiple(), earningsYield)) {
+        for (FinancialDataPoint metric : List.of(pe.multiple(), pb.multiple(), dividendYield.multiple(), earningsYield,
+                onFiledEps.pe())) {
             if (metric.status() == DataStatus.UNAVAILABLE) {
                 gaps.add(new DataGap("Valuation", metric.metric(), metric.statusReason()));
             }
@@ -82,8 +105,98 @@ public class ValuationService {
         }
         pe.uncheckedReason().ifPresent(reason -> unchecked.put(earningsYield.metric(), "calculated from a trailing P/E "
                 + "that was not cross-checked: " + reason));
+        onFiledEps.uncheckedReason().ifPresent(reason -> {
+            unchecked.put(onFiledEps.pe().metric(), reason);
+            issues.add(DataQualityIssue.warning("The P/E on filed EPS (%s) is not checked: %s.".formatted(
+                    onFiledEps.pe().display(), reason), onFiledEps.pe().dependsOnFields()));
+        });
         return new ValuationSnapshot(checkedInputs, pe.multiple(), pb.multiple(), dividendYield.multiple(),
-                earningsYield, List.copyOf(issues), List.copyOf(gaps), java.util.Map.copyOf(unchecked));
+                earningsYield, onFiledEps.pe(), shareCount, List.copyOf(issues), List.copyOf(gaps),
+                java.util.Map.copyOf(unchecked));
+    }
+
+    /** The P/E on filed EPS, and why it is unchecked if it is. */
+    private record OnFiledEps(FinancialDataPoint pe, Optional<String> uncheckedReason) {
+    }
+
+    /** Shares at the fiscal year's end: paid-up equity capital / face value, both as filed. */
+    private static FinancialDataPoint filedShareCount(FiledPerShare filed) {
+        String metric = "filedShareCount";
+        if (!filed.available()) {
+            return FinancialDataPoint.unavailable(metric, Unit.SHARES, ReportingPeriod.unknown(), null,
+                    filed.unavailableReason());
+        }
+        FinancialDataPoint capital = filed.paidUpEquityCapital();
+        FinancialDataPoint face = filed.faceValue();
+        String label = filed.fiscalYear().label();
+        String calculation = "%s paid-up equity capital x 1,00,00,000 / %s face value per share".formatted(label, label);
+        for (FinancialDataPoint input : List.of(capital, face)) {
+            if (!input.available()) {
+                return FinancialDataPoint.unavailable(metric, Unit.SHARES, capital.period(), capital.source(),
+                        "not calculated: %s (%s) is %s: %s".formatted(input.metric(), label, input.status(),
+                                input.statusReason()));
+            }
+        }
+        CalculationVerifier.SourceValues sources = new CalculationVerifier.SourceValues().add(capital).add(face);
+        return FinancialCalculator.shareCount(capital.value(), face.value())
+                .map(count -> CalculationVerifier.verify(FinancialDataPoint.calculated(metric, count, Unit.SHARES,
+                        capital.period(), capital.source(), Formula.SHARE_COUNT, calculation,
+                        List.of(CalculationInput.of(label + " paid-up equity capital", capital),
+                                CalculationInput.of(label + " face value per share", face))), sources))
+                .orElseGet(() -> FinancialDataPoint.unavailable(metric, Unit.SHARES, capital.period(), capital.source(),
+                        "not calculated: the face value per share is not positive"));
+    }
+
+    private OnFiledEps peOnFiledEps(ReportedValuation reported, FiledPerShare filed, FinancialDataPoint shareCount,
+                                    CalculationVerifier.SourceValues sources) {
+        String metric = "peOnFiledEps";
+        FinancialDataPoint price = reported.price();
+        ReportingPeriod at = price.period();
+        if (!filed.available()) {
+            return new OnFiledEps(FinancialDataPoint.unavailable(metric, Unit.MULTIPLE, at, null,
+                    "No P/E on filed EPS: " + filed.unavailableReason()), Optional.empty());
+        }
+        FinancialDataPoint eps = filed.basicEps();
+        String label = filed.fiscalYear().label();
+        String calculation = "share price (%s) / %s basic EPS as filed".formatted(at.label(), label);
+        Optional<String> unusable = unusable(price).or(() -> unusable(eps));
+        if (unusable.isPresent()) {
+            return new OnFiledEps(FinancialDataPoint.unavailable(metric, Unit.MULTIPLE, at, eps.source(),
+                    "P/E on filed EPS not calculated: " + unusable.get()), Optional.empty());
+        }
+        if (eps.value().signum() <= 0) {
+            return new OnFiledEps(FinancialDataPoint.unavailable(metric, Unit.MULTIPLE, at, eps.source(),
+                    "P/E on filed EPS not calculated: %s basic EPS is %s, and a P/E is not meaningful for a loss"
+                            .formatted(label, eps.display())), Optional.empty());
+        }
+        FinancialDataPoint today = reported.sharesOutstanding();
+        Optional<String> unchecked = Optional.empty();
+        if (!shareCount.available() || today == null || !today.available()) {
+            unchecked = Optional.of("whether %s basic EPS is on today's share count could not be checked: %s".formatted(
+                    label, !shareCount.available() ? "the filed share count is " + shareCount.statusReason()
+                            : "the provider's shares outstanding is " + (today == null ? "missing"
+                            : today.status() + " (" + today.statusReason() + ")")));
+        } else {
+            BigDecimal apart = FinancialCalculator.growthPercent(today.value(), shareCount.value()).map(BigDecimal::abs)
+                    .orElse(null);
+            if (apart == null || apart.compareTo(SHARE_COUNT_TOLERANCE_PERCENT) > 0) {
+                return new OnFiledEps(FinancialDataPoint.unavailable(metric, Unit.MULTIPLE, at, eps.source(),
+                        ("P/E on filed EPS not calculated: the filing states %s at the end of %s, the provider %s now%s. "
+                                + "A bonus issue, split or share issue since then would make %s EPS a figure per share "
+                                + "of a different count from today's price.").formatted(shareCount.display(), label,
+                                today.display(), apart == null ? "" : " (%s%% apart)".formatted(apart.toPlainString()),
+                                label)), Optional.empty());
+            }
+        }
+        sources.add(eps);
+        FinancialDataPoint pe = FinancialCalculator.multiple(price.value(), eps.value())
+                .map(value -> CalculationVerifier.verify(FinancialDataPoint.calculated(metric, value, Unit.MULTIPLE, at,
+                        eps.source(), Formula.MULTIPLE, calculation,
+                        List.of(CalculationInput.of("share price", price), CalculationInput.of(label + " basic EPS", eps))),
+                        sources))
+                .orElseGet(() -> FinancialDataPoint.unavailable(metric, Unit.MULTIPLE, at, eps.source(),
+                        "P/E on filed EPS could not be calculated"));
+        return new OnFiledEps(pe, pe.available() ? unchecked : Optional.empty());
     }
 
     @FunctionalInterface

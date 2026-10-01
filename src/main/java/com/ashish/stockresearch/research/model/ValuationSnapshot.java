@@ -16,6 +16,10 @@ import java.util.Map;
  *
  * @param reported         the provider's figures, including the price and per-share inputs the checks used;
  *                         a per-share input whose check failed is DATA_CONFLICT with its multiple
+ * @param peOnFiledEps     the share price over the latest filed fiscal year's basic EPS, calculated by the
+ *                         application; only while that EPS is on today's share count
+ * @param filedShareCount  the number of shares at the end of that fiscal year, from the filing's paid-up equity
+ *                         capital and face value; what the share-count check compared
  * @param uncheckedMetrics metrics that are available but could not be cross-checked, with why - usable
  *                         for display, never for passing a screening rule
  */
@@ -25,6 +29,8 @@ public record ValuationSnapshot(
         FinancialDataPoint priceToBook,
         FinancialDataPoint dividendYieldPercent,
         FinancialDataPoint earningsYieldPercent,
+        FinancialDataPoint peOnFiledEps,
+        FinancialDataPoint filedShareCount,
         List<DataQualityIssue> dataQualityIssues,
         List<DataGap> dataGaps,
         Map<String, String> uncheckedMetrics
@@ -38,8 +44,16 @@ public record ValuationSnapshot(
         return reported.asOf();
     }
 
-    /** The four valuation metrics, in display order. */
+    /**
+     * The provider's multiples and the earnings yield calculated from its P/E, in display order. The P/E on
+     * filed EPS is not among them: it is measured on a different source's EPS, over a fiscal year.
+     */
     public List<FinancialDataPoint> metrics() {
         return List.of(trailingPe, priceToBook, dividendYieldPercent, earningsYieldPercent);
+    }
+
+    /** Whether the company's filed results were available to measure the price against. */
+    public boolean filedFiguresUsed() {
+        return filedShareCount.source() != null || peOnFiledEps.source() != null;
     }
 }

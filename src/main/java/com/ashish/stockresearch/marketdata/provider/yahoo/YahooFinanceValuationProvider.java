@@ -101,6 +101,7 @@ class YahooFinanceValuationProvider implements ValuationDataProvider {
                 multiple("priceToBook", statistics != null ? statistics.priceToBook() : null, at, base,
                         "defaultKeyStatistics.priceToBook"),
                 dividendYield(detail != null ? detail.dividendYield() : null, at, base),
+                shares(statistics != null ? statistics.sharesOutstanding() : null, at, base),
                 new DataProvenance(YahooFinanceFinancialDataProvider.SOURCE, SourceType.MARKET_DATA_PROVIDER,
                         DataFreshness.DELAYED, Instant.now(), null, asOf, null, note(asOf)));
         log.info("Retrieved Yahoo Finance valuation for {} as of {}", resolution.providerSymbol(), at.label());
@@ -156,6 +157,19 @@ class YahooFinanceValuationProvider implements ValuationDataProvider {
                         ? FinancialUnits.fractionToPercent(raw.raw()) : raw.raw().setScale(2, RoundingMode.HALF_UP),
                         Unit.PERCENT, period, source))
                 .orElseGet(() -> unverified(metric, raw, period, source, "a fraction or a percentage"));
+    }
+
+    /** A share count; Yahoo's formatted value must confirm it is one. */
+    private static FinancialDataPoint shares(YahooValue raw, ReportingPeriod period, SourceInfo base) {
+        SourceInfo source = base.withField("defaultKeyStatistics.sharesOutstanding");
+        if (raw == null) {
+            return FinancialDataPoint.unavailable("sharesOutstanding", Unit.SHARES, period, source,
+                    "Yahoo Finance did not publish defaultKeyStatistics.sharesOutstanding");
+        }
+        return YahooFieldSemantics.verify(raw, YahooFieldSemantics.SHARES)
+                .map(unit -> FinancialDataPoint.reported("sharesOutstanding", raw.raw(), unit, raw.raw(), Unit.SHARES,
+                        period, source))
+                .orElseGet(() -> unverified("sharesOutstanding", raw, period, source, "a share count"));
     }
 
     private static FinancialDataPoint unverified(String metric, YahooValue raw, ReportingPeriod period,

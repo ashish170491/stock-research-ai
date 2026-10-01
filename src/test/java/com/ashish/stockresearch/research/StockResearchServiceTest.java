@@ -38,7 +38,7 @@ class StockResearchServiceTest {
         return new StockResearchService(companyProfileProvider, financialDataProvider,
                 shareholdingProvider, historicalMarketDataProvider,
                 new FinancialMetricsService(), new HistoricalPerformanceService(), valuationDataProvider,
-                new ValuationService(BigDecimal.valueOf(5)));
+                new ValuationService(BigDecimal.valueOf(5)), TestFilings.none());
     }
 
     @Test

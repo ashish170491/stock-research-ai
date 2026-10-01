@@ -4,6 +4,7 @@ import com.ashish.stockresearch.research.model.FiledItem;
 import com.ashish.stockresearch.research.model.FiledYear;
 import com.ashish.stockresearch.research.model.FiledYear.Check;
 import com.ashish.stockresearch.research.model.FinancialDataPoint;
+import com.ashish.stockresearch.research.model.StatementFormat;
 import com.ashish.stockresearch.research.model.StatementScope;
 import org.springframework.stereotype.Component;
 
@@ -44,7 +45,7 @@ public class FiledStatementChecks {
     public FiledYear check(FiledYear year) {
         List<Check> checks = new ArrayList<>();
         FiledYear checked = year;
-        boolean bank = year.item(FiledItem.DEPOSITS).available() || year.item(FiledItem.INTEREST_EARNED).available();
+        boolean bank = year.format() == StatementFormat.BANK;
         if (year.scope() == StatementScope.CONSOLIDATED && bank) {
             // The banking format deducts minority interest and adds associates' profit after tax, with signs
             // this application has not established; a check on it could reject a correct figure.

@@ -120,8 +120,11 @@ public class StockResearchTools {
 
     @Tool(name = VALUATION_TOOL, description = """
             Get a stock's valuation multiples at one point in time: trailing P/E, price-to-book, dividend yield, \
-            and earnings yield (calculated by the application as 100 / P/E), with the share price, EPS, book \
-            value and dividend per share they are measured against. Use it for questions about P/E, price-to-book, \
+            earnings yield (calculated by the application as 100 / P/E) and P/E on filed EPS (the share price over \
+            the latest fiscal year's basic EPS as the company filed it with NSE, calculated by the application), \
+            with the share price, EPS, book value and dividend per share they are measured against. The two P/Es \
+            are over different periods (trailing twelve months, and a fiscal year): never present one as the other. \
+            Use it for questions about P/E, price-to-book, \
             dividend yield, earnings yield or valuation multiples. \
             The values are POINT-IN-TIME: each is dated to the share price it was measured against and changes \
             with the price, so state the date and never present them as current once time has passed. \

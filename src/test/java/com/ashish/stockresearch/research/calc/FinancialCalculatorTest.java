@@ -168,4 +168,15 @@ class FinancialCalculatorTest {
         assertThat(FinancialCalculator.dividendsToOperatingCashFlowPercent(d("4025.50"), d("6172.00"))).isEmpty();
         assertThat(FinancialCalculator.dividendsToOperatingCashFlowPercent(d("-4025.50"), d("-100"))).isEmpty();
     }
+
+    @Test
+    void sumsFiledLinesAndNeverTreatsAMissingLineAsZero() {
+        assertThat(FinancialCalculator.sum(List.of(new BigDecimal("123162"), new BigDecimal("27061"))))
+                .contains(new BigDecimal("150223"));
+        assertThat(FinancialCalculator.sum(java.util.Arrays.asList(new BigDecimal("123162"), null))).isEmpty();
+        assertThat(FinancialCalculator.operatingProfit(new BigDecimal("1075675"), new BigDecimal("981475"),
+                new BigDecimal("27061"))).contains(new BigDecimal("121261"));
+        assertThat(FinancialCalculator.operatingProfit(new BigDecimal("1075675"), null, new BigDecimal("27061")))
+                .isEmpty();
+    }
 }
