@@ -39,7 +39,7 @@ class CriteriaValidatorTest {
         ScreeningCriteria criteria = interpretation.criteria().orElseThrow();
         assertThat(criteria.industryGroups()).containsExactly(IndustryGroup.IT_SERVICES);
         assertThat(labels(criteria, IndustryGroup.IT_SERVICES))
-                .containsExactly("ROE > 18.00%", "D/E ≤ 0.50x", "ROE 3y avg ≥ 15.00%");
+                .containsExactly("ROE > 18.00%", "ROE 3y avg ≥ 15.00%", "D/E ≤ 0.50x");
         assertThat(interpretation.readings()).contains(
                 "“IT” → only companies in the IT_SERVICES industry group",
                 "“ROE above 18%” → ROE > 18.00% (return on equity, latest fiscal year)",
@@ -300,7 +300,7 @@ class CriteriaValidatorTest {
                 ExtractedCriteria.none(), true);
 
         assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.IT_SERVICES))
-                .containsExactly("D/E ≤ 0.50x", "ROE 3y avg ≥ 15.00%");
+                .containsExactly("ROE 3y avg ≥ 15.00%", "D/E ≤ 0.50x");
     }
 
     @Test
@@ -336,7 +336,7 @@ class CriteriaValidatorTest {
                         List.of()), false);
 
         assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER))
-                .containsExactly("Profit CAGR 3y > 15.00%", "ROE 5y avg ≥ 18.00%");
+                .containsExactly("ROE 5y avg ≥ 18.00%", "Profit CAGR 3y > 15.00%");
         assertThat(interpretation.notApplied()).isEmpty();
     }
 

@@ -122,6 +122,10 @@
   details.criteria h4 { margin: 10px 0 4px; font-size: 13px; }
   details.criteria ul { margin: 0; padding-left: 18px; }
   details.criteria li { margin: 2px 0; }
+  details.criteria p.question { margin: 6px 0 2px; font-size: 12px; font-style: italic; color: var(--muted); }
+  details.term { margin: 2px 0 6px; font-size: 13px; }
+  details.term summary { cursor: pointer; font-weight: 400; color: var(--muted); }
+  details.term p { margin: 4px 0; }
   details.criteria .muted, .muted { color: var(--muted); font-size: 13px; }
   .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
@@ -421,13 +425,29 @@
   const titleCase = name => name.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
   const groupLabel = g => GROUP_LABELS[g] || g;
 
-  let options = null, preset = null, snapshotTimer = null;
+  let options = null, preset = null, snapshotTimer = null, glossary = null;
+
+  // The application's glossary: fixed, reviewed text, never written by the language model.
+  const termFor = metric => glossary && glossary.entries.find(e => (e.screeningMetrics || []).includes(metric));
+  function termDetails(metric) {
+    const t = termFor(metric);
+    if (!t) return null;
+    const d = el('details', 'term');
+    d.append(el('summary', null, 'What this means'));
+    d.append(el('p', null, t.name + ': ' + t.meaning));
+    d.append(el('p', null, 'How it is calculated here: ' + t.calculation));
+    d.append(el('p', null, 'How to read it: ' + t.howToRead));
+    if (t.readWith.length) d.append(el('p', null, 'Read it with: ' + t.readWith.join('; ')));
+    t.industryNotes.forEach(n => d.append(el('p', 'muted', n)));
+    return d;
+  }
 
   async function loadScreener() {
     if (options) return;
     try {
       const res = await fetch('/api/screening/options');
       options = await res.json();
+      try { glossary = await (await fetch('/api/glossary')).json(); } catch (e) { glossary = null; }
     } catch (err) {
       $('screen-out').replaceChildren(el('div', 'notice', 'Could not load the screener: ' + err.message));
       return;
@@ -459,9 +479,22 @@
       const title = set.title === 'Non-financial companies' ? 'Non-financial companies' : (SECTION_LABELS[set.title] || set.title);
       body.append(el('h4', null, title + (set.title === 'Non-financial companies'
         ? ' (' + set.groups.map(groupLabel).join(', ') + ')' : '')));
-      const ul = el('ul');
-      set.criteria.forEach(c => { const li = el('li'); li.append(el('strong', null, c.label), document.createTextNode(' — ' + c.description)); ul.append(li); });
-      body.append(ul);
+      // the criteria arrive in question order; each question is a heading of its own
+      let ul = null, question = null;
+      set.criteria.forEach(c => {
+        const q = termFor(c.metric) ? termFor(c.metric).question : '';
+        if (!ul || q !== question) {
+          question = q;
+          if (q) body.append(el('p', 'question', q));
+          ul = el('ul');
+          body.append(ul);
+        }
+        const li = el('li');
+        li.append(el('strong', null, c.label), document.createTextNode(' — ' + c.description));
+        const d = termDetails(c.metric);
+        if (d) li.append(d);
+        ul.append(li);
+      });
     });
     if (p.notScreened.length) {
       body.append(el('p', 'muted', 'Not screened by this preset: ' + p.notScreened.map(groupLabel).join(', ')
@@ -469,6 +502,7 @@
     }
     body.append(el('p', 'muted', 'Ties are broken by ' + p.tieBreak + '. These criteria are common rules of thumb set in the '
       + 'application\'s configuration, not benchmarks or advice.'));
+    if (glossary) body.append(el('p', 'muted', glossary.note));
   }
 
   function formatTime(iso) {
@@ -599,7 +633,8 @@
       const table = el('table', 'screen');
       const head = el('tr');
       ['Rank', 'Company', 'Criteria met'].forEach(h => head.append(el('th', null, h)));
-      section.criteria.forEach(c => { const th = el('th', 'crit', c.label); if (c.period) th.append(el('small', null, c.period)); th.title = c.description; head.append(th); });
+      section.criteria.forEach(c => { const th = el('th', 'crit', c.label); if (c.period) th.append(el('small', null, c.period)); th.title = (termFor(c.metric) ? termFor(c.metric).question + ' ' : '') + c.description
+        + (termFor(c.metric) ? ' — ' + termFor(c.metric).meaning : ''); head.append(th); });
       head.append(el('th', null, 'Tie-break'));
       const thead = el('thead'); thead.append(head); table.append(thead);
       const tbody = el('tbody');

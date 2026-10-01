@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.agent;
 
+import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.marketdata.NseSymbolDirectory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,8 @@ public class RequestRouter {
             - SCREEN: find, filter, screen or shortlist stocks that meet criteria, naming no single company.
             - SPECIFIC_QUESTION: any narrower question about a company or stock (a metric, a period,
               ownership, performance over time, what the company does).
+            - EXPLAIN_TERM: what a financial term, ratio or metric means or how to read it, naming no
+              company ("what is ROCE?", "what does CAGR mean?").
             - NOT_STOCK_RELATED: anything not about companies, stocks or markets.
             Name only companies in the message; never add one. Use an empty list when none is named.
             The one exception: when the message refers to a company only as "it", "its", "they" or
@@ -103,8 +106,9 @@ public class RequestRouter {
 
     private final ChatClient routingClient;
     private final NseSymbolDirectory directory;
+    private final MetricGlossary glossary;
 
-    public RequestRouter(ChatClient.Builder chatClientBuilder, NseSymbolDirectory directory,
+    public RequestRouter(ChatClient.Builder chatClientBuilder, NseSymbolDirectory directory, MetricGlossary glossary,
                          Advisor conversationTraceAdvisor) {
         // No tools: routing only classifies, it never fetches. No thinking either: a classification
         // needs no reasoning trace, and generating one is most of the latency of a routed request.
@@ -115,6 +119,7 @@ public class RequestRouter {
                 .defaultAdvisors(conversationTraceAdvisor)
                 .build();
         this.directory = directory;
+        this.glossary = glossary;
     }
 
     /**
@@ -154,6 +159,11 @@ public class RequestRouter {
     Optional<RoutedRequest> byKeywords(String message) {
         if (message == null || message.isBlank()) {
             return Optional.empty();
+        }
+        // "What is ROCE?", "what is a good P/E for banks?": a term the glossary explains, about no company
+        if (glossary.asked(message).flatMap(MetricGlossary.Asked::entry).isPresent()
+                && directory.namedIn(message).isEmpty()) {
+            return Optional.of(new RoutedRequest(Intent.EXPLAIN_TERM, List.of()));
         }
         if (SCREEN.matcher(message).find()) {
             // "Which companies does Reliance Industries own?" is about one company, not a screen
@@ -262,7 +272,7 @@ public class RequestRouter {
                 companies.addAll(named);
                 yield new RoutedRequest(Intent.COMPARE, companies);
             }
-            case NOT_STOCK_RELATED -> routed;
+            case EXPLAIN_TERM, NOT_STOCK_RELATED -> routed;
         };
     }
 
@@ -280,6 +290,9 @@ public class RequestRouter {
             };
             // a screen names no company; one the model listed is not screened on its own
             case SCREEN -> new RoutedRequest(Intent.SCREEN, List.of());
+            // "what is TCS's ROE?" is a question about TCS, not about the term
+            case EXPLAIN_TERM -> routed.companies().isEmpty() ? routed
+                    : new RoutedRequest(Intent.SPECIFIC_QUESTION, routed.companies());
             case SPECIFIC_QUESTION, NOT_STOCK_RELATED -> routed;
         };
     }

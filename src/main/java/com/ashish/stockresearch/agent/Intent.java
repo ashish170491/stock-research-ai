@@ -21,6 +21,12 @@ public enum Intent {
     /** A narrower question about a company or stock, answered by the model with the research tools. */
     SPECIFIC_QUESTION,
 
+    /**
+     * What a financial term or ratio means or how to read it - "what is ROCE?", "what is a good P/E?" - naming no
+     * company. Answered from the application's glossary, with no model call.
+     */
+    EXPLAIN_TERM,
+
     /** Not about stocks at all. Answered without tools. */
     NOT_STOCK_RELATED
 }

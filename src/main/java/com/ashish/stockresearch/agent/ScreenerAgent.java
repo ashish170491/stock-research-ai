@@ -127,7 +127,12 @@ public class ScreenerAgent {
      *                   empty when no screen ran
      * @param memoryNote a one-line record of the turn for the conversation's memory
      */
-    public record ScreenAnswer(String text, String evidence, String memoryNote) {
+    /** @param criteria the criteria the screen ran with; null when no screen was run */
+    public record ScreenAnswer(String text, String evidence, String memoryNote, ScreeningCriteria criteria) {
+
+        public ScreenAnswer(String text, String evidence, String memoryNote) {
+            this(text, evidence, memoryNote, null);
+        }
     }
 
     public ScreenerAgent(ChatClient.Builder chatClientBuilder, Advisor conversationTraceAdvisor,
@@ -218,7 +223,7 @@ public class ScreenerAgent {
                 chain.stage(4, "summarise", "no summary: " + ex.getMessage());
             }
             return new ScreenAnswer(compose(interpretation, summary, ScreeningRenderer.forReaders(result)), result,
-                    memoryNote(interpretation.criteria().get(), outcome));
+                    memoryNote(interpretation.criteria().get(), outcome), interpretation.criteria().get());
         }
     }
 

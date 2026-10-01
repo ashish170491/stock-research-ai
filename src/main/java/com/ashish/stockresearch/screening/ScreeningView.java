@@ -50,7 +50,7 @@ public record ScreeningView(
     }
 
     /** @param period the period most stocks' values cover; a cell states its own when it differs */
-    public record Criterion(String label, String description, String period) {
+    public record Criterion(String label, String description, String period, ScreeningMetric metric) {
     }
 
     public record Row(int rank, String symbol, String company, IndustryGroup group, long met, int total,
@@ -107,7 +107,8 @@ public record ScreeningView(
         List<String> periods = ScreeningRenderer.commonPeriods(stocks);
         List<Criterion> criteria = new ArrayList<>();
         for (int i = 0; i < rules.size(); i++) {
-            criteria.add(new Criterion(rules.get(i).label(), rules.get(i).describe(), periods.get(i)));
+            criteria.add(new Criterion(rules.get(i).label(), rules.get(i).describe(), periods.get(i),
+                    rules.get(i).metric()));
         }
         List<Row> rows = new ArrayList<>();
         for (StockScreening stock : stocks) {

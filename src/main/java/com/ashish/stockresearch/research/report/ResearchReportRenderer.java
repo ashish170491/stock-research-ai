@@ -1,5 +1,8 @@
 package com.ashish.stockresearch.research.report;
 
+import com.ashish.stockresearch.glossary.GlossaryEntry;
+import com.ashish.stockresearch.glossary.MetricGlossary;
+import com.ashish.stockresearch.glossary.MetricQuestion;
 import com.ashish.stockresearch.research.model.AnnualFinancials;
 import com.ashish.stockresearch.research.model.AnnualRatios;
 import com.ashish.stockresearch.research.model.CalculationInput;
@@ -27,9 +30,12 @@ import com.ashish.stockresearch.research.sector.SectorContext;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -93,6 +99,14 @@ public class ResearchReportRenderer {
             + "never recalculate them, derive new figures from them, or convert their units or currency.";
 
     public String render(StockResearchReport report, String interpretation) {
+        return render(report, interpretation, null);
+    }
+
+    /**
+     * The report, with its latest figures grouped by the question each answers when a glossary is given, ahead
+     * of the FACTS they are taken from.
+     */
+    public String render(StockResearchReport report, String interpretation, MetricGlossary glossary) {
         Mask conflicted = new Mask(report.dataQualityIssues(), false);
         StringBuilder md = new StringBuilder();
         md.append("# Research report: ").append(report.companyName())
@@ -104,6 +118,9 @@ public class ResearchReportRenderer {
         }
         md.append(".\n\n");
         renderConflicts(md, report.dataQualityIssues());
+        if (glossary != null) {
+            renderAtAGlance(md, report, glossary, conflicted);
+        }
 
         md.append("## 1. FACTS\n\n_Values supplied by the stated source (REPORTED) or computed by the application "
                 + "from them (CALCULATED). Amounts are normalised to crore by the application only after the "
@@ -162,6 +179,72 @@ public class ResearchReportRenderer {
             renderAudit(md, calculatedPoints(report));
         }
         return md.toString();
+    }
+
+    /**
+     * The latest figures, grouped by the question each answers ({@link MetricQuestion}): the same data points as
+     * the FACTS below, with the same status and conflict tags, so nothing is shown here that is not shown there.
+     */
+    private void renderAtAGlance(StringBuilder md, StockResearchReport report, MetricGlossary glossary, Mask conflicted) {
+        Map<MetricQuestion, List<FinancialDataPoint>> byQuestion = new EnumMap<>(MetricQuestion.class);
+        for (FinancialDataPoint point : glancePoints(report)) {
+            Optional<GlossaryEntry> entry = glossary.forMetricKey(point.metric());
+            entry.ifPresent(e -> byQuestion.computeIfAbsent(e.question(), q -> new ArrayList<>()).add(point));
+        }
+        if (byQuestion.isEmpty()) {
+            return;
+        }
+        md.append("## At a glance, by question\n\n_The latest figures from the FACTS below, grouped by the question "
+                + "each helps answer. What each measures and how to read it is under Explain the terms at the end._\n\n");
+        md.append("| Question | Figure | Value | Period |\n|---|---|---|---|\n");
+        byQuestion.forEach((question, unordered) -> {
+            boolean first = true;
+            // in glossary order: ROE before ROA before ROCE
+            List<FinancialDataPoint> points = unordered.stream().sorted(java.util.Comparator.comparingInt(
+                    point -> glossary.entries().indexOf(glossary.forMetricKey(point.metric()).orElseThrow()))).toList();
+            for (FinancialDataPoint p : points) {
+                // a value that is not usable shows its status only; FACTS gives the reason
+                String value = conflicted.covers(p) || p.status() == DataStatus.VALID ? value(p, conflicted)
+                        : p.status().name() + " (see FACTS)";
+                if (report.sectorContext() != null && report.sectorContext().isNonPrimary(p.metric())) {
+                    value += " (not a primary measure for " + report.sectorContext().group() + ")";
+                }
+                md.append("| ").append(first ? question.heading() : "").append(" | ")
+                        .append(glossary.label(p.metric())).append(" (").append(p.metric()).append(") | ").append(value).append(" | ").append(p.period().label())
+                        .append(" |\n");
+                first = false;
+            }
+        });
+        md.append("\n");
+    }
+
+    /** The report's latest figures: the last fiscal year's ratios, the multi-year figures, valuation and price. */
+    private static List<FinancialDataPoint> glancePoints(StockResearchReport report) {
+        List<FinancialDataPoint> points = new ArrayList<>();
+        if (report.financials().success()) {
+            FinancialSummary summary = report.financials().financialSummary();
+            List<AnnualRatios> annual = summary.calculated().annual();
+            if (!annual.isEmpty()) {
+                points.addAll(annual.get(annual.size() - 1).points());
+            }
+            points.addAll(List.of(summary.calculated().netProfitMarginTtmPercent(),
+                    summary.calculated().revenueCagrPercent(), summary.calculated().netProfitCagrPercent(),
+                    summary.calculated().ocfToPat3yMultiple(), summary.calculated().ocfToPat5yMultiple(),
+                    summary.reported().headline().ebitda(), summary.reported().headline().freeCashFlow()));
+        }
+        if (report.valuation().success()) {
+            ValuationSnapshot valuation = report.valuation().valuation();
+            points.addAll(valuation.metrics());
+            points.add(valuation.reported().trailingEps());
+            if (valuation.filedFiguresUsed()) {
+                points.add(valuation.peOnFiledEps());
+            }
+        }
+        if (report.historicalPerformance().success()) {
+            HistoricalPerformance h = report.historicalPerformance().historicalPerformance();
+            points.addAll(List.of(h.cagrPercent(), h.totalReturnPercent(), h.maxDrawdownPercent()));
+        }
+        return points.stream().filter(Objects::nonNull).toList();
     }
 
     /** What the model is given to interpret: conflicts first, then facts, observations, withheld topics and gaps. */
