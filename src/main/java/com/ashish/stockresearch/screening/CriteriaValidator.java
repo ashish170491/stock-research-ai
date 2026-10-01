@@ -32,6 +32,9 @@ import java.util.stream.Collectors;
  *       out of bounds is rejected, never clamped or converted.</li>
  *   <li><b>Operators</b> follow the user's words ("at least", "below") where the words say; the model's
  *       choice is used only where they do not.</li>
+ *   <li><b>Spans</b> ("5-year growth", "3y average ROE") follow the user's words too: a metric measured over
+ *       fiscal years is the one over the span the request names, or over its series' default span when it
+ *       names none, never the span the model picked. A span the application does not measure is rejected.</li>
  *   <li><b>Vague qualities</b> ("low debt", "profitable") are read as a preset's own threshold for the metric
  *       ({@code app.screening.vague-terms}), found in the user's words by Java as well as by the model.
  *       Judgements ("cheap", "undervalued") are never read as a threshold at all.</li>
@@ -116,8 +119,9 @@ public class CriteriaValidator {
         Set<String> vague = new LinkedHashSet<>();
         Set<BigDecimal> numbers = numbersIn(text);
         Set<BigDecimal> accounted = new java.util.HashSet<>();
+        List<Integer> spans = spansIn(text);
         for (ExtractedCriteria.Criterion criterion : read.criteria()) {
-            stated(criterion, text, numbers, rules, readings, notApplied, vague, accounted);
+            stated(criterion, text, numbers, spans, rules, readings, notApplied, vague, accounted);
         }
         Optional<String> unread = unreadNumbers(text, accounted, notApplied);
         vague.addAll(vaguePhrasesIn(text));
@@ -127,8 +131,9 @@ public class CriteriaValidator {
             }
         }
         for (String phrase : longestOnly(vague)) {
-            vagueTerm(phrase, preset, groups, rules, readings, notApplied);
+            vagueTerm(phrase, preset, groups, spans, rules, readings, notApplied);
         }
+        spansNotApplied(text, preset, rules, notApplied);
         for (String judgement : judgementsIn(text)) {
             notApplied.add(("“%s” is a judgement, and this application does not judge stocks, so it was not "
                     + "applied. To screen on price or returns, give a metric and a number, such as a maximum P/E "
@@ -164,12 +169,13 @@ public class CriteriaValidator {
             "\\b(?:nifty\\s*(?:next\\s*|midcap\\s*|smallcap\\s*)?|next\\s*|bse\\s*|sensex\\s*)\\d+\\b", Pattern.CASE_INSENSITIVE);
     /** "top 10": the screen ranks every stock and is never cut to a number. */
     private static final Pattern TOP_N = Pattern.compile("\\btop\\s*(\\d+)\\b", Pattern.CASE_INSENSITIVE);
-    /** "5-year", "3 yr": a span; the snapshot's growth and averages are over 3 fiscal years. */
+    /** "5-year", "3 yr", "3y": a span of fiscal years, which selects the metric of a series measured over it. */
     private static final Pattern SPAN = Pattern.compile("\\b(\\d+)[\\s-]*(?:years?|yrs?|y)\\b", Pattern.CASE_INSENSITIVE);
 
     /**
      * A number in the request that no criterion accounts for - the extraction model missed a criterion the
-     * user stated. Universe names, "top N" and spans are not criteria; the last two are explained instead.
+     * user stated. Universe names, "top N" and spans are not criteria: "top N" is explained instead, and a span
+     * chooses the metric a criterion is measured by ({@link #spanned}).
      */
     private static Optional<String> unreadNumbers(String text, Set<BigDecimal> accounted, List<String> notApplied) {
         String rest = UNIVERSE_NUMBER.matcher(text).replaceAll(" ");
@@ -179,14 +185,6 @@ public class CriteriaValidator {
                     .formatted(top.group()));
         }
         rest = TOP_N.matcher(rest).replaceAll(" ");
-        Matcher span = SPAN.matcher(rest);
-        while (span.find()) {
-            if (!span.group(1).equals("3")) {
-                notApplied.add(("“%s”: growth and averages are measured over the last 3 fiscal years, the longest "
-                        + "span the data supports, so a %s-year span cannot be screened.").formatted(span.group(),
-                        span.group(1)));
-            }
-        }
         rest = SPAN.matcher(rest).replaceAll(" ");
         return numbersIn(rest).stream()
                 .filter(n -> accounted.stream().noneMatch(a -> a.compareTo(n) == 0))
@@ -290,8 +288,8 @@ public class CriteriaValidator {
 
     /** @param accounted the numbers of the request a criterion was read from, used or rejected */
     private static void stated(ExtractedCriteria.Criterion criterion, String text, Set<BigDecimal> numbers,
-                               List<Rule> rules, List<String> readings, List<String> notApplied, Set<String> vague,
-                               Set<BigDecimal> accounted) {
+                               List<Integer> spans, List<Rule> rules, List<String> readings, List<String> notApplied,
+                               Set<String> vague, Set<BigDecimal> accounted) {
         String phrase = criterion.phrase() == null || criterion.phrase().isBlank()
                 ? String.valueOf(criterion.metric()) : criterion.phrase().strip();
         boolean inRequest = contains(text, phrase);
@@ -334,6 +332,11 @@ public class CriteriaValidator {
                     .collect(Collectors.joining(", ")) + ".");
             return;
         }
+        Optional<Spanned> spanned = spanned(metric.get(), inRequest ? phrase : null, spans, phrase, notApplied);
+        if (spanned.isEmpty()) {
+            return;
+        }
+        metric = Optional.of(spanned.get().metric());
         if (!metric.get().withinBounds(threshold)) {
             ScreeningMetric m = metric.get();
             notApplied.add(("“%s”: %s is outside the range the screen accepts for %s (%s to %s), so the criterion "
@@ -359,7 +362,96 @@ public class CriteriaValidator {
             return;
         }
         rules.add(rule);
-        readings.add("“%s” → %s (%s)".formatted(phrase, rule.label(), metric.get().description()));
+        readings.add("“%s” → %s (%s)%s".formatted(phrase, rule.label(), metric.get().description(),
+                spanned.get().note()));
+    }
+
+    /** A metric with the span it is measured over, and how that span was read, for the reading shown. */
+    private record Spanned(ScreeningMetric metric, String note) {
+    }
+
+    /**
+     * The metric over the span the user's words name: the criterion's own phrase first, then the request if it
+     * names a single span, then the series' default span - never the span the model chose. Empty, with the
+     * reason in {@code notApplied}, when the words name a span the application does not measure the series over,
+     * or name more than one.
+     */
+    private static Optional<Spanned> spanned(ScreeningMetric metric, String ownWords, List<Integer> spansInRequest,
+                                             String phrase, List<String> notApplied) {
+        if (metric.series().isEmpty()) {
+            return Optional.of(new Spanned(metric, ""));
+        }
+        ScreeningMetric.Series series = metric.series().get();
+        List<Integer> own = ownWords == null ? List.of() : spansIn(ownWords);
+        int years;
+        String how;
+        if (own.size() > 1) {
+            notApplied.add("“%s”: it names more than one span (%s years), so the criterion was not applied."
+                    .formatted(phrase, own.stream().map(String::valueOf).collect(Collectors.joining(" and "))));
+            return Optional.empty();
+        } else if (own.size() == 1) {
+            years = own.get(0);
+            how = "";
+        } else if (spansInRequest.size() == 1) {
+            years = spansInRequest.get(0);
+            how = ", the span your request names";
+        } else {
+            years = series.defaultYears();
+            how = spansInRequest.isEmpty() ? ", as no span was given"
+                    : ", as the criterion does not say which of the spans in your request it is over";
+        }
+        Optional<ScreeningMetric> over = ScreeningMetric.of(series, years);
+        if (over.isEmpty()) {
+            notApplied.add(("“%s”: %s is measured over %s fiscal years, so a %d-year span cannot be screened and the "
+                    + "criterion was not applied.").formatted(phrase, series.description(), spansOf(series), years));
+            return Optional.empty();
+        }
+        return Optional.of(new Spanned(over.get(), how.isEmpty() ? ""
+                : " - over %d fiscal years%s".formatted(years, how)));
+    }
+
+    /** The distinct spans of fiscal years a text names, in the order it names them. */
+    static List<Integer> spansIn(String text) {
+        String rest = TOP_N.matcher(UNIVERSE_NUMBER.matcher(text).replaceAll(" ")).replaceAll(" ");
+        Set<Integer> spans = new LinkedHashSet<>();
+        Matcher span = SPAN.matcher(rest);
+        while (span.find()) {
+            spans.add(Integer.parseInt(span.group(1)));
+        }
+        return List.copyOf(spans);
+    }
+
+    private static String spansOf(ScreeningMetric.Series series) {
+        return ScreeningMetric.spans(series).stream().map(String::valueOf).collect(Collectors.joining(" or "));
+    }
+
+    /**
+     * Spans in the request that no criterion of the screen is measured over - "ROE above 15% over 5 years" is a
+     * single year's ROE - said rather than silently dropped.
+     */
+    private static void spansNotApplied(String text, Optional<ScreeningCriteria> preset, List<Rule> rules,
+                                        List<String> notApplied) {
+        Set<Integer> measured = new java.util.HashSet<>();
+        rules.forEach(rule -> measured.add(rule.metric().years()));
+        preset.ifPresent(p -> {
+            p.nonFinancialRules().forEach(rule -> measured.add(rule.metric().years()));
+            p.groupRules().values().forEach(groupRules -> groupRules.forEach(rule -> measured.add(rule.metric().years())));
+        });
+        Set<Integer> offered = Arrays.stream(ScreeningMetric.values()).map(ScreeningMetric::years)
+                .filter(years -> years > 0).collect(Collectors.toCollection(java.util.TreeSet::new));
+        for (int years : spansIn(text)) {
+            if (measured.contains(years) || notApplied.stream().anyMatch(note -> note.contains(years + "-year span"))) {
+                continue;
+            }
+            notApplied.add(offered.contains(years)
+                    ? ("“%d years”: no criterion of this screen is measured over %d fiscal years, so the span was not "
+                            + "applied. Growth, average ROE and cash conversion can be screened over %s fiscal years, "
+                            + "for example “revenue CAGR %dy above 10%%”.").formatted(years, years,
+                            offered.stream().map(String::valueOf).collect(Collectors.joining(" or ")), years)
+                    : ("“%d years”: growth, average ROE and cash conversion are measured over %s fiscal years, so a "
+                            + "%d-year span cannot be screened.").formatted(years, offered.stream().map(String::valueOf)
+                            .collect(Collectors.joining(" or ")), years));
+        }
     }
 
     static Optional<ScreeningMetric> metric(String name) {
@@ -416,7 +508,7 @@ public class CriteriaValidator {
     }
 
     private void vagueTerm(String phrase, Optional<ScreeningCriteria> preset, Set<IndustryGroup> groups,
-                           List<Rule> rules, List<String> readings, List<String> notApplied) {
+                           List<Integer> spans, List<Rule> rules, List<String> readings, List<String> notApplied) {
         if (judgementTerms.stream().anyMatch(term -> phrasePattern(term, false).matcher(phrase).find())) {
             return; // reported as a judgement
         }
@@ -433,20 +525,31 @@ public class CriteriaValidator {
             return;
         }
         for (ScreeningMetric metric : term.get().metrics()) {
-            if (rules.stream().anyMatch(rule -> rule.metric() == metric)) {
-                readings.add("“%s”: covered by your own %s criterion".formatted(phrase, metric.shortLabel()));
-                continue;
-            }
-            if (preset.isPresent() && presetCovers(preset.get(), metric, groups)) {
-                readings.add("“%s”: covered by the %s preset's %s criterion".formatted(phrase, preset.get().name(),
-                        metric.shortLabel()));
-                continue;
-            }
             ScreeningCriteria source = presets.find(term.get().preset()).orElseThrow();
-            Rule rule = presetRule(source, metric, groups).orElseThrow();
+            Rule presetRule = presetRule(source, metric, groups).orElseThrow();
+            // "growing over 3 years": the preset's threshold, over the span the request names
+            Optional<ScreeningMetric> over = metric.series().isPresent() && spans.size() == 1
+                    && spans.get(0) != metric.years() ? ScreeningMetric.of(metric.series().get(), spans.get(0))
+                    : Optional.empty();
+            ScreeningMetric measured = over.orElse(metric);
+            if (rules.stream().anyMatch(rule -> rule.metric().series().isPresent()
+                    ? rule.metric().series().equals(measured.series()) : rule.metric() == measured)) {
+                readings.add("“%s”: covered by your own %s criterion".formatted(phrase, measured.shortLabel()));
+                continue;
+            }
+            if (preset.isPresent() && presetCovers(preset.get(), measured, groups)) {
+                readings.add("“%s”: covered by the %s preset's %s criterion".formatted(phrase, preset.get().name(),
+                        measured.shortLabel()));
+                continue;
+            }
+            Rule rule = new Rule(measured, presetRule.operator(), presetRule.threshold());
             rules.add(rule);
-            readings.add("“%s” → %s (%s): the %s preset's threshold, as no number was given".formatted(phrase,
-                    rule.label(), metric.description(), source.name()));
+            readings.add(over.isEmpty()
+                    ? "“%s” → %s (%s): the %s preset's threshold, as no number was given".formatted(phrase,
+                            rule.label(), measured.description(), source.name())
+                    : ("“%s” → %s (%s): the %s preset's threshold for its %d-year rule, as no number was given, "
+                            + "measured over the %d years your request names").formatted(phrase, rule.label(),
+                            measured.description(), source.name(), metric.years(), measured.years()));
         }
     }
 
@@ -588,14 +691,15 @@ public class CriteriaValidator {
     /**
      * A phrase matched whole, with any spacing or hyphen between its words. With {@code noNumberAfter}, not
      * when a number follows within three words ("growing above 15%"): then the phrase is part of a criterion
-     * the user stated. "and", "with", "or" and "but" end the look-ahead, so "low debt and ROE above 18%" still
+     * the user stated. A span is not such a number: "growing over the last 3 years" is still vague. "and", "with", "or" and "but" end the look-ahead, so "low debt and ROE above 18%" still
      * asks for low debt.
      */
     private static Pattern phrasePattern(String phrase, boolean noNumberAfter) {
         String words = Arrays.stream(phrase.strip().split("[\\s-]+")).map(Pattern::quote)
                 .collect(Collectors.joining("[\\s-]+"));
         String after = noNumberAfter
-                ? "(?!(?:\\s+(?!(?:and|with|or|but)\\b)[\\p{L}/%-]+){0,3}\\s*[<>≥≤=]?\\s*-?\\d)" : "";
+                ? "(?!(?:\\s+(?!(?:and|with|or|but)\\b)[\\p{L}/%-]+){0,3}\\s*[<>≥≤=]?\\s*-?\\d"
+                        + "(?!\\d*(?:\\.\\d+)?[\\s-]*(?:years?|yrs?|y)\\b))" : "";
         return Pattern.compile("(?<![\\p{L}\\d-])" + words + "(?![\\p{L}\\d-])" + after, Pattern.CASE_INSENSITIVE);
     }
 

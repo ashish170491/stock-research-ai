@@ -27,31 +27,39 @@ import java.util.function.Function;
  */
 final class SnapshotCalculator {
 
-    static final int YEARS = 3;
-
     private SnapshotCalculator() {
     }
 
-    /** Return on equity averaged over the last 3 consecutive fiscal years' calculated ROE. */
-    static FinancialDataPoint roe3yAverage(List<AnnualRatios> ratios, CalculationVerifier.SourceValues sources) {
-        String metric = "returnOnEquity3yAveragePercent";
-        if (ratios.size() < YEARS) {
+    /**
+     * Return on equity averaged over the last {@code years} consecutive fiscal years' calculated ROE. Every
+     * year must be on the same basis - profit over average equity - so a year whose ROE could only be taken on
+     * closing equity (no prior-year balance sheet) gives no average rather than one over mixed bases.
+     */
+    static FinancialDataPoint roeAverage(List<AnnualRatios> ratios, int years, CalculationVerifier.SourceValues sources) {
+        String metric = "returnOnEquity%dyAveragePercent".formatted(years);
+        if (ratios.size() < years) {
             return FinancialDataPoint.unavailable(metric, Unit.PERCENT, ReportingPeriod.unknown(), null,
-                    "needs %d fiscal years of return on equity; %d available".formatted(YEARS, ratios.size()));
+                    "needs %d fiscal years of return on equity; %d available".formatted(years, ratios.size()));
         }
-        List<AnnualRatios> window = ratios.subList(ratios.size() - YEARS, ratios.size());
+        List<AnnualRatios> window = ratios.subList(ratios.size() - years, ratios.size());
         Optional<String> gap = notConsecutive(window.stream().map(AnnualRatios::period).toList());
         if (gap.isPresent()) {
             return FinancialDataPoint.unavailable(metric, Unit.PERCENT, ReportingPeriod.unknown(), null, gap.get());
         }
-        ReportingPeriod span = span(window.get(0).period(), window.get(window.size() - 1).period(), YEARS);
+        ReportingPeriod span = span(window.get(0).period(), window.get(window.size() - 1).period(), years);
         List<FinancialDataPoint> roe = window.stream().map(AnnualRatios::returnOnEquityPercent).toList();
         String calculation = "(%s return on equity) / %d".formatted(String.join(" + ",
-                window.stream().map(year -> year.period().label()).toList()), YEARS);
+                window.stream().map(year -> year.period().label()).toList()), years);
         FinancialDataPoint last = roe.get(roe.size() - 1);
         Optional<FinancialDataPoint> blocked = blocked(metric, Unit.PERCENT, span, last, Formula.MEAN, calculation, roe);
         if (blocked.isPresent()) {
             return blocked.get();
+        }
+        Optional<FinancialDataPoint> onClosing = roe.stream().filter(point -> !onAverageEquity(point)).findFirst();
+        if (onClosing.isPresent()) {
+            return FinancialDataPoint.unavailable(metric, Unit.PERCENT, span, last.source(), ("%s return on equity "
+                    + "is on closing equity (no prior-year balance sheet), so the %d years are not on one basis")
+                    .formatted(onClosing.get().period().label(), years));
         }
         // The yearly ROE values are the application's own verified calculations, so they carry no provider
         // field to reconcile; the mean is still recomputed from them.
@@ -65,24 +73,36 @@ final class SnapshotCalculator {
                         "the average could not be calculated")), sources);
     }
 
-    /** Compound annual growth over exactly the last 3 fiscal years (4 consecutive year-ends). */
-    static FinancialDataPoint cagr3y(List<AnnualFinancials> annual, Function<AnnualFinancials, FinancialDataPoint> field,
-                                     String name, String metric, CalculationVerifier.SourceValues sources) {
-        if (annual.size() < YEARS + 1) {
+    /**
+     * Profit over the average of opening and closing equity: besides the year's profit, its inputs are balances
+     * at two different dates, the prior year-end's and this year's.
+     */
+    private static boolean onAverageEquity(FinancialDataPoint roe) {
+        String year = roe.period().label();
+        return roe.formula() == Formula.AVERAGE_BALANCE_RETURN_PERCENT && roe.inputs().stream()
+                .map(CalculationInput::period).filter(period -> period != null && !period.equals(year))
+                .distinct().count() == 2;
+    }
+
+    /** Compound annual growth over exactly the last {@code years} fiscal years ({@code years} + 1 consecutive year-ends). */
+    static FinancialDataPoint cagr(List<AnnualFinancials> annual, int years,
+                                   Function<AnnualFinancials, FinancialDataPoint> field, String name, String metric,
+                                   CalculationVerifier.SourceValues sources) {
+        if (annual.size() < years + 1) {
             return FinancialDataPoint.unavailable(metric, Unit.PERCENT, ReportingPeriod.unknown(), null,
-                    "a %d-year %s CAGR needs %d fiscal years; %d available".formatted(YEARS, name, YEARS + 1,
+                    "a %d-year %s CAGR needs %d fiscal years; %d available".formatted(years, name, years + 1,
                             annual.size()));
         }
-        List<AnnualFinancials> window = annual.subList(annual.size() - YEARS - 1, annual.size());
+        List<AnnualFinancials> window = annual.subList(annual.size() - years - 1, annual.size());
         Optional<String> gap = notConsecutive(window.stream().map(AnnualFinancials::period).toList());
         if (gap.isPresent()) {
             return FinancialDataPoint.unavailable(metric, Unit.PERCENT, ReportingPeriod.unknown(), null, gap.get());
         }
         AnnualFinancials first = window.get(0);
         AnnualFinancials last = window.get(window.size() - 1);
-        ReportingPeriod span = span(first.period(), last.period(), YEARS);
+        ReportingPeriod span = span(first.period(), last.period(), years);
         String calculation = "((%s %s / %s %s)^(1/%d) - 1) x 100".formatted(last.period().label(), name,
-                first.period().label(), name, YEARS);
+                first.period().label(), name, years);
         FinancialDataPoint start = field.apply(first);
         FinancialDataPoint end = field.apply(last);
         // Every year of the window must be usable, as for the research layer's CAGR: a disputed middle year
@@ -92,13 +112,13 @@ final class SnapshotCalculator {
         if (blocked.isPresent()) {
             return blocked.get();
         }
-        BigDecimal years = BigDecimal.valueOf(YEARS);
-        return verified(FinancialCalculator.cagrPercent(start.value(), end.value(), years)
+        BigDecimal spanYears = BigDecimal.valueOf(years);
+        return verified(FinancialCalculator.cagrPercent(start.value(), end.value(), spanYears)
                 .map(value -> FinancialDataPoint.calculated(metric, value, Unit.PERCENT, span, end.source(),
                         Formula.CAGR_PERCENT, calculation,
                         List.of(CalculationInput.of(first.period().label() + " " + name, start),
                                 CalculationInput.of(last.period().label() + " " + name, end),
-                                CalculationInput.derived("years", years, Unit.YEARS))))
+                                CalculationInput.derived("years", spanYears, Unit.YEARS))))
                 .orElseGet(() -> FinancialDataPoint.unavailable(metric, Unit.PERCENT, span, end.source(),
                         "%s CAGR is undefined: the start or end value is not positive".formatted(name))), sources);
     }

@@ -76,10 +76,13 @@ class CriteriaValidatorTest {
                 read(List.of(), List.of(criterion("revenue growing above 15%", "REVENUE_CAGR_3Y_PERCENT", "ABOVE", "15")),
                         List.of("growing")), false);
 
-        // "growing" alone is vague (revenue and profit CAGR); the stated revenue criterion replaces its revenue half
+        // "growing" alone is vague (revenue and profit CAGR); the stated revenue criterion replaces its revenue half.
+        // The request names no span, so growth is over the default 5 years, whatever span the model picked.
         assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER))
-                .containsExactly("Revenue CAGR 3y > 15.00%", "Profit CAGR 3y ≥ 10.00%");
-        assertThat(interpretation.readings()).contains("“growing”: covered by your own Revenue CAGR 3y criterion");
+                .containsExactly("Revenue CAGR 5y > 15.00%", "Profit CAGR 5y ≥ 10.00%");
+        assertThat(interpretation.readings()).contains("“revenue growing above 15%” → Revenue CAGR 5y > 15.00% (revenue "
+                        + "CAGR over the last 5 fiscal years) - over 5 fiscal years, as no span was given",
+                "“growing”: covered by your own Revenue CAGR 5y criterion");
     }
 
     // S4-3: an unknown metric is rejected with a message naming what can be screened.
@@ -92,7 +95,7 @@ class CriteriaValidatorTest {
         assertThat(interpretation.criteria()).isEmpty();
         assertThat(interpretation.notApplied()).singleElement().asString()
                 .contains("“promoter holding above 50%”: ‘PROMOTER_HOLDING’ is not a metric the screen can test")
-                .contains("It can test: ROE 3y avg, ROE, ROA, ROCE");
+                .contains("It can test: ROE 3y avg, ROE 5y avg, ROE, ROA, ROCE");
         assertThat(interpretation.refusal()).startsWith("I found no criteria in your request that the screen can apply");
     }
 
@@ -316,10 +319,60 @@ class CriteriaValidatorTest {
                         List.of(criterion("5-year revenue CAGR above 12%", "REVENUE_CAGR_3Y_PERCENT", "ABOVE", "12")),
                         List.of()), false);
 
-        assertThat(interpretation.criteria()).isPresent();
-        assertThat(interpretation.notApplied()).anyMatch(n -> n.contains("only the Nifty 50 can be screened"))
-                .anyMatch(n -> n.contains("“top 10”: the screen ranks every stock"))
-                .anyMatch(n -> n.contains("a 5-year span cannot be screened"));
+        // the 5-year span is the user's: the model's 3-year metric is replaced, not used
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER))
+                .containsExactly("Revenue CAGR 5y > 12.00%");
+        assertThat(interpretation.notApplied()).hasSize(2)
+                .anyMatch(n -> n.contains("only the Nifty 50 can be screened"))
+                .anyMatch(n -> n.contains("“top 10”: the screen ranks every stock"));
+    }
+
+    @Test
+    void measuresACriterionOverTheSpanItsOwnWordsName() {
+        ScreenInterpretation interpretation = validator.interpret(
+                "Companies with 3-year profit growth above 15% and 5y average ROE of at least 18%", read(List.of(),
+                        List.of(criterion("3-year profit growth above 15%", "NET_PROFIT_CAGR_5Y_PERCENT", "ABOVE", "15"),
+                                criterion("5y average ROE of at least 18%", "ROE_3Y_AVG_PERCENT", "AT_LEAST", "18")),
+                        List.of()), false);
+
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER))
+                .containsExactly("Profit CAGR 3y > 15.00%", "ROE 5y avg ≥ 18.00%");
+        assertThat(interpretation.notApplied()).isEmpty();
+    }
+
+    @Test
+    void rejectsASpanTheApplicationDoesNotMeasure() {
+        ScreenInterpretation interpretation = validator.interpret("Stocks with 10-year revenue CAGR above 12%",
+                read(List.of(), List.of(criterion("10-year revenue CAGR above 12%", "REVENUE_CAGR_5Y_PERCENT", "ABOVE",
+                        "12")), List.of()), false);
+
+        assertThat(interpretation.criteria()).isEmpty();
+        assertThat(interpretation.notApplied()).containsExactly("“10-year revenue CAGR above 12%”: revenue growth (CAGR) "
+                + "is measured over 3 or 5 fiscal years, so a 10-year span cannot be screened and the criterion was not "
+                + "applied.");
+    }
+
+    @Test
+    void readsAVagueQualityOverTheSpanTheRequestNames() {
+        ScreenInterpretation interpretation = validator.interpret("Find companies growing over the last 3 years",
+                ExtractedCriteria.none(), false);
+
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER))
+                .containsExactly("Revenue CAGR 3y ≥ 10.00%", "Profit CAGR 3y ≥ 10.00%");
+        assertThat(interpretation.readings()).contains("“growing” → Revenue CAGR 3y ≥ 10.00% (revenue CAGR over the "
+                + "last 3 fiscal years): the quality-compounder preset's threshold for its 5-year rule, as no number was "
+                + "given, measured over the 3 years your request names");
+    }
+
+    @Test
+    void saysWhenASpanAppliesToNoCriterion() {
+        ScreenInterpretation interpretation = validator.interpret("Stocks with ROE above 15% over 5 years",
+                read(List.of(), List.of(criterion("ROE above 15%", "ROE_PERCENT", "ABOVE", "15")), List.of()), false);
+
+        // a single year's ROE: the span is not quietly read as an average
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER)).containsExactly("ROE > 15.00%");
+        assertThat(interpretation.notApplied()).singleElement().asString()
+                .startsWith("“5 years”: no criterion of this screen is measured over 5 fiscal years");
     }
 
     @Test

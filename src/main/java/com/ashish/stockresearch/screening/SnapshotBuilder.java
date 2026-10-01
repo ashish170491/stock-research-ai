@@ -72,10 +72,12 @@ public class SnapshotBuilder {
     }
 
     private static void financialMetrics(FinancialSummaryResult result, Map<ScreeningMetric, SnapshotMetric> metrics) {
-        List<ScreeningMetric> financial = List.of(ScreeningMetric.ROE_3Y_AVG_PERCENT, ScreeningMetric.ROE_PERCENT,
-                ScreeningMetric.ROA_PERCENT, ScreeningMetric.ROCE_PERCENT, ScreeningMetric.OPERATING_MARGIN_PERCENT,
-                ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE, ScreeningMetric.REVENUE_CAGR_3Y_PERCENT,
-                ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE,
+        List<ScreeningMetric> financial = List.of(ScreeningMetric.ROE_3Y_AVG_PERCENT, ScreeningMetric.ROE_5Y_AVG_PERCENT,
+                ScreeningMetric.ROE_PERCENT, ScreeningMetric.ROA_PERCENT, ScreeningMetric.ROCE_PERCENT,
+                ScreeningMetric.OPERATING_MARGIN_PERCENT, ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE,
+                ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, ScreeningMetric.REVENUE_CAGR_5Y_PERCENT,
+                ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT,
+                ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE, ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE,
                 ScreeningMetric.DIVIDENDS_TO_OCF_PERCENT);
         if (!result.success()) {
             financial.forEach(metric -> metrics.put(metric, SnapshotMetric.unavailable(metric,
@@ -88,21 +90,29 @@ public class SnapshotBuilder {
         CalculationVerifier.SourceValues sources = new CalculationVerifier.SourceValues();
         annual.forEach(year -> year.points().forEach(sources::add));
 
-        metrics.put(ScreeningMetric.ROE_3Y_AVG_PERCENT, SnapshotMetric.of(ScreeningMetric.ROE_3Y_AVG_PERCENT,
-                SnapshotCalculator.roe3yAverage(ratios, sources)));
+        for (ScreeningMetric metric : List.of(ScreeningMetric.ROE_3Y_AVG_PERCENT, ScreeningMetric.ROE_5Y_AVG_PERCENT)) {
+            metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.roeAverage(ratios, metric.years(), sources)));
+        }
         latest(ratios, AnnualRatios::returnOnEquityPercent, ScreeningMetric.ROE_PERCENT, metrics);
         latest(ratios, AnnualRatios::returnOnAssetsPercent, ScreeningMetric.ROA_PERCENT, metrics);
         latest(ratios, AnnualRatios::returnOnCapitalEmployedPercent, ScreeningMetric.ROCE_PERCENT, metrics);
         latest(ratios, AnnualRatios::operatingMarginPercent, ScreeningMetric.OPERATING_MARGIN_PERCENT, metrics);
         latest(ratios, AnnualRatios::debtToEquityMultiple, ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE, metrics);
-        metrics.put(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, SnapshotMetric.of(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT,
-                SnapshotCalculator.cagr3y(annual, AnnualFinancials::revenue, "revenue", "revenueCagr3yPercent",
-                        sources)));
-        metrics.put(ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, SnapshotMetric.of(
-                ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, SnapshotCalculator.cagr3y(annual,
-                        AnnualFinancials::netProfit, "net profit", "netProfitCagr3yPercent", sources)));
+        for (ScreeningMetric metric : List.of(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT,
+                ScreeningMetric.REVENUE_CAGR_5Y_PERCENT)) {
+            metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.cagr(annual, metric.years(),
+                    AnnualFinancials::revenue, "revenue", "revenueCagr%dyPercent".formatted(metric.years()), sources)));
+        }
+        for (ScreeningMetric metric : List.of(ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT,
+                ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT)) {
+            metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.cagr(annual, metric.years(),
+                    AnnualFinancials::netProfit, "net profit", "netProfitCagr%dyPercent".formatted(metric.years()),
+                    sources)));
+        }
         metrics.put(ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE, SnapshotMetric.of(ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE,
                 summary.calculated().ocfToPat3yMultiple()));
+        metrics.put(ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE, SnapshotMetric.of(ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE,
+                summary.calculated().ocfToPat5yMultiple()));
         metrics.put(ScreeningMetric.DIVIDENDS_TO_OCF_PERCENT, SnapshotMetric.of(ScreeningMetric.DIVIDENDS_TO_OCF_PERCENT,
                 SnapshotCalculator.dividendsToOperatingCashFlow(annual, sources)));
     }

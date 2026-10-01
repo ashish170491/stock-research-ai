@@ -5,8 +5,9 @@
   live only in StockScreener, against explicit configured criteria, reading the
   fundamentals snapshot (never a provider). No other code or prompt judges a stock.
 - A screen asked for in words goes through ScreenerAgent: the model only extracts criteria
-  and summarises the result. CriteriaValidator checks every metric, bound and threshold
-  against the user's own words, and the answer shows every assumption.
+  and summarises the result. CriteriaValidator checks every metric, bound, threshold and span
+  (3y / 5y) against the user's own words, and the answer shows every assumption. A metric over
+  N fiscal years uses exactly N consecutive years, never fewer.
 - Every model answer about a screen also goes through ScreeningCountVerifier (AnswerChecks).
 - Every number is a FinancialDataPoint with unit, period, source and DataStatus.
   Only VALID values are used; non-VALID never passes a screening rule.

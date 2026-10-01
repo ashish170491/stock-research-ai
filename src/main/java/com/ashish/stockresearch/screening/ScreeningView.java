@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.screening;
 
+import com.ashish.stockresearch.research.model.DataStatus;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
 import com.ashish.stockresearch.screening.ScreeningResult.RuleResult;
 import com.ashish.stockresearch.screening.ScreeningResult.StockScreening;
@@ -117,7 +118,8 @@ public record ScreeningView(
                 boolean ownPeriod = metric.periodLabel() != null && !metric.periodLabel().equals(periods.get(i));
                 boolean insufficient = result.outcome() == RuleOutcome.INSUFFICIENT_DATA;
                 cells.add(new Cell(result.rule().label(), result.outcome(), metric.display(),
-                        ownPeriod ? metric.periodLabel() : null, ScreeningRenderer.why(metric),
+                        ownPeriod ? metric.periodLabel() : null, metric.usable() || metric.status() != DataStatus.VALID
+                                ? metric.status().name() : ScreeningRenderer.why(metric),
                         insufficient ? ScreeningRenderer.root(result) : null, metric.source(), metric.calculation()));
             }
             SnapshotMetric tie = stock.tieBreak();

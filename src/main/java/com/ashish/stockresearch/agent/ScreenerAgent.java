@@ -79,8 +79,9 @@ public class ScreenerAgent {
             Metrics:
             %s
             Plain "ROE" is ROE_PERCENT; "average ROE" is ROE_3Y_AVG_PERCENT. Revenue or sales growth is
-            REVENUE_CAGR_3Y_PERCENT; profit or earnings growth is NET_PROFIT_CAGR_3Y_PERCENT. "P/E" is
-            TRAILING_PE_MULTIPLE and "P/B" is PRICE_TO_BOOK_MULTIPLE.
+            REVENUE_CAGR_5Y_PERCENT; profit or earnings growth is NET_PROFIT_CAGR_5Y_PERCENT. A request that
+            names a span ("3-year growth") uses the metric over that span. "P/E" is TRAILING_PE_MULTIPLE and
+            "P/B" is PRICE_TO_BOOK_MULTIPLE.
             A condition with a number on something not in this list still goes in criteria, with metric set
             to the request's own name for it.
             """;

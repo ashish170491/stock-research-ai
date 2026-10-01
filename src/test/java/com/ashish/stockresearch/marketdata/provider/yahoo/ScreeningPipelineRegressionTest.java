@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,8 +43,16 @@ class ScreeningPipelineRegressionTest {
         FundamentalsSnapshot techm = snapshot("TECHM");
 
         assertThat(techm.industryGroup()).isEqualTo(IndustryGroup.IT_SERVICES);
-        assertThat(techm.metrics().values()).allSatisfy(m -> assertThat(m.status()).as(m.metric().name())
-                .isEqualTo(DataStatus.VALID));
+        // Yahoo's four fiscal years, with no filings: every metric over at most 3 years is VALID, and none
+        // over 5 is measured over fewer years than it says
+        Set<ScreeningMetric> fiveYear = Set.of(ScreeningMetric.ROE_5Y_AVG_PERCENT, ScreeningMetric.REVENUE_CAGR_5Y_PERCENT,
+                ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT, ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE);
+        assertThat(techm.metrics().values()).filteredOn(m -> !fiveYear.contains(m.metric()))
+                .allSatisfy(m -> assertThat(m.status()).as(m.metric().name()).isEqualTo(DataStatus.VALID));
+        assertThat(fiveYear).allSatisfy(m -> assertThat(techm.metric(m).status()).as(m.name())
+                .isEqualTo(DataStatus.UNAVAILABLE));
+        assertThat(techm.metric(ScreeningMetric.REVENUE_CAGR_5Y_PERCENT).statusReason())
+                .isEqualTo("a 5-year revenue CAGR needs 6 fiscal years; 4 available");
         // FY26 dividends paid 4,025.50 crore out of 6,172.00 crore operating cash flow
         assertThat(techm.metric(ScreeningMetric.DIVIDENDS_TO_OCF_PERCENT).value()).isEqualByComparingTo("65.22");
         assertThat(techm.metric(ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE).display()).isEqualTo("1.61x");
@@ -61,8 +70,9 @@ class ScreeningPipelineRegressionTest {
         assertThat(outcomes(result, "TECHM")).containsExactlyInAnyOrderEntriesOf(Map.of(
                 "ROE 3y avg ≥ 15.00%", RuleOutcome.FAIL, // 13.76%
                 "ROCE ≥ 15.00%", RuleOutcome.PASS, // 20.72%
-                "Revenue CAGR 3y ≥ 10.00%", RuleOutcome.FAIL, // 2.16%
-                "Profit CAGR 3y ≥ 10.00%", RuleOutcome.FAIL, // -0.14%
+                // Yahoo's four years cannot give a 5-year growth rate
+                "Revenue CAGR 5y ≥ 10.00%", RuleOutcome.INSUFFICIENT_DATA,
+                "Profit CAGR 5y ≥ 10.00%", RuleOutcome.INSUFFICIENT_DATA,
                 "OCF/PAT 3y ≥ 0.80x", RuleOutcome.PASS, // 1.61x
                 "D/E ≤ 0.50x", RuleOutcome.PASS)); // 0.07x
     }
@@ -90,9 +100,9 @@ class ScreeningPipelineRegressionTest {
         assertThat(outcomes(result, "TECHM")).containsExactlyInAnyOrderEntriesOf(Map.of(
                 "Dividend yield ≥ 2.00%", RuleOutcome.PASS, // 3.29%
                 "Dividends/OCF ≤ 100.00%", RuleOutcome.PASS, // 65.22%
-                "Profit CAGR 3y > 0.00%", RuleOutcome.FAIL)); // -0.14%
+                "Profit CAGR 5y > 0.00%", RuleOutcome.INSUFFICIENT_DATA)); // four fiscal years
         assertThat(outcomes(result, "HDFCBANK")).containsExactlyInAnyOrderEntriesOf(Map.of(
                 "Dividend yield ≥ 2.00%", RuleOutcome.FAIL, // 1.77%
-                "Profit CAGR 3y > 0.00%", RuleOutcome.INSUFFICIENT_DATA));
+                "Profit CAGR 5y > 0.00%", RuleOutcome.INSUFFICIENT_DATA));
     }
 }
