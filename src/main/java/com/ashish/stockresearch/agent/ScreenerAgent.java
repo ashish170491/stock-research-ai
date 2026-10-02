@@ -206,8 +206,10 @@ public class ScreenerAgent {
             }
 
             // Stage 3: StockScreener makes every pass/fail decision.
-            Progress.Step screening = Progress.start("Screening the stored Nifty 50 snapshot");
-            ScreeningOutcome outcome = screeningService.screen(interpretation.criteria().get(), null);
+            Progress.Step screening = Progress.start("Screening the stored %s snapshot"
+                    .formatted(interpretation.universe().displayName()));
+            ScreeningOutcome outcome = screeningService.screen(interpretation.criteria().get(),
+                    interpretation.universe().name());
             if (outcome.success()) {
                 screening.done("Screened %d stocks from the snapshot of %s".formatted(outcome.result().ranked().size(),
                         outcome.run().snapshotDate()));

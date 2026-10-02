@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Snapshots and screens built from the real Yahoo Finance responses for Tech Mahindra and HDFC Bank
@@ -31,6 +32,27 @@ class ScreeningPipelineRegressionTest {
         return new SnapshotBuilder(ResearchPipelineRegressionTest.research(symbol), new SectorClassifier(),
                 ResearchPipelineRegressionTest.SEPT_2026)
                 .build(new Universes.Member(symbol, symbol + " Ltd.", "x"), LocalDate.of(2026, 9, 27));
+    }
+
+    // S12-2: a member is captured from its own NSE listing only
+    @Test
+    void neverStoresAnotherListingsFiguresUnderAMember() {
+        // the resolver answers every symbol with Tech Mahindra, as a guessed ticker for an unknown symbol might
+        SnapshotBuilder guessed = new SnapshotBuilder(ResearchPipelineRegressionTest.research("TECHM"),
+                new SectorClassifier(), ResearchPipelineRegressionTest.SEPT_2026);
+        SnapshotBuilder onBse = new SnapshotBuilder(ResearchPipelineRegressionTest.research("TECHM", "BSE"),
+                new SectorClassifier(), ResearchPipelineRegressionTest.SEPT_2026);
+
+        assertThatThrownBy(() -> guessed.build(new Universes.Member("DUMMYHEG", "Dummy HEG Ltd.", "Capital Goods"),
+                LocalDate.of(2026, 9, 27)))
+                .isInstanceOf(SnapshotBuilder.NothingRetrievedException.class)
+                .hasMessage("the profile resolved to TECHM (NSE), not DUMMYHEG's own NSE listing, so nothing was stored");
+        assertThatThrownBy(() -> onBse.build(new Universes.Member("TECHM", "Tech Mahindra Ltd.", "IT"),
+                LocalDate.of(2026, 9, 27)))
+                .isInstanceOf(SnapshotBuilder.NothingRetrievedException.class)
+                .hasMessageContaining("resolved to TECHM (BSE), not TECHM's own NSE listing");
+        // Yahoo's own fiscal years: none read from the filings
+        assertThat(snapshot("TECHM").filedFiscalYears()).isZero();
     }
 
     private static Map<String, RuleOutcome> outcomes(ScreeningResult result, String symbol) {

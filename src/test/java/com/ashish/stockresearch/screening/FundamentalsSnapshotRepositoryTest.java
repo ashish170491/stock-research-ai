@@ -89,6 +89,33 @@ class FundamentalsSnapshotRepositoryTest {
                 "profile: not found; financials: not found; valuation: not found"));
     }
 
+    // S12-L1: the share of a run's companies with six filed fiscal years
+    @Test
+    void countsTheCompaniesWithSixFiledFiscalYears() {
+        SnapshotRun run = repository.startRun(Universe.NIFTY500, DATE, NOW, 4);
+        repository.save(run.id(), stock("TCS", IndustryGroup.IT_SERVICES).filedFiscalYears(6).build());
+        repository.save(run.id(), stock("INFY", IndustryGroup.IT_SERVICES).filedFiscalYears(6).build());
+        repository.save(run.id(), stock("TMCV", IndustryGroup.MANUFACTURING).filedFiscalYears(1).build());
+        repository.save(run.id(), stock("EMBASSY", IndustryGroup.OTHER).filedFiscalYears(0).build());
+
+        SnapshotRun.FiledYears filed = repository.filedYears(run.id());
+
+        assertThat(filed).isEqualTo(new SnapshotRun.FiledYears(4, 4, 2));
+        assertThat(filed.describe()).isEqualTo("2 of 4 companies (50.0%) have six fiscal years read from their NSE filings");
+        assertThat(repository.snapshots(run.id())).extracting(FundamentalsSnapshot::filedFiscalYears)
+                .containsExactly(0, 6, 6, 1); // by symbol
+    }
+
+    @Test
+    void saysSoWhenARunDidNotRecordFiledYears() {
+        SnapshotRun run = repository.startRun(Universe.NIFTY50, DATE, NOW, 1);
+        repository.save(run.id(), stock("TCS", IndustryGroup.IT_SERVICES).build());
+
+        assertThat(repository.filedYears(run.id())).isEqualTo(new SnapshotRun.FiledYears(1, 0, 0));
+        assertThat(repository.filedYears(run.id()).describe()).isEqualTo("filed fiscal years were not recorded in this run");
+        assertThat(repository.snapshots(run.id()).get(0).filedFiscalYears()).isNull();
+    }
+
     @Test
     void hasNoCompletedRunBeforeTheFirstSnapshot() {
         assertThat(repository.latestCompletedRun(Universe.NIFTY50)).isEmpty();

@@ -7,7 +7,10 @@
 - A screen asked for in words goes through ScreenerAgent: the model only extracts criteria
   and summarises the result. CriteriaValidator checks every metric, bound, threshold and span
   (3y / 5y) against the user's own words, and the answer shows every assumption. A metric over
-  N fiscal years uses exactly N consecutive years, never fewer.
+  N fiscal years uses exactly N consecutive years, never fewer. The index screened (Nifty 50 or Nifty 500)
+  is read from the user's words, never chosen by the model; a request that names none gets the Nifty 50.
+- A snapshot stores a universe member only from its own NSE listing; a symbol that resolves to another
+  listing is a recorded failure. Universe CSVs are kept as downloaded from NSE Indices.
 - Every model answer about a screen also goes through ScreeningCountVerifier (AnswerChecks).
 - Every number is a FinancialDataPoint with unit, period, source and DataStatus.
   Only VALID values are used; non-VALID never passes a screening rule.

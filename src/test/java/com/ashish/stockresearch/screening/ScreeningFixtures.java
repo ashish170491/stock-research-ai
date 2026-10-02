@@ -46,6 +46,7 @@ public final class ScreeningFixtures {
         private final String symbol;
         private final IndustryGroup group;
         private final Map<ScreeningMetric, SnapshotMetric> metrics = new EnumMap<>(ScreeningMetric.class);
+        private Integer filedFiscalYears;
 
         private Builder(String symbol, IndustryGroup group) {
             this.symbol = symbol;
@@ -62,9 +63,14 @@ public final class ScreeningFixtures {
             return this;
         }
 
+        public Builder filedFiscalYears(int years) {
+            filedFiscalYears = years;
+            return this;
+        }
+
         public FundamentalsSnapshot build() {
             return new FundamentalsSnapshot(symbol, symbol + " Limited", group, "test classification", DATE,
-                    Instant.parse("2026-09-28T13:10:00Z"), metrics);
+                    Instant.parse("2026-09-28T13:10:00Z"), metrics, filedFiscalYears);
         }
     }
 }

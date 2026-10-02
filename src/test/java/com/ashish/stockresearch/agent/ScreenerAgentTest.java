@@ -128,8 +128,12 @@ class ScreenerAgentTest {
 
     /** TCS meets every criterion; INFY's ROE fails; WIPRO's D/E is disputed; HDFCBANK is left out by the IT filter. */
     private void snapshot() {
+        snapshot(Universe.NIFTY50);
+    }
+
+    private void snapshot(Universe universe) {
         Instant now = Instant.parse("2026-09-28T13:00:00Z");
-        SnapshotRun run = repository.startRun(Universe.NIFTY50, DATE, now, 4);
+        SnapshotRun run = repository.startRun(universe, DATE, now, 4);
         repository.save(run.id(), stock("TCS", IndustryGroup.IT_SERVICES).with(ROE_PERCENT, "40")
                 .with(ROE_3Y_AVG_PERCENT, "35").with(DEBT_TO_EQUITY_MULTIPLE, "0.1").build());
         repository.save(run.id(), stock("INFY", IndustryGroup.IT_SERVICES).with(ROE_PERCENT, "16")
@@ -322,6 +326,30 @@ class ScreenerAgentTest {
                 .anyMatch(l -> l.startsWith("DONE in ") && l.endsWith("| 2 model call(s)"));
         // one trace, not one per model call
         assertThat(lines).filteredOn(l -> l.contains("USER > ")).hasSize(1);
+    }
+
+    // S12-3: the request's own words choose the Nifty 500; the model is never asked which index
+    @Test
+    void screensTheNifty500WhenTheRequestNamesIt() {
+        snapshot(Universe.NIFTY500);
+        ScriptedModel model = new ScriptedModel(p -> EXTRACTED, p -> GOOD_SUMMARY);
+        List<com.ashish.stockresearch.trace.Progress.Event> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        ScreenerAgent.ScreenAnswer answer;
+        try (com.ashish.stockresearch.trace.Progress.Scope scope = com.ashish.stockresearch.trace.Progress.open(events::add)) {
+            answer = agent(model).answer("Find profitable Nifty 500 IT companies with low debt and ROE above 18%");
+        }
+
+        assertThat(answer.text()).contains("- Universe: the Nifty 500, as your request names it.")
+                .contains("Universe: Nifty 500 (NIFTY500). Snapshot of " + DATE).doesNotContain("Not applied");
+        assertThat(answer.memoryNote()).contains("on the Nifty 500 snapshot of " + DATE);
+        assertThat(events).extracting(com.ashish.stockresearch.trace.Progress.Event::label)
+                .contains("Screening the stored Nifty 500 snapshot");
+        // the extraction prompt carries no universe for the model to choose
+        assertThat(model.prompts.get(0).getContents()).doesNotContain("NIFTY500");
+        // with no Nifty 50 snapshot, a request naming no index is not screened on the Nifty 500 instead
+        assertThat(agent(new ScriptedModel(p -> EXTRACTED, p -> GOOD_SUMMARY)).answer(REQUEST).text())
+                .contains("No completed snapshot of Nifty 50 exists yet");
     }
 
     // Progress: the four stages are reported as they happen.

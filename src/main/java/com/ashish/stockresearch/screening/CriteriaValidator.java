@@ -54,10 +54,14 @@ public class CriteriaValidator {
     private static final Pattern NUMBER = Pattern.compile("(?<![\\w.])-?\\d+(?:\\.\\d+)?");
     private static final Pattern THRESHOLD = Pattern.compile("^\\s*([-+]?\\d+(?:\\.\\d+)?)\\s*(?:%|x|times)?\\s*$",
             Pattern.CASE_INSENSITIVE);
+    /** The universes a request can name, by their words: "Nifty 500", "nifty50", "NIFTY-50". */
+    private static final Map<Universe, Pattern> UNIVERSE_WORDS = Map.of(
+            Universe.NIFTY50, Pattern.compile("\\bnifty[\\s-]*50\\b", Pattern.CASE_INSENSITIVE),
+            Universe.NIFTY500, Pattern.compile("\\bnifty[\\s-]*500\\b", Pattern.CASE_INSENSITIVE));
     /** Universes that cannot be screened yet. */
     private static final Pattern OTHER_UNIVERSE = Pattern.compile(
-            "\\b(?:nifty\\s*(?:next\\s*50|100|200|500|midcap\\s*\\d*|smallcap\\s*\\d*|bank)|next\\s*50|mid[- ]?caps?"
-                    + "|small[- ]?caps?|large[- ]?caps? beyond|sensex|bse\\s*\\d+)\\b",
+            "\\b(?:nifty[\\s-]*(?:next[\\s-]*50|100|200|midcap[\\s-]*\\d*|smallcap[\\s-]*\\d*|bank)|next[\\s-]*50"
+                    + "|mid[- ]?caps?|small[- ]?caps?|large[- ]?caps? beyond|sensex|bse[\\s-]*\\d+)\\b",
             Pattern.CASE_INSENSITIVE);
     /** The user's comparison words, in the order they are checked: "not less than" is "at least", not "less than". */
     private static final List<Map.Entry<Pattern, Operator>> OPERATOR_WORDS = List.of(
@@ -108,11 +112,7 @@ public class CriteriaValidator {
 
         Optional<ScreeningCriteria> preset = preset(text, read.preset(), readings, notApplied);
         Set<IndustryGroup> groups = groups(text, read.industryGroups(), readings, notApplied);
-        Matcher otherUniverse = OTHER_UNIVERSE.matcher(text);
-        if (otherUniverse.find()) {
-            notApplied.add("“%s”: only the Nifty 50 can be screened so far, so the screen covers the Nifty 50."
-                    .formatted(otherUniverse.group().strip()));
-        }
+        Universe universe = universe(text, readings, notApplied);
 
         // Stated criteria first, so a vague word the user also gave a number for is read as their number.
         List<Rule> rules = new ArrayList<>();
@@ -141,32 +141,67 @@ public class CriteriaValidator {
         }
 
         if (unread.isPresent() && extractionFailed) {
-            return ScreenInterpretation.refused(nothingToScreen(text, true), readings, notApplied);
+            return ScreenInterpretation.refused(nothingToScreen(text, true), readings, notApplied, universe);
         }
         if (unread.isPresent()) {
             // Screening without a criterion the user stated would list stocks that do not meet it.
             return ScreenInterpretation.refused(("I could not read every criterion in your request (%s was not "
                     + "matched to a criterion), so I did not run a screen rather than run one without it. Rephrase it "
                     + "as a metric and a number, for example “ROE above 18%%”.").formatted(unread.get()), readings,
-                    notApplied);
+                    notApplied, universe);
         }
         if (preset.isEmpty() && rules.isEmpty()) {
-            return ScreenInterpretation.refused(nothingToScreen(text, extractionFailed), readings, notApplied);
+            return ScreenInterpretation.refused(nothingToScreen(text, extractionFailed), readings, notApplied, universe);
         }
         try {
             ScreeningCriteria criteria = preset.isPresent()
                     ? onPreset(preset.get(), rules, groups, readings)
                     : custom(rules, groups, readings);
-            return ScreenInterpretation.run(criteria, readings, notApplied);
+            return ScreenInterpretation.run(criteria, readings, notApplied, universe);
         } catch (IllegalArgumentException ex) {
             return ScreenInterpretation.refused("These criteria cannot be combined into one screen: "
-                    + ex.getMessage() + ".", readings, notApplied);
+                    + ex.getMessage() + ".", readings, notApplied, universe);
         }
+    }
+
+    /**
+     * The index the request names, read from its words and never from the model: the first one named when it
+     * names two, and {@link Universe#DEFAULT} when it names none. Either way the reading says so; an index that
+     * cannot be screened is said too.
+     */
+    private static Universe universe(String text, List<String> readings, List<String> notApplied) {
+        Map<Integer, Universe> named = new java.util.TreeMap<>();
+        Map<Universe, String> words = new EnumMap<>(Universe.class);
+        UNIVERSE_WORDS.forEach((candidate, pattern) -> {
+            Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                named.put(matcher.start(), candidate);
+                words.put(candidate, matcher.group().strip());
+            }
+        });
+        Universe universe = named.isEmpty() ? Universe.DEFAULT : named.values().iterator().next();
+        String others = Arrays.stream(Universe.values()).filter(other -> other != universe)
+                .map(Universe::displayName).collect(Collectors.joining(" or the "));
+        readings.add(named.isEmpty()
+                ? ("Universe: the %s, the default when a request names no index that can be screened (name the %s "
+                        + "to screen it instead).").formatted(universe.displayName(), others)
+                : "Universe: the %s, as your request names it.".formatted(universe.displayName()));
+        named.values().stream().filter(other -> other != universe).forEach(other -> notApplied.add(
+                "“%s”: one screen covers one index, so it covers the %s, the first your request names."
+                        .formatted(words.get(other), universe.displayName())));
+        Matcher otherUniverse = OTHER_UNIVERSE.matcher(text);
+        if (otherUniverse.find()) {
+            notApplied.add("“%s”: only the %s can be screened so far, so the screen covers the %s."
+                    .formatted(otherUniverse.group().strip(), Arrays.stream(Universe.values())
+                            .map(Universe::displayName).collect(Collectors.joining(" and the ")),
+                            universe.displayName()));
+        }
+        return universe;
     }
 
     /** "Nifty 50", "BSE 500": a universe's name, not a criterion. */
     private static final Pattern UNIVERSE_NUMBER = Pattern.compile(
-            "\\b(?:nifty\\s*(?:next\\s*|midcap\\s*|smallcap\\s*)?|next\\s*|bse\\s*|sensex\\s*)\\d+\\b", Pattern.CASE_INSENSITIVE);
+            "\\b(?:nifty[\\s-]*(?:next[\\s-]*|midcap[\\s-]*|smallcap[\\s-]*)?|next[\\s-]*|bse[\\s-]*|sensex[\\s-]*)\\d+\\b", Pattern.CASE_INSENSITIVE);
     /** "top 10": the screen ranks every stock and is never cut to a number. */
     private static final Pattern TOP_N = Pattern.compile("\\btop\\s*(\\d+)\\b", Pattern.CASE_INSENSITIVE);
     /** "5-year", "3 yr", "3y": a span of fiscal years, which selects the metric of a series measured over it. */

@@ -47,8 +47,12 @@ class ScreeningServiceTest {
 
     /** A completed run of the whole Nifty 50: every member stored, as the snapshot job would store it. */
     private SnapshotRun completedRun() {
-        List<Universes.Member> members = universes.members(Universe.NIFTY50);
-        SnapshotRun run = repository.startRun(Universe.NIFTY50, DATE, NOW, members.size());
+        return completedRun(Universe.NIFTY50);
+    }
+
+    private SnapshotRun completedRun(Universe universe) {
+        List<Universes.Member> members = universes.members(universe);
+        SnapshotRun run = repository.startRun(universe, DATE, NOW, members.size());
         for (int i = 0; i < members.size(); i++) {
             String symbol = members.get(i).symbol();
             FundamentalsSnapshot snapshot = switch (symbol) {
@@ -77,6 +81,38 @@ class ScreeningServiceTest {
         assertThat(outcome.result().notScreened()).extracting(ScreeningResult.NotScreened::symbol)
                 .containsExactly("HDFCLIFE");
         assertThat(millis).isLessThan(1000);
+    }
+
+    // S12-4: the whole Nifty 500, read from the in-memory snapshot, screened and rendered well inside a second
+    @Test
+    void screensTheNifty500FromTheSnapshotInUnderASecond() {
+        completedRun(Universe.NIFTY500);
+        service.screen("dividend", "NIFTY500", null); // the first screen loads the classes and the member list
+
+        long started = System.nanoTime();
+        ScreeningOutcome outcome = service.screen("quality-compounder", "NIFTY500", null);
+        String table = renderer.render(outcome);
+        long millis = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(outcome.success()).isTrue();
+        assertThat(outcome.universe()).isEqualTo(Universe.NIFTY500);
+        assertThat(outcome.result().ranked().size() + outcome.result().notScreened().size()).isEqualTo(500);
+        assertThat(outcome.notInSnapshot()).isEmpty();
+        assertThat(table).contains("Universe: Nifty 500 (NIFTY500)").contains(": 500 of 500 stocks captured.");
+        assertThat(millis).isLessThan(1000);
+    }
+
+    // S12-3: a request that names no universe is screened on the Nifty 50, even when a Nifty 500 snapshot exists
+    @Test
+    void screensTheNifty50WhenNoUniverseIsNamed() {
+        completedRun(Universe.NIFTY500);
+        completedRun(Universe.NIFTY50);
+
+        ScreeningOutcome outcome = service.screen("quality-compounder", null, null);
+
+        assertThat(outcome.universe()).isEqualTo(Universe.NIFTY50);
+        assertThat(outcome.result().ranked().size() + outcome.result().notScreened().size()).isEqualTo(50);
+        assertThat(service.screen("quality-compounder", "Nifty 500", null).universe()).isEqualTo(Universe.NIFTY500);
     }
 
     // S3-8

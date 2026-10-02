@@ -8,6 +8,7 @@ import com.ashish.stockresearch.research.model.CompanyProfileResult;
 import com.ashish.stockresearch.research.model.FinancialDataPoint;
 import com.ashish.stockresearch.research.model.FinancialSummary;
 import com.ashish.stockresearch.research.model.FinancialSummaryResult;
+import com.ashish.stockresearch.research.model.SourceType;
 import com.ashish.stockresearch.research.model.ValuationResult;
 import com.ashish.stockresearch.research.model.ValuationSnapshot;
 import com.ashish.stockresearch.research.sector.IndustryGroup;
@@ -56,6 +57,12 @@ public class SnapshotBuilder {
             throw new NothingRetrievedException("profile: %s; financials: %s; valuation: %s".formatted(
                     profile.message(), financials.message(), valuation.message()));
         }
+        ownListing(symbol, "profile", profile.success() ? profile.companyProfile().symbol() : null,
+                profile.success() ? profile.companyProfile().exchange() : null);
+        ownListing(symbol, "financials", financials.success() ? financials.financialSummary().reported().symbol() : null,
+                financials.success() ? financials.financialSummary().reported().exchange() : null);
+        ownListing(symbol, "valuation", valuation.success() ? valuation.valuation().reported().symbol() : null,
+                valuation.success() ? valuation.valuation().reported().exchange() : null);
 
         SectorContext sector = profile.success()
                 ? sectorClassifier.classify(profile.companyProfile().sector(), profile.companyProfile().industry())
@@ -68,7 +75,34 @@ public class SnapshotBuilder {
         String name = profile.success() && profile.companyProfile().companyName() != null
                 ? profile.companyProfile().companyName() : member.companyName();
         return new FundamentalsSnapshot(symbol, name, sector.group(), sector.basis(), snapshotDate,
-                clock.instant(), metrics);
+                clock.instant(), metrics, filedFiscalYears(financials));
+    }
+
+    /** The fiscal years whose figures were read from the NSE filings; 0 when the history is the provider's. */
+    public static Integer filedFiscalYears(FinancialSummaryResult financials) {
+        if (!financials.success()) {
+            return 0;
+        }
+        return (int) financials.financialSummary().reported().annualHistory().stream()
+                .filter(year -> year.points().stream().anyMatch(point -> point != null && point.source() != null
+                        && point.source().sourceType() == SourceType.OFFICIAL_FILING))
+                .count();
+    }
+
+    /**
+     * A member is captured from its own NSE listing only. A symbol the provider does not know falls through to
+     * a search and a guessed ticker, which can land on another company or a BSE listing; those figures are never
+     * stored under the member.
+     */
+    private static void ownListing(String member, String what, String resolved, String exchange) {
+        if (resolved == null) {
+            return;
+        }
+        if (!resolved.strip().equalsIgnoreCase(member) || exchange == null || !"NSE".equalsIgnoreCase(exchange.strip())) {
+            throw new NothingRetrievedException(("the %s resolved to %s (%s), not %s's own NSE listing, so nothing "
+                    + "was stored").formatted(what, resolved, exchange == null ? "exchange not stated" : exchange,
+                    member));
+        }
     }
 
     private static void financialMetrics(FinancialSummaryResult result, Map<ScreeningMetric, SnapshotMetric> metrics) {

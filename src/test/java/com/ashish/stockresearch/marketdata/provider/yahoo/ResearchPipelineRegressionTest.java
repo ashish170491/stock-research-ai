@@ -72,6 +72,11 @@ class ResearchPipelineRegressionTest {
 
     /** The research service for one company, served from its recorded Yahoo responses. */
     static StockResearchService research(String symbol) {
+        return research(symbol, "NSE");
+    }
+
+    /** The recorded data for {@code symbol}, with the resolver answering every symbol with its listing on {@code exchange}. */
+    static StockResearchService research(String symbol, String exchange) {
         String name = symbol.toLowerCase();
         RestClient.Builder builder = RestClient.builder().baseUrl("https://query1.finance.yahoo.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
@@ -84,7 +89,7 @@ class ResearchPipelineRegressionTest {
 
         YahooSymbolResolver resolver = mock(YahooSymbolResolver.class);
         when(resolver.resolve(any())).thenReturn(Optional.of(
-                new YahooSymbolResolver.Resolution(symbol + ".NS", symbol, "NSE", null)));
+                new YahooSymbolResolver.Resolution(symbol + ".NS", symbol, exchange, null)));
         YahooCrumbProvider crumbs = mock(YahooCrumbProvider.class);
         when(crumbs.get()).thenReturn(Optional.of(new YahooCrumbProvider.Credentials("A3=c", "crumb", Instant.MAX)));
 

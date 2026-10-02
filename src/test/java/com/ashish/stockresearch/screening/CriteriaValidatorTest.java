@@ -323,7 +323,8 @@ class CriteriaValidatorTest {
         assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER))
                 .containsExactly("Revenue CAGR 5y > 12.00%");
         assertThat(interpretation.notApplied()).hasSize(2)
-                .anyMatch(n -> n.contains("only the Nifty 50 can be screened"))
+                .anyMatch(n -> n.equals("“Nifty Next 50”: only the Nifty 50 and the Nifty 500 can be screened so far, so "
+                        + "the screen covers the Nifty 50."))
                 .anyMatch(n -> n.contains("“top 10”: the screen ranks every stock"));
     }
 
@@ -373,6 +374,65 @@ class CriteriaValidatorTest {
         assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.OTHER)).containsExactly("ROE > 15.00%");
         assertThat(interpretation.notApplied()).singleElement().asString()
                 .startsWith("“5 years”: no criterion of this screen is measured over 5 fiscal years");
+    }
+
+    // S12-3
+    @Test
+    void screensTheNifty500WhenTheRequestNamesIt() {
+        ScreenInterpretation interpretation = validator.interpret("Which Nifty 500 stocks have ROE above 20%?",
+                read(List.of(), List.of(criterion("ROE above 20%", "ROE_PERCENT", "ABOVE", "20")), List.of()), false);
+
+        assertThat(interpretation.universe()).isEqualTo(Universe.NIFTY500);
+        assertThat(interpretation.criteria()).isPresent();
+        // 500 is the index's name, not a number the screen left unread
+        assertThat(interpretation.notApplied()).isEmpty();
+        assertThat(interpretation.readings()).contains("Universe: the Nifty 500, as your request names it.");
+    }
+
+    // S12-3
+    @Test
+    void screensTheNifty50WhenTheRequestNamesNoIndexAndSaysSo() {
+        ScreenInterpretation unnamed = validator.interpret("Find companies with ROE above 20%",
+                read(List.of(), List.of(criterion("ROE above 20%", "ROE_PERCENT", "ABOVE", "20")), List.of()), false);
+        ScreenInterpretation named = validator.interpret("Which NIFTY50 stocks have ROE above 20%?",
+                read(List.of(), List.of(criterion("ROE above 20%", "ROE_PERCENT", "ABOVE", "20")), List.of()), false);
+
+        assertThat(unnamed.universe()).isEqualTo(Universe.NIFTY50);
+        assertThat(unnamed.readings()).contains("Universe: the Nifty 50, the default when a request names no index that "
+                + "can be screened (name the Nifty 500 to screen it instead).");
+        assertThat(named.universe()).isEqualTo(Universe.NIFTY50);
+        assertThat(named.readings()).contains("Universe: the Nifty 50, as your request names it.");
+        // a refused request still says which index it would have covered
+        assertThat(validator.interpret("Screen the Nifty 500", ExtractedCriteria.none(), true).universe())
+                .isEqualTo(Universe.NIFTY500);
+    }
+
+    // "Nifty-500" is the index's name, hyphen or not, never a number left unread
+    @Test
+    void readsAHyphenatedIndexNameAsTheIndex() {
+        ScreenInterpretation interpretation = validator.interpret("Which Nifty-500 stocks have ROE above 20%?",
+                read(List.of(), List.of(criterion("ROE above 20%", "ROE_PERCENT", "ABOVE", "20")), List.of()), false);
+
+        assertThat(interpretation.universe()).isEqualTo(Universe.NIFTY500);
+        assertThat(interpretation.criteria()).isPresent();
+        assertThat(interpretation.refusal()).isNull();
+
+        // an index that cannot be screened is said, hyphen or not
+        assertThat(validator.interpret("Which Nifty-100 stocks have ROE above 20%?", read(List.of(),
+                List.of(criterion("ROE above 20%", "ROE_PERCENT", "ABOVE", "20")), List.of()), false).notApplied())
+                .containsExactly("“Nifty-100”: only the Nifty 50 and the Nifty 500 can be screened so far, so the "
+                        + "screen covers the Nifty 50.");
+    }
+
+    @Test
+    void screensOneIndexWhenARequestNamesTwo() {
+        ScreenInterpretation interpretation = validator.interpret(
+                "Which Nifty 500 stocks outside the Nifty 50 have ROE above 20%?",
+                read(List.of(), List.of(criterion("ROE above 20%", "ROE_PERCENT", "ABOVE", "20")), List.of()), false);
+
+        assertThat(interpretation.universe()).isEqualTo(Universe.NIFTY500);
+        assertThat(interpretation.notApplied()).containsExactly(
+                "“Nifty 50”: one screen covers one index, so it covers the Nifty 500, the first your request names.");
     }
 
     @Test

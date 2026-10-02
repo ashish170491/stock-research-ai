@@ -54,4 +54,20 @@ class ScreeningToolsTest {
             assertThat(call.evidence()).isEqualTo(text);
         });
     }
+
+    // A Nifty 500 table would fill the model's context: the tool says where that screen is answered instead.
+    @Test
+    void leavesTheNifty500ToAScreenAskedForInWords() {
+        ScreeningService service = mock(ScreeningService.class);
+        ToolUsage usage = new ToolUsage();
+
+        String text = new ScreeningTools(service, new ScreeningRenderer())
+                .screenStocks("dividend", "Nifty 500", null, new ToolContext(usage.asToolContext()));
+
+        assertThat(text).startsWith("TOOL RESULT: screenStocks - status UNKNOWN_UNIVERSE\nNo screen: this tool screens "
+                + "the Nifty 50 only. The Nifty 500 is screened when the user asks for the screen in words");
+        org.mockito.Mockito.verifyNoInteractions(service);
+        assertThat(usage.calls()).singleElement().satisfies(call -> assertThat(call.status()).isEqualTo("UNKNOWN_UNIVERSE"));
+        assertThat(description()).contains("does NOT screen the Nifty 500");
+    }
 }

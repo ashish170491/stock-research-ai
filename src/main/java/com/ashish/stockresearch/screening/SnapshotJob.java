@@ -101,6 +101,14 @@ public class SnapshotJob {
         }
     }
 
+    private String filedYears(SnapshotRun run) {
+        try {
+            return repository.filedYears(run.id()).describe();
+        } catch (RuntimeException ex) {
+            return "filed fiscal years could not be counted: " + ex.getMessage();
+        }
+    }
+
     private SnapshotRun capture(SnapshotRun run, List<Universes.Member> members) {
         int stored = 0;
         int failed = 0;
@@ -136,8 +144,8 @@ public class SnapshotJob {
                 running.set(false);
             }
         }
-        log.info("Snapshot run {} of {} {}: {} stored, {} failed, in {}s", run.id(), run.universe(), status, stored,
-                failed, (System.nanoTime() - started) / 1_000_000_000);
+        log.info("Snapshot run {} of {} {}: {} stored, {} failed, in {}s; {}", run.id(), run.universe(), status, stored,
+                failed, (System.nanoTime() - started) / 1_000_000_000, filedYears(run));
         return new SnapshotRun(run.id(), run.universe(), run.snapshotDate(), run.startedAt(), clock.instant(), status,
                 run.requested(), stored, failed);
     }

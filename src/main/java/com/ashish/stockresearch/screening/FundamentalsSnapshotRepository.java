@@ -60,11 +60,12 @@ public class FundamentalsSnapshotRepository {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.sql("""
                         INSERT INTO fundamentals_snapshot (run_id, symbol, company_name, industry_group,
-                               classification_basis, snapshot_date, captured_at)
-                        VALUES (:run, :symbol, :name, :group, :basis, :date, :captured)""")
+                               classification_basis, snapshot_date, captured_at, filed_fiscal_years)
+                        VALUES (:run, :symbol, :name, :group, :basis, :date, :captured, :filed)""")
                 .param("run", runId).param("symbol", snapshot.symbol()).param("name", snapshot.companyName())
                 .param("group", snapshot.industryGroup().name()).param("basis", snapshot.classificationBasis())
                 .param("date", snapshot.snapshotDate()).param("captured", timestamp(snapshot.capturedAt()))
+                .param("filed", snapshot.filedFiscalYears())
                 .update(key, "id");
         long snapshotId = key.getKey().longValue();
         for (SnapshotMetric metric : snapshot.metrics().values()) {
@@ -117,7 +118,8 @@ public class FundamentalsSnapshotRepository {
                     metricsById.put(id, new EnumMap<>(ScreeningMetric.class));
                     byId.put(id, new FundamentalsSnapshot(rs.getString("symbol"), rs.getString("company_name"),
                             IndustryGroup.valueOf(rs.getString("industry_group")), rs.getString("classification_basis"),
-                            rs.getObject("snapshot_date", LocalDate.class), instant(rs, "captured_at"), Map.of()));
+                            rs.getObject("snapshot_date", LocalDate.class), instant(rs, "captured_at"), Map.of(),
+                            rs.getObject("filed_fiscal_years", Integer.class)));
                 });
         jdbc.sql("""
                         SELECT m.* FROM snapshot_metric m JOIN fundamentals_snapshot s ON s.id = m.snapshot_id
@@ -132,8 +134,21 @@ public class FundamentalsSnapshotRepository {
                 });
         List<FundamentalsSnapshot> snapshots = new ArrayList<>();
         byId.forEach((id, s) -> snapshots.add(new FundamentalsSnapshot(s.symbol(), s.companyName(), s.industryGroup(),
-                s.classificationBasis(), s.snapshotDate(), s.capturedAt(), metricsById.get(id))));
+                s.classificationBasis(), s.snapshotDate(), s.capturedAt(), metricsById.get(id), s.filedFiscalYears())));
         return List.copyOf(snapshots);
+    }
+
+    /** How many of a run's stored companies have six fiscal years read from their NSE filings. */
+    public SnapshotRun.FiledYears filedYears(long runId) {
+        return jdbc.sql("""
+                        SELECT COUNT(*) AS stored,
+                               COUNT(filed_fiscal_years) AS recorded,
+                               COALESCE(SUM(CASE WHEN filed_fiscal_years >= 6 THEN 1 ELSE 0 END), 0) AS six
+                        FROM fundamentals_snapshot WHERE run_id = :run""")
+                .param("run", runId)
+                .query((rs, row) -> new SnapshotRun.FiledYears(rs.getInt("stored"), rs.getInt("recorded"),
+                        rs.getInt("six")))
+                .single();
     }
 
     public List<SnapshotRun.Failure> failures(long runId) {
