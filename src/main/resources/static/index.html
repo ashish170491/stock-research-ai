@@ -245,10 +245,15 @@
     <div class="scroll"><div class="column wide">
       <div class="intro">
         <h2>Stock screener</h2>
-        <p>See which Nifty 50 companies meet a set of financial criteria. The application checks every criterion itself and
+        <p>See which Nifty 50 or Nifty 500 companies meet a set of financial criteria. The application checks every criterion itself and
           shows the figure each result was decided on. Results come from the latest data snapshot, not live prices.</p>
       </div>
       <div class="freshness" id="snap-bar"><span class="dot busy"></span><span class="grow">Checking the data snapshot…</span></div>
+
+      <div class="controls">
+        <label for="universe">Index</label>
+        <select id="universe" aria-label="Index to screen"></select>
+      </div>
 
       <h3 class="step"><span>1</span>Choose a screen</h3>
       <div class="presets" id="presets"></div>
@@ -547,6 +552,8 @@
       $('screen-out').replaceChildren(el('div', 'notice', 'Could not load the screener: ' + err.message));
       return;
     }
+    const universeSelect = $('universe');
+    universeSelect.replaceChildren(...options.universes.map(u => { const o = el('option', null, u.label); o.value = u.value; return o; }));
     const groupSelect = $('group');
     groupSelect.replaceChildren(el('option', null, 'All types of company'));
     groupSelect.firstChild.value = '';
@@ -606,11 +613,26 @@
       hour: '2-digit', minute: '2-digit' }) + ' IST';
   }
 
+  function universeLabel() {
+    const u = options && options.universes.find(x => x.value === $('universe').value);
+    return u ? u.label : 'Nifty 50';
+  }
+
+  function universeSize() {
+    const u = options && options.universes.find(x => x.value === $('universe').value);
+    return u ? u.members : 50;
+  }
+
+  /** A rough wait: a few seconds a company, through the Yahoo and NSE throttles. */
+  function minutes(companies) {
+    return Math.max(1, Math.round(companies * 4 / 60));
+  }
+
   async function refreshSnapshot() {
     const bar = $('snap-bar');
     let body = null;
     try {
-      const res = await fetch('/api/admin/snapshot');
+      const res = await fetch('/api/admin/snapshot?' + new URLSearchParams({ universe: $('universe').value }));
       if (res.ok) body = await res.json();
     } catch { /* shown below */ }
     bar.replaceChildren();
@@ -622,12 +644,15 @@
     if (!body) {
       dot.classList.add('none');
       text.append(el('strong', null, 'No data snapshot yet.'),
-        el('small', null, 'Take one to start screening. It collects data for all 50 companies and takes about 3 minutes.'));
+        el('small', null, 'Take one to start screening. It collects data for every company in the ' + universeLabel()
+          + ' and takes roughly ' + minutes(universeSize()) + ' minutes, longer the first time.'));
       button.textContent = 'Take the first snapshot';
     } else if (body.running) {
       dot.classList.add('busy');
       text.append(el('strong', null, 'Refreshing data…'),
-        el('small', null, 'Collecting figures for ' + body.run.requested + ' companies. This takes about 3 minutes; results update when it finishes.'));
+        el('small', null, 'Collecting figures for ' + body.run.requested + ' companies'
+          + (body.filedYears ? ' (' + body.filedYears.stored + ' stored so far)' : '') + '. This takes roughly '
+          + minutes(body.run.requested) + ' minutes, longer the first time; results update when it finishes.'));
       button.disabled = true;
       button.textContent = 'Refreshing…';
       clearTimeout(snapshotTimer);
@@ -646,8 +671,9 @@
 
   async function startSnapshot() {
     try {
-      const res = await fetch('/api/admin/snapshot', { method: 'POST' });
-      if (!res.ok && res.status !== 409) throw new Error('HTTP ' + res.status);
+      const res = await fetch('/api/admin/snapshot?' + new URLSearchParams({ universe: $('universe').value }), { method: 'POST' });
+      if (res.status === 409) alert('Another snapshot is being taken. Try again when it has finished.');
+      else if (!res.ok) throw new Error('HTTP ' + res.status);
     } catch (err) {
       alert('Could not start the refresh: ' + err.message);
     }
@@ -658,7 +684,7 @@
     if (!preset) return;
     const out = $('screen-out');
     out.replaceChildren(el('p', 'pending', 'Screening…'));
-    const params = new URLSearchParams({ preset: preset.name });
+    const params = new URLSearchParams({ preset: preset.name, universe: $('universe').value });
     if ($('group').value) params.set('industryGroup', $('group').value);
     let view;
     try {
@@ -835,10 +861,11 @@
 
   $('run-screen').addEventListener('click', runScreen);
   $('group').addEventListener('change', runScreen);
+  $('universe').addEventListener('change', () => { $('snap-bar').dataset.running = ''; refreshSnapshot(); runScreen(); });
   $('ask-chat').addEventListener('click', () => {
     if (!preset) return;
     const group = $('group').value;
-    const question = 'Which Nifty 50 ' + (group ? groupLabel(group).toLowerCase() + ' ' : 'stocks ') + 'meet the '
+    const question = 'Which ' + universeLabel() + ' ' + (group ? groupLabel(group).toLowerCase() + ' ' : 'stocks ') + 'meet the '
       + preset.name + ' criteria?';
     document.querySelector('.tabs button[data-view="chat"]').click();
     input.value = question;

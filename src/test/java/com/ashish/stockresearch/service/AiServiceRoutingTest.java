@@ -479,4 +479,12 @@ class AiServiceRoutingTest {
                         "Understood: what a term means",
                         "Looking the term up in the application's glossary");
     }
+
+    // A screen's first step names no index: the screen itself says which one the request's words chose.
+    @Test
+    void theUnderstoodStepOfAScreenNamesNoIndex() {
+        assertThat(AiService.understood(new com.ashish.stockresearch.agent.RoutedRequest(
+                com.ashish.stockresearch.agent.Intent.SCREEN, List.of())))
+                .isEqualTo("a screen of stocks against criteria");
+    }
 }

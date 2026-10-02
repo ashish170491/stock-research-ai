@@ -1,5 +1,7 @@
 package com.ashish.stockresearch.marketdata.provider.nse;
 
+import com.ashish.stockresearch.research.model.FinancialSummaryResult;
+import com.ashish.stockresearch.screening.SnapshotBuilder;
 import com.ashish.stockresearch.research.FinancialMetricsService;
 import com.ashish.stockresearch.research.FiledStatementChecks;
 import com.ashish.stockresearch.research.ResearchDataUnavailableException;
@@ -144,6 +146,20 @@ class FiledFiguresAsSourceTest {
         // no filings source at all (the mock profile): nothing changes
         ReportedFinancials provider = yahoo("NSE");
         assertThat(TestFilings.none().withFiledAnnualHistory(provider)).isSameAs(provider);
+    }
+
+    // S12-L1: a snapshot counts the fiscal years read from the filings, never the provider's
+    @Test
+    void aSnapshotCountsOnlyTheFiscalYearsReadFromTheFilings() {
+        FinancialSummary filed = metrics.summarize(TestFilings.of((symbol, years) -> RELIANCE)
+                .withFiledAnnualHistory(yahoo("NSE")));
+        FinancialSummary providers = metrics.summarize(TestFilings.of((symbol, years) -> RELIANCE)
+                .withFiledAnnualHistory(yahoo("BSE")));
+
+        assertThat(SnapshotBuilder.filedFiscalYears(FinancialSummaryResult.success(filed))).isEqualTo(2);
+        assertThat(SnapshotBuilder.filedFiscalYears(FinancialSummaryResult.success(providers))).isZero();
+        assertThat(SnapshotBuilder.filedFiscalYears(FinancialSummaryResult.failure(ResearchStatus.PROVIDER_UNAVAILABLE,
+                "down"))).isZero();
     }
 
     @Test

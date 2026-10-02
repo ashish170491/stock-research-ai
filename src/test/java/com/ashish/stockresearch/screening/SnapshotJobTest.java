@@ -63,6 +63,34 @@ class SnapshotJobTest {
         assertThat(scheduled.cron()).isEqualTo("${app.screening.snapshot.cron:0 30 18 * * MON-FRI}");
     }
 
+    // S12-2: the whole Nifty 500 through the same job, one failure recorded and the run carried on
+    @Test
+    void capturesTheNifty500ThroughTheSameJob() {
+        Universes real = new Universes();
+        when(builder.build(any(), any())).thenAnswer(call -> {
+            Universes.Member member = call.getArgument(0);
+            if (member.symbol().equals("EMBASSY")) {
+                throw new SnapshotBuilder.NothingRetrievedException("the profile resolved to EMBASSY (BSE), not "
+                        + "EMBASSY's own NSE listing, so nothing was stored");
+            }
+            return ScreeningFixtures.stock(member.symbol(), IndustryGroup.OTHER).filedFiscalYears(6).build();
+        });
+
+        SnapshotRun run = new SnapshotJob(real, builder, repository, EVENING, Duration.ofSeconds(1), pauses::add)
+                .runNow(Universe.NIFTY500).orElseThrow();
+
+        assertThat(run.universe()).isEqualTo(Universe.NIFTY500);
+        assertThat(run.requested()).isEqualTo(500);
+        assertThat(run.stored()).isEqualTo(499);
+        assertThat(run.failed()).isEqualTo(1);
+        assertThat(repository.failures(run.id())).extracting(SnapshotRun.Failure::symbol).containsExactly("EMBASSY");
+        assertThat(repository.filedYears(run.id())).isEqualTo(new SnapshotRun.FiledYears(499, 499, 499));
+        // the pause between companies applies to every company after the first
+        assertThat(pauses).hasSize(499);
+        assertThat(repository.latestCompletedRun(Universe.NIFTY500)).contains(run);
+        assertThat(repository.latestCompletedRun(Universe.NIFTY50)).isEmpty();
+    }
+
     @Test
     void recordsACompanyThatFailsAndCarriesOnWithTheRest() {
         when(builder.build(argThat(m -> m != null && m.symbol().equals("TCS")), any())).thenReturn(snapshot("TCS"));

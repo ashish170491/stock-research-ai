@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS fundamentals_snapshot (
     captured_at          TIMESTAMP WITH TIME ZONE NOT NULL,
     UNIQUE (run_id, symbol)
 );
+-- How many fiscal years were read from the NSE filings; null in runs made before it was recorded.
+ALTER TABLE fundamentals_snapshot ADD COLUMN IF NOT EXISTS filed_fiscal_years INT;
 
 -- One row per metric, with its DataStatus as the research layer produced it.
 CREATE TABLE IF NOT EXISTS snapshot_metric (

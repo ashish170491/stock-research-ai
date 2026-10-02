@@ -13,6 +13,8 @@ import java.util.Map;
  *
  * @param classificationBasis how the industry group was decided (the provider's sector and industry)
  * @param snapshotDate        the date of the run, in India
+ * @param filedFiscalYears    how many of the company's fiscal years were read from its NSE filings (the
+ *                            snapshot asks for six, so a five-year span has both ends); null when not recorded
  */
 public record FundamentalsSnapshot(
         String symbol,
@@ -21,7 +23,8 @@ public record FundamentalsSnapshot(
         String classificationBasis,
         LocalDate snapshotDate,
         Instant capturedAt,
-        Map<ScreeningMetric, SnapshotMetric> metrics
+        Map<ScreeningMetric, SnapshotMetric> metrics,
+        Integer filedFiscalYears
 ) {
 
     public FundamentalsSnapshot {
@@ -33,6 +36,12 @@ public record FundamentalsSnapshot(
             copy.putAll(metrics);
         }
         metrics = java.util.Collections.unmodifiableMap(copy);
+    }
+
+    public FundamentalsSnapshot(String symbol, String companyName, IndustryGroup industryGroup,
+                                String classificationBasis, LocalDate snapshotDate, Instant capturedAt,
+                                Map<ScreeningMetric, SnapshotMetric> metrics) {
+        this(symbol, companyName, industryGroup, classificationBasis, snapshotDate, capturedAt, metrics, null);
     }
 
     /** The stored metric, or UNAVAILABLE if this snapshot did not record it. */

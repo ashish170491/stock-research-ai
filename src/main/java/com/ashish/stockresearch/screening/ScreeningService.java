@@ -36,7 +36,7 @@ public class ScreeningService {
     }
 
     /**
-     * @param universeName  null or blank for NIFTY50
+     * @param universeName  null or blank for the default, NIFTY50
      * @param industryGroup null or blank for every group
      */
     public ScreeningOutcome screen(String presetName, String universeName, String industryGroup) {
@@ -65,11 +65,11 @@ public class ScreeningService {
      * Screens with criteria built elsewhere - a preset, or criteria read from a request in words and
      * validated ({@code CriteriaValidator}). The industry-group filter is the criteria's own.
      *
-     * @param universeName null or blank for NIFTY50
+     * @param universeName null or blank for the default, NIFTY50
      */
     public ScreeningOutcome screen(ScreeningCriteria criteria, String universeName) {
         long started = System.nanoTime();
-        Optional<Universe> universe = universeName == null || universeName.isBlank() ? Optional.of(Universe.NIFTY50)
+        Optional<Universe> universe = universeName == null || universeName.isBlank() ? Optional.of(Universe.DEFAULT)
                 : Universe.parse(universeName);
         if (universe.isEmpty()) {
             return ScreeningOutcome.failure(ScreeningOutcome.Status.UNKNOWN_UNIVERSE,

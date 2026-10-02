@@ -249,7 +249,7 @@ public class AiService {
 			case FULL_RESEARCH -> "a research report on " + named;
 			case QUOTE -> "the latest price of " + named;
 			case COMPARE -> "a comparison of " + named;
-			case SCREEN -> "a screen of the Nifty 50";
+			case SCREEN -> "a screen of stocks against criteria";
 			case SPECIFIC_QUESTION -> companies.isEmpty() ? "a question for the research tools" : "a question about " + named;
 			case EXPLAIN_TERM -> "what a term means";
 			case NOT_STOCK_RELATED -> "a general question, not about stocks";
