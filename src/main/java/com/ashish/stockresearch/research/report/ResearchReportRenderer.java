@@ -107,6 +107,21 @@ public class ResearchReportRenderer {
      * of the FACTS they are taken from.
      */
     public String render(StockResearchReport report, String interpretation, MetricGlossary glossary) {
+        return render(report, interpretation, glossary, null);
+    }
+
+    /**
+     * Values that depend on a value in a DATA_CONFLICT, as this renderer tags them: a VALID status alone does not
+     * show that a value was calculated from a disputed field.
+     */
+    public static java.util.function.Predicate<FinancialDataPoint> disputed(StockResearchReport report) {
+        return new Mask(report.dataQualityIssues(), false)::covers;
+    }
+
+    /**
+     * @param context the context beside each ratio, rendered by Java, placed after the latest figures; null for none
+     */
+    public String render(StockResearchReport report, String interpretation, MetricGlossary glossary, String context) {
         Mask conflicted = new Mask(report.dataQualityIssues(), false);
         StringBuilder md = new StringBuilder();
         md.append("# Research report: ").append(report.companyName())
@@ -120,6 +135,9 @@ public class ResearchReportRenderer {
         renderConflicts(md, report.dataQualityIssues());
         if (glossary != null) {
             renderAtAGlance(md, report, glossary, conflicted);
+        }
+        if (context != null && !context.isBlank()) {
+            md.append(context.strip()).append("\n\n");
         }
 
         md.append("## 1. FACTS\n\n_Values supplied by the stated source (REPORTED) or computed by the application "

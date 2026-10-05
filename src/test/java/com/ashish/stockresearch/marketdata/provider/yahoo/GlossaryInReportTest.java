@@ -81,6 +81,11 @@ class GlossaryInReportTest {
     }
 
     private final MetricGlossary glossary = TestGlossary.glossary();
+    /** No snapshot stored: the context gives each ratio its own years only. */
+    private static final com.ashish.stockresearch.context.RatioContextService NO_SNAPSHOT =
+            new com.ashish.stockresearch.context.RatioContextService(
+                    new com.ashish.stockresearch.screening.FundamentalsSnapshotRepository(
+                            com.ashish.stockresearch.screening.SnapshotDatabase.create()), 5);
     private final FixedModel model = new FixedModel();
 
     private String report(String symbol) {
@@ -88,7 +93,7 @@ class GlossaryInReportTest {
                 new FinancialDataValidator(ResearchPipelineRegressionTest.SEPT_2026), new SectorClassifier());
         return new ResearchReportWriter(ChatClient.builder(model), new PassThrough(), service,
                 new ResearchReportRenderer(), new UnsupportedClaimFilter(), new NumericClaimVerifier(),
-                new OllamaCalls("qwen3:8b", "http://localhost:11434"), glossary, false).write(symbol);
+                new OllamaCalls("qwen3:8b", "http://localhost:11434"), glossary, NO_SNAPSHOT, false).write(symbol);
     }
 
     // S11-1: every metric the report shows is explained, apart from plain amounts and prices.

@@ -92,6 +92,10 @@ app:
       # verifiers removed about as many unsupported sentences either way
       # (18 vs 13), and both modes let some through. Off unless that changes.
       thinking: false
+    context:
+      # A peer median and range need at least this many companies of the same industry group with a usable
+      # value in the snapshot (besides the company itself); with fewer, none is given.
+      minimum-peers: 5
 
   screening:
     snapshot:

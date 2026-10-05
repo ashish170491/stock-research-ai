@@ -8,4 +8,4 @@
 | S13-4 | CODE | Own history gives the company's value for each filed fiscal year, their range and the latest year's place in it. A year that is not VALID is shown with its status and left out of the range. |
 | S13-5 | CODE | Context is rendered in neutral words only. Test: rendered context is free of "good", "bad", "strong", "weak", "cheap", "expensive", "attractive", "healthy", "better", "worse". |
 | S13-6 | CODE | Every peer or history figure in a model's answer passes `NumericClaimVerifier` against the context, and the snapshot date and peer count are stated beside every peer figure. |
-| S13-L1 | LIVE | The HDFC Bank research report shows its ROE with its own filed years' range and its bank peers' median and range, with the snapshot date and the peer count. |
+| S13-L1 | LIVE | The HDFC Bank research report shows its ROE beside each of its filed fiscal years, each with its status, and its bank peers' median and range, with the snapshot date and the peer count. A report for a bank with at least two VALID filed years (for example ICICI Bank) also shows the range and the latest year's place in it. |

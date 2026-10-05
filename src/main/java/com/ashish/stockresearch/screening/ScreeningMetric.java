@@ -124,6 +124,19 @@ public enum ScreeningMetric {
         return years;
     }
 
+    /**
+     * The snapshot metric holding the same figure as a report metric ("returnOnEquityPercent" is ROE_PERCENT, the
+     * latest fiscal year's): the one metric with that key, or the one of them that spans no fiscal years. Empty
+     * when the report's figure has no single counterpart - a growth rate whose span may differ from the snapshot's.
+     */
+    public static Optional<ScreeningMetric> forReportMetric(String metricKey) {
+        List<ScreeningMetric> same = Arrays.stream(values()).filter(metric -> metric.sectorKey.equals(metricKey)).toList();
+        if (same.size() == 1) {
+            return Optional.of(same.get(0));
+        }
+        return same.stream().filter(metric -> metric.series == null).findFirst();
+    }
+
     /** The metric of {@code series} measured over {@code years} fiscal years, if the application offers that span. */
     public static Optional<ScreeningMetric> of(Series series, int years) {
         return Arrays.stream(values()).filter(metric -> metric.series == series && metric.years == years).findFirst();
