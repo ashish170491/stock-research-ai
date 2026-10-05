@@ -85,7 +85,11 @@ public class ResearchReportWriter {
 	}
 
 	public String write(String symbol) {
-		StockResearchReport report = researchReportService.build(symbol);
+		return write(researchReportService.build(symbol));
+	}
+
+	/** The same report, for a caller that already built it (e.g. a comparison fetching several at once). */
+	public String write(StockResearchReport report) {
 		ReportContext context = Progress.step("Placing each ratio beside the company's own years and its peers "
 				+ "(stored snapshot)", () -> contextService.build(report, ResearchReportRenderer.disputed(report)));
 		// The reader's context carries every peer figure, verified, with its snapshot date and peer count. The

@@ -10,6 +10,7 @@ import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
+import com.ashish.stockresearch.research.comparison.ComparisonService;
 import com.ashish.stockresearch.research.report.AnswerChecks;
 import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
@@ -85,6 +86,7 @@ public class AiService {
 	private final ChatClient toolClient;
 	private final ChatClient generalClient;
 	private final ResearchReportWriter researchReportWriter;
+	private final ComparisonService comparisonService;
 	private final StockMarketDataService stockMarketDataService;
 	private final ScreenerAgent screenerAgent;
 	private final AnswerChecks checks;
@@ -109,6 +111,7 @@ public class AiService {
 			ScreeningTools screeningTools,
 			Advisor conversationTraceAdvisor,
 			ResearchReportWriter researchReportWriter,
+			ComparisonService comparisonService,
 			StockMarketDataService stockMarketDataService,
 			ScreenerAgent screenerAgent,
 			AnswerChecks checks,
@@ -129,6 +132,7 @@ public class AiService {
 				.build();
 		this.router = router;
 		this.researchReportWriter = researchReportWriter;
+		this.comparisonService = comparisonService;
 		this.stockMarketDataService = stockMarketDataService;
 		this.screenerAgent = screenerAgent;
 		this.checks = checks;
@@ -143,8 +147,8 @@ public class AiService {
 	 * <ul>
 	 *   <li>FULL_RESEARCH - the verified report, built and rendered in Java;</li>
 	 *   <li>QUOTE - the quote service's answer, rendered as text with no model involved;</li>
-	 *   <li>COMPARE - one verified report per company, one after another (no side-by-side
-	 *       analysis yet);</li>
+	 *   <li>COMPARE - {@link ComparisonService}'s aligned table of all the companies at once, with one
+	 *       verified narrative over that table, not a separate report per company;</li>
 	 *   <li>SCREEN - {@link ScreenerAgent}'s chain: criteria read from the request and validated in
 	 *       Java, the screen, and a checked summary;</li>
 	 *   <li>SPECIFIC_QUESTION - the model with the research tools, its answer screened against
@@ -184,13 +188,9 @@ public class AiService {
 				remember(conversationId, message, answer);
 			}
 			case COMPARE -> {
-				List<String> compared = companies;
-				answer = java.util.stream.IntStream.range(0, compared.size()).mapToObj(i -> Progress.step(
-								"Building the report on %s (%d of %d)".formatted(compared.get(i), i + 1, compared.size()),
-								() -> researchReportWriter.write(compared.get(i))))
-						.collect(Collectors.joining("\n\n---\n\n"));
-				remember(conversationId, message, "[Full research reports on " + String.join(" and ", companies)
-						+ " were shown to the user.]");
+				answer = comparisonService.compare(companies);
+				remember(conversationId, message, "[A comparison of " + String.join(" and ", companies)
+						+ " was shown to the user.]");
 			}
 			case SCREEN -> {
 				ScreenerAgent.ScreenAnswer screen = screenerAgent.answer(message);
