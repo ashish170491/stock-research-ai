@@ -124,6 +124,8 @@ class AiServiceRoutingTest {
     private final ResearchReportWriter reportWriter = mock(ResearchReportWriter.class);
     private final StockMarketDataService quotes = mock(StockMarketDataService.class);
     private final ScreenerAgent screenerAgent = mock(ScreenerAgent.class);
+    private final com.ashish.stockresearch.research.comparison.ComparisonService comparisonService =
+            mock(com.ashish.stockresearch.research.comparison.ComparisonService.class);
     private final StockResearchService research = new StockResearchService(
             new MockStockResearchProvider(), new MockStockResearchProvider(), new UnsupportedShareholdingProvider(),
             new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService(),
@@ -139,7 +141,7 @@ class AiServiceRoutingTest {
         StockResearchTools tools = new StockResearchTools(research, new ResearchReportRenderer(), new SectorClassifier());
         return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools,
                 new ScreeningTools(mock(ScreeningService.class), new ScreeningRenderer()), new PassThrough(),
-                reportWriter, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
+                reportWriter, comparisonService, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
                         new ScreeningCountVerifier(), new UnsupportedClaimFilter()),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions,
                 com.ashish.stockresearch.glossary.TestGlossary.glossary());
@@ -182,13 +184,13 @@ class AiServiceRoutingTest {
     }
 
     @Test
-    void compareReturnsOneReportPerCompany() {
+    void compareUsesTheComparisonServiceForAnAlignedTableNotSeparateReports() {
         routes("Compare HDFC Bank and ICICI Bank", Intent.COMPARE, "HDFCBANK", "ICICIBANK");
-        when(reportWriter.write("HDFCBANK")).thenReturn("# HDFC report");
-        when(reportWriter.write("ICICIBANK")).thenReturn("# ICICI report");
+        when(comparisonService.compare(List.of("HDFCBANK", "ICICIBANK"))).thenReturn("## Comparison\n...");
 
         assertThat(service(UNUSED).chat(CONVERSATION, "Compare HDFC Bank and ICICI Bank").text())
-                .isEqualTo("# HDFC report\n\n---\n\n# ICICI report");
+                .isEqualTo("## Comparison\n...");
+        verify(reportWriter, never()).write(anyString());
     }
 
     @Test

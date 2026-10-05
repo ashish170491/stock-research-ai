@@ -26,6 +26,11 @@
   minimum peers, or a metric not primary for the group, gives no peer statistic. The model is never given a
   peer figure to restate (ContextRenderer.renderForModel omits it); PositionClaimFilter removes any sentence
   that still compares with peers or other companies, or places a value among years or companies, in words.
+- Comparing companies (ComparisonService) aligns them on the same metric, fiscal period and currency in
+  Java (ComparisonBuilder); a cell whose period or currency differs is NOT_COMPARABLE, never silently shown
+  beside a figure it cannot be read against. Each company's figure sits beside its own industry group's
+  median from Step 13. The model writes one narrative over that aligned table only - never a separate
+  report per company - and that narrative is verified the same way a report's interpretation is.
 - Long work reports its steps with trace.Progress (streamed by /api/ai/chat/stream). A step names
   what is being done, for which company and from which source - never a figure, and never the
   model's draft text.
