@@ -43,5 +43,8 @@ public enum Unit {
     INR_PER_SHARE,
 
     /** A span of time in years. */
-    YEARS
+    YEARS,
+
+    /** A place counted from the highest: 1 is the highest of the values it is ranked among. */
+    POSITION
 }

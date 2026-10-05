@@ -141,6 +141,22 @@ public final class CalculationVerifier {
             case SUM -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).sum();
             case OPERATING_PROFIT -> in.size() == 3 ? in.get(0) - in.get(1) + in.get(2) : null;
             case SHARE_COUNT -> in.size() == 2 && in.get(1) > 0 ? in.get(0) * 1e7 / in.get(1) : null;
+            case MEDIAN -> {
+                if (in.isEmpty()) {
+                    yield null;
+                }
+                double[] sorted = in.stream().mapToDouble(Double::doubleValue).sorted().toArray();
+                int middle = sorted.length / 2;
+                yield sorted.length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+            }
+            case MINIMUM -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).min().getAsDouble();
+            case MAXIMUM -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).max().getAsDouble();
+            case RANK_FROM_HIGHEST -> {
+                if (in.size() < 2 || in.subList(1, in.size()).stream().noneMatch(v -> v.doubleValue() == in.get(0))) {
+                    yield null;
+                }
+                yield 1.0 + in.subList(1, in.size()).stream().filter(v -> v > in.get(0)).count();
+            }
         };
         return result == null || !Double.isFinite(result) ? Optional.empty() : Optional.of(result);
     }

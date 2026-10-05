@@ -121,6 +121,7 @@ public final class FinancialUnits {
             case MULTIPLE -> "%s%sx".formatted(sign, abs.setScale(2, RoundingMode.HALF_UP).toPlainString());
             case SHARES -> "%s%s shares".formatted(sign, indianGrouping(abs, 0));
             case YEARS -> "%s%s years".formatted(sign, abs.setScale(2, RoundingMode.HALF_UP).toPlainString());
+            case POSITION -> "%s%s".formatted(sign, abs.setScale(0, RoundingMode.HALF_UP).toPlainString());
         };
     }
 

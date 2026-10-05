@@ -177,6 +177,46 @@ public final class FinancialCalculator {
                 .divide(BigDecimal.valueOf(values.size()), 2, RoundingMode.HALF_UP));
     }
 
+    /** The median, to 2 decimal places: the mean of the two middle values for an even count; empty for none. */
+    public static Optional<BigDecimal> median(List<BigDecimal> values) {
+        if (values == null || values.isEmpty() || values.stream().anyMatch(java.util.Objects::isNull)) {
+            return Optional.empty();
+        }
+        List<BigDecimal> sorted = values.stream().sorted().toList();
+        int middle = sorted.size() / 2;
+        BigDecimal median = sorted.size() % 2 == 1 ? sorted.get(middle)
+                : sorted.get(middle - 1).add(sorted.get(middle)).divide(TWO, 2, RoundingMode.HALF_UP);
+        return Optional.of(median.setScale(2, RoundingMode.HALF_UP));
+    }
+
+    /** The lowest value; empty for none or a missing one. */
+    public static Optional<BigDecimal> minimum(List<BigDecimal> values) {
+        if (values == null || values.isEmpty() || values.stream().anyMatch(java.util.Objects::isNull)) {
+            return Optional.empty();
+        }
+        return values.stream().min(BigDecimal::compareTo);
+    }
+
+    /** The highest value; empty for none or a missing one. */
+    public static Optional<BigDecimal> maximum(List<BigDecimal> values) {
+        if (values == null || values.isEmpty() || values.stream().anyMatch(java.util.Objects::isNull)) {
+            return Optional.empty();
+        }
+        return values.stream().max(BigDecimal::compareTo);
+    }
+
+    /**
+     * Where {@code value} sits among {@code values} counted from the highest: 1 for the highest, and one more than
+     * the number of values strictly above it, so equal values share a rank. Empty when {@code value} is not one of
+     * them.
+     */
+    public static Optional<Integer> rankFromHighest(List<BigDecimal> values, BigDecimal value) {
+        if (values == null || value == null || values.stream().noneMatch(v -> v != null && v.compareTo(value) == 0)) {
+            return Optional.empty();
+        }
+        return Optional.of(1 + (int) values.stream().filter(v -> v != null && v.compareTo(value) > 0).count());
+    }
+
     /**
      * Dividends paid as a percentage of the same year's operating cash flow. The cash-flow statement
      * reports dividends as an outflow, so {@code dividendsPaid} must be zero or negative; a positive figure

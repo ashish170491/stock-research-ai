@@ -66,5 +66,19 @@ public enum Formula {
      * The number of equity shares: paid-up equity capital (crore) x 10,000,000 / face value per share.
      * Inputs: paid-up equity capital in crore, face value per share.
      */
-    SHARE_COUNT
+    SHARE_COUNT,
+    /**
+     * The median of the inputs: the middle value once sorted, or the mean of the two middle values for an even
+     * count - e.g. the return on equity of a company's industry peers. Inputs: the values, in any order.
+     */
+    MEDIAN,
+    /** The lowest of the inputs, e.g. the low end of a range. Inputs: the values. */
+    MINIMUM,
+    /** The highest of the inputs, e.g. the high end of a range. Inputs: the values. */
+    MAXIMUM,
+    /**
+     * A value's place counted from the highest: 1 + the number of values strictly above it, so equal values share
+     * a place. Inputs: the ranked value, then every value it is ranked among, itself included.
+     */
+    RANK_FROM_HIGHEST
 }

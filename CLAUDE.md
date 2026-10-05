@@ -20,6 +20,12 @@
 - What a term means comes only from MetricGlossary (fixed, reviewed text): never a model-written
   definition, and never an ideal value or a good/bad judgement. Industry notes come from
   IndustryGroup and screen thresholds from ScreeningPresets, not written a second time.
+- Context beside a ratio (own fiscal years, industry peers in the stored snapshot) is calculated in
+  FinancialCalculator, verified, and rendered by Java in neutral words only (median, range, rank, highest or
+  lowest of the years shown). A peer figure always carries the snapshot date and peer count; fewer than the
+  minimum peers, or a metric not primary for the group, gives no peer statistic. The model is never given a
+  peer figure to restate (ContextRenderer.renderForModel omits it); PositionClaimFilter removes any sentence
+  that still compares with peers or other companies, or places a value among years or companies, in words.
 - Long work reports its steps with trace.Progress (streamed by /api/ai/chat/stream). A step names
   what is being done, for which company and from which source - never a figure, and never the
   model's draft text.
