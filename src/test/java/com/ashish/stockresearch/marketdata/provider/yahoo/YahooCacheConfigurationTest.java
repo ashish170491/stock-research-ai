@@ -20,10 +20,18 @@ import static org.mockito.Mockito.when;
 /** The caches run for real: each test proxies its bean through {@link YahooCacheConfiguration}. */
 class YahooCacheConfigurationTest {
 
+    /** The same durations application.yml configures, so a test failure here means the real config broke. */
+    static YahooFinanceProperties properties() {
+        return new YahooFinanceProperties(null, null, null, 0, 0, new YahooFinanceProperties.Cache(
+                Duration.ofMinutes(1), Duration.ofHours(6), Duration.ofHours(24), Duration.ofHours(24),
+                Duration.ofDays(7), Duration.ofMinutes(5)));
+    }
+
     /** {@code instance} as the application would see it: behind the caching proxy. */
     static <T> T cached(Class<T> type, T instance) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
         context.register(YahooCacheConfiguration.class);
+        context.registerBean(YahooFinanceProperties.class, YahooCacheConfigurationTest::properties);
         context.registerBean(type, () -> instance);
         context.refresh();
         return context.getBean(type);
@@ -31,7 +39,10 @@ class YahooCacheConfigurationTest {
 
     @Test
     void givesEachCacheItsOwnTimeToLive() {
-        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(YahooCacheConfiguration.class);
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+        context.register(YahooCacheConfiguration.class);
+        context.registerBean(YahooFinanceProperties.class, YahooCacheConfigurationTest::properties);
+        context.refresh();
         CacheManager manager = context.getBean(CacheManager.class);
 
         assertThat(manager.getCacheNames()).containsExactlyInAnyOrder(

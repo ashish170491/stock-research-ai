@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
+import com.ashish.stockresearch.service.OllamaCalls;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -18,6 +19,7 @@ class LlmSymbolResolverTest {
     private ChatClient chatClient;
     private ChatClient.ChatClientRequestSpec requestSpec;
     private ChatClient.CallResponseSpec callResponseSpec;
+    private final OllamaCalls ollama = new OllamaCalls("qwen3:8b", "http://localhost:11434");
 
     @BeforeEach
     void setUp() {
@@ -37,7 +39,7 @@ class LlmSymbolResolverTest {
     void returnsCandidateTickerFromCleanResponse() {
         when(callResponseSpec.content()).thenReturn("BHARTIARTL");
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Bharti Airtel");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Bharti Airtel");
 
         assertThat(result).contains("BHARTIARTL");
     }
@@ -46,7 +48,7 @@ class LlmSymbolResolverTest {
     void normalizesWhitespaceAndCase() {
         when(callResponseSpec.content()).thenReturn("  bhartiartl  \n");
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Bharti Airtel");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Bharti Airtel");
 
         assertThat(result).contains("BHARTIARTL");
     }
@@ -55,7 +57,7 @@ class LlmSymbolResolverTest {
     void returnsEmptyWhenModelRespondsUnknown() {
         when(callResponseSpec.content()).thenReturn("UNKNOWN");
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Some Obscure Company");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Some Obscure Company");
 
         assertThat(result).isEmpty();
     }
@@ -64,7 +66,7 @@ class LlmSymbolResolverTest {
     void returnsEmptyWhenResponseIsNotAPlausibleTicker() {
         when(callResponseSpec.content()).thenReturn("I'm not sure, but it might be XYZ or ABC.");
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Some Company");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Some Company");
 
         assertThat(result).isEmpty();
     }
@@ -73,7 +75,7 @@ class LlmSymbolResolverTest {
     void returnsEmptyWhenResponseIsBlank() {
         when(callResponseSpec.content()).thenReturn("   ");
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Some Company");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Some Company");
 
         assertThat(result).isEmpty();
     }
@@ -82,7 +84,7 @@ class LlmSymbolResolverTest {
     void returnsEmptyWhenChatClientThrows() {
         when(chatClient.prompt(anyString())).thenThrow(new RuntimeException("Ollama unreachable"));
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Some Company");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Some Company");
 
         assertThat(result).isEmpty();
     }
@@ -91,7 +93,7 @@ class LlmSymbolResolverTest {
     void ignoresTheModelsInlineReasoning() {
         when(callResponseSpec.content()).thenReturn("<think>Bharti Airtel trades as BHARTIARTL on NSE.</think>\nBHARTIARTL");
 
-        Optional<String> result = new LlmSymbolResolver(chatClientBuilder).resolveTickerGuess("Bharti Airtel");
+        Optional<String> result = new LlmSymbolResolver(chatClientBuilder, ollama).resolveTickerGuess("Bharti Airtel");
 
         assertThat(result).contains("BHARTIARTL");
     }

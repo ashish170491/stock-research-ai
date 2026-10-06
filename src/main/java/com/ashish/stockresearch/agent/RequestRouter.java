@@ -2,6 +2,7 @@ package com.ashish.stockresearch.agent;
 
 import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.marketdata.NseSymbolDirectory;
+import com.ashish.stockresearch.service.OllamaCalls;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -107,9 +108,10 @@ public class RequestRouter {
     private final ChatClient routingClient;
     private final NseSymbolDirectory directory;
     private final MetricGlossary glossary;
+    private final OllamaCalls ollama;
 
     public RequestRouter(ChatClient.Builder chatClientBuilder, NseSymbolDirectory directory, MetricGlossary glossary,
-                         Advisor conversationTraceAdvisor) {
+                         Advisor conversationTraceAdvisor, OllamaCalls ollama) {
         // No tools: routing only classifies, it never fetches. No thinking either: a classification
         // needs no reasoning trace, and generating one is most of the latency of a routed request.
         // The prompt is short, so a small context keeps the KV cache small.
@@ -120,6 +122,7 @@ public class RequestRouter {
                 .build();
         this.directory = directory;
         this.glossary = glossary;
+        this.ollama = ollama;
     }
 
     /**
@@ -212,7 +215,7 @@ public class RequestRouter {
                 : message;
         RoutedRequest routed;
         try {
-            routed = routingClient.prompt().user(prompt).call().entity(RoutedRequest.class);
+            routed = ollama.call(() -> routingClient.prompt().user(prompt).call().entity(RoutedRequest.class));
         } catch (RuntimeException ex) {
             log.warn("Routing model gave no usable answer for '{}' ({}); treating it as a specific question",
                     message, ex.getMessage());

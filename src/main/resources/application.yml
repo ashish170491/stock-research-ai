@@ -65,6 +65,16 @@ app:
       # often. A report's parallel fetches, and any future screen over many
       # stocks, are spaced to at most this many requests per second.
       requests-per-second: 2
+      # How long a cached response stays fresh before a repeated question calls Yahoo again
+      # (YahooCacheConfiguration). Only a successful answer is ever cached.
+      cache:
+        quotes: 1m
+        price-history: 6h
+        financials: 24h
+        company-profiles: 24h
+        symbol-resolution: 7d
+        # Measured against the share price, so kept for minutes, not hours.
+        valuations: 5m
     # Companies' results as filed with NSE (XBRL): the source of record for annual fundamentals. NSE's
     # website endpoints are not an official API, so requests are spaced and each filed document is kept
     # under document-directory once fetched (filings never change; a revision is a new document).

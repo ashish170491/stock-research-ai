@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.marketdata.provider.yahoo;
 
+import com.ashish.stockresearch.service.OllamaCalls;
 import com.ashish.stockresearch.service.ResearchReportWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,24 +30,26 @@ class LlmSymbolResolver {
     private static final Pattern PLAUSIBLE_TICKER = Pattern.compile("^[A-Z0-9&-]{1,20}$");
 
     private final ChatClient chatClient;
+    private final OllamaCalls ollama;
 
-    LlmSymbolResolver(ChatClient.Builder chatClientBuilder) {
+    LlmSymbolResolver(ChatClient.Builder chatClientBuilder, OllamaCalls ollama) {
         // A one-word answer: no thinking, no sampling variety, a small context.
         this.chatClient = chatClientBuilder.clone()
                 .defaultOptions(OllamaChatOptions.builder().disableThinking().temperature(0.0).numCtx(2048))
                 .build();
+        this.ollama = ollama;
     }
 
     Optional<String> resolveTickerGuess(String companyName) {
         String response;
         try {
-            response = chatClient.prompt("""
+            response = ollama.call(() -> chatClient.prompt("""
                     Give the exact NSE (National Stock Exchange of India) trading symbol for this company: "%s"
                     Respond with ONLY the ticker symbol in uppercase - no explanation, no punctuation, no exchange suffix like .NS.
                     If you are not confident or the company is not listed in India, respond with exactly: UNKNOWN
                     """.formatted(companyName))
                     .call()
-                    .content();
+                    .content());
         } catch (RuntimeException ex) {
             log.debug("LLM symbol lookup failed for '{}': {}", companyName, ex.getMessage());
             return Optional.empty();
