@@ -78,7 +78,7 @@ class RequestRouterTest {
 
     private static RequestRouter router(StubModel model) {
         return new RequestRouter(ChatClient.builder(model), NSE, com.ashish.stockresearch.glossary.TestGlossary.glossary(),
-                new PassThrough());
+                new PassThrough(), new com.ashish.stockresearch.service.OllamaCalls("qwen3:8b", "http://localhost:11434"));
     }
 
     // --- The model's classification, one test per intent -------------------------------------

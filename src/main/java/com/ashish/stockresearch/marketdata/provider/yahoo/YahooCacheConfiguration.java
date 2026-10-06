@@ -41,24 +41,26 @@ class YahooCacheConfiguration {
     /** Bean name of the key generator that makes "tcs", " TCS " and "TCS" the same entry. */
     static final String SYMBOL_KEY = "symbolKey";
 
-    static final Map<String, Duration> TIME_TO_LIVE = Map.of(
-            QUOTES, Duration.ofMinutes(1),
-            PRICE_HISTORY, Duration.ofHours(6),
-            FINANCIALS, Duration.ofHours(24),
-            COMPANY_PROFILES, Duration.ofHours(24),
-            SYMBOL_RESOLUTION, Duration.ofDays(7),
-            // Measured against the share price, so kept for minutes, not hours.
-            VALUATIONS, Duration.ofMinutes(5));
-
     private static final int MAX_ENTRIES_PER_CACHE = 2_000;
 
+    /** How long each kind of response stays fresh, as configured (app.market-data.yahoo-finance.cache.*). */
+    static Map<String, Duration> timeToLive(YahooFinanceProperties.Cache cache) {
+        return Map.of(
+                QUOTES, cache.quotes(),
+                PRICE_HISTORY, cache.priceHistory(),
+                FINANCIALS, cache.financials(),
+                COMPANY_PROFILES, cache.companyProfiles(),
+                SYMBOL_RESOLUTION, cache.symbolResolution(),
+                VALUATIONS, cache.valuations());
+    }
+
     @Bean
-    CacheManager cacheManager() {
+    CacheManager cacheManager(YahooFinanceProperties properties) {
         CaffeineCacheManager manager = new CaffeineCacheManager();
         // No caches on demand: a mistyped cache name fails instead of silently creating an unbounded
         // cache. Set first, because setCacheNames replaces any cache already registered under a name.
         manager.setCacheNames(Set.of());
-        TIME_TO_LIVE.forEach((name, ttl) -> manager.registerCustomCache(name, Caffeine.newBuilder()
+        timeToLive(properties.cache()).forEach((name, ttl) -> manager.registerCustomCache(name, Caffeine.newBuilder()
                 .expireAfterWrite(ttl)
                 .maximumSize(MAX_ENTRIES_PER_CACHE)
                 .build()));
