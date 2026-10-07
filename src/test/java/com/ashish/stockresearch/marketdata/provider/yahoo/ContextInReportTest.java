@@ -117,7 +117,9 @@ class ContextInReportTest {
         return new ResearchReportWriter(ChatClient.builder(scriptedModel), new PassThrough(), service,
                 new ResearchReportRenderer(), new UnsupportedClaimFilter(), new NumericClaimVerifier(),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), glossary,
-                new RatioContextService(repository, 5), false).write("HDFCBANK");
+                new RatioContextService(repository, 5),
+                com.ashish.stockresearch.research.critic.CriticTestSupport.alwaysAccept(),
+                com.ashish.stockresearch.research.critic.CriticTestSupport.noBearCase(), false).write("HDFCBANK");
     }
 
     // S13-L1, offline: HDFC Bank's ROE beside its own years and its bank peers, with the snapshot date and count

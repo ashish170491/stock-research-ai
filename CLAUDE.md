@@ -31,6 +31,12 @@
   beside a figure it cannot be read against. Each company's figure sits beside its own industry group's
   median from Step 13. The model writes one narrative over that aligned table only - never a separate
   report per company - and that narrative is verified the same way a report's interpretation is.
+- A report's interpretation goes through ResearchCritic (tool-free, evidence and draft only) before it is
+  final: REVISE gets one revision round (at most two writer calls total), and the deterministic verifiers
+  run on whichever draft is final, never only the first. An unreachable or unparseable critic is treated
+  as ACCEPT, logged, never a new way for the report to fail. The report's bear case (BearCaseWriter) is
+  drawn only from data gaps, data-quality issues and failed screening rules - never facts or observations -
+  and is checked by the same verifiers.
 - Long work reports its steps with trace.Progress (streamed by /api/ai/chat/stream). A step names
   what is being done, for which company and from which source - never a figure, and never the
   model's draft text.
