@@ -93,7 +93,9 @@ class GlossaryInReportTest {
                 new FinancialDataValidator(ResearchPipelineRegressionTest.SEPT_2026), new SectorClassifier());
         return new ResearchReportWriter(ChatClient.builder(model), new PassThrough(), service,
                 new ResearchReportRenderer(), new UnsupportedClaimFilter(), new NumericClaimVerifier(),
-                new OllamaCalls("qwen3:8b", "http://localhost:11434"), glossary, NO_SNAPSHOT, false).write(symbol);
+                new OllamaCalls("qwen3:8b", "http://localhost:11434"), glossary, NO_SNAPSHOT,
+                com.ashish.stockresearch.research.critic.CriticTestSupport.alwaysAccept(),
+                com.ashish.stockresearch.research.critic.CriticTestSupport.noBearCase(), false).write(symbol);
     }
 
     // S11-1: every metric the report shows is explained, apart from plain amounts and prices.
