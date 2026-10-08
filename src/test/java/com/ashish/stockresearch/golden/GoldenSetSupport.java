@@ -135,7 +135,7 @@ final class GoldenSetSupport {
                 conversationTraceAdvisor, researchReportService, new ResearchReportRenderer(), claimFilter,
                 numericVerifier, ollama, glossary, ratioContextService, critic, bearCaseWriter, false);
         ComparisonService comparisonService = new ComparisonService(chatClientBuilder, conversationTraceAdvisor,
-                researchReportService, ratioContextService, new ComparisonBuilder(glossary), glossary,
+                researchReportService, ratioContextService, new ComparisonBuilder(glossary),
                 numericVerifier, claimFilter, ollama);
 
         ChatMemory chatMemory = MessageWindowChatMemory.builder()

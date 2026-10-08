@@ -2,7 +2,6 @@ package com.ashish.stockresearch.research.comparison;
 
 import com.ashish.stockresearch.context.RatioContextService;
 import com.ashish.stockresearch.context.ReportContext;
-import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import com.ashish.stockresearch.research.report.ResearchReportRenderer;
 import com.ashish.stockresearch.research.report.ResearchReportService;
@@ -48,7 +47,6 @@ public class ComparisonService {
     private final ResearchReportService researchReportService;
     private final RatioContextService contextService;
     private final ComparisonBuilder builder;
-    private final MetricGlossary glossary;
     private final NumericClaimVerifier numericVerifier;
     private final UnsupportedClaimFilter claimFilter;
     private final OllamaCalls ollama;
@@ -59,14 +57,12 @@ public class ComparisonService {
             ResearchReportService researchReportService,
             RatioContextService contextService,
             ComparisonBuilder builder,
-            MetricGlossary glossary,
             NumericClaimVerifier numericVerifier,
             UnsupportedClaimFilter claimFilter,
             OllamaCalls ollama) {
         this.researchReportService = researchReportService;
         this.contextService = contextService;
         this.builder = builder;
-        this.glossary = glossary;
         this.numericVerifier = numericVerifier;
         this.claimFilter = claimFilter;
         this.ollama = ollama;
@@ -112,7 +108,7 @@ public class ComparisonService {
                     .formatted(screened.removedSentences().size(), String.join(" | ", screened.removedSentences()));
         }
         String rendered = tableText + "\n" + text + "\n";
-        return rendered + "\n" + glossary.section(glossary.termsIn(rendered));
+        return rendered;
     }
 
     private record FetchResult(String symbol, StockResearchReport report, String failure) {

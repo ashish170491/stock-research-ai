@@ -271,19 +271,17 @@ class AiServiceRoutingTest {
         verify(router, never()).route(org.mockito.ArgumentMatchers.anyString(), any());
     }
 
-    // S11-6: a screen's answer ends with the glossary's entries for its criteria, added after the checks.
+    // Term explanations live on the Terms tab, so a screen's answer carries none.
     @Test
-    void aScreenAnswerEndsWithTheTermsItsCriteriaUse() {
+    void aScreenAnswerCarriesNoTermExplanations() {
         String question = "Find profitable companies";
         routes(question, Intent.SCREEN);
         when(screenerAgent.answer(question)).thenReturn(new ScreenerAgent.ScreenAnswer("TCS meets ROE 3y avg ≥ 15.00% "
                 + "and D/E ≤ 0.50x.", "TOOL RESULT: screenStocks - status OK", "[A screen was shown to the user]"));
-        MetricGlossary glossary = com.ashish.stockresearch.glossary.TestGlossary.glossary();
 
         String text = service(UNUSED).chat(CONVERSATION, question).text();
 
-        assertThat(text).isEqualTo("TCS meets ROE 3y avg ≥ 15.00% and D/E ≤ 0.50x.\n\n" + glossary.section(List.of(
-                glossary.byKey("roe").orElseThrow(), glossary.byKey("debt-to-equity").orElseThrow())));
+        assertThat(text).isEqualTo("TCS meets ROE 3y avg ≥ 15.00% and D/E ≤ 0.50x.");
         // the memory keeps the note, not the glossary
         assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo("[A screen was shown to the user]");
     }
@@ -300,9 +298,8 @@ class AiServiceRoutingTest {
 
         String text = service(UNUSED).chat(CONVERSATION, question).text();
 
-        assertThat(text).startsWith("5 stocks meet every criterion.\n\n" + glossary.criteriaByQuestion(quality))
-                .contains("## Explain the terms").contains("**Return on capital employed (ROCE)**")
-                .contains("**Operating cash flow to net profit (OCF/PAT)**");
+        assertThat(text).isEqualTo("5 stocks meet every criterion.\n\n" + glossary.criteriaByQuestion(quality))
+                .doesNotContain("## Explain the terms");
     }
 
     // S11-7: "what is ROCE?" is the glossary's entry, with no model call at all.
@@ -467,18 +464,15 @@ class AiServiceRoutingTest {
         assertThat(answer).startsWith("It is price divided by earnings per share.");
     }
 
-    // A tool answer ends with one line per term it uses, from the glossary, after the checks.
+    // A tool answer carries no term list: the terms are on the Terms tab.
     @Test
-    void aToolAnswerListsTheTermsItUses() {
+    void aToolAnswerCarriesNoTermList() {
         routes("How is it calculated?", Intent.SPECIFIC_QUESTION);
         ScriptedModel model = new ScriptedModel(messages -> text("It is price divided by earnings per share."));
-        MetricGlossary glossary = com.ashish.stockresearch.glossary.TestGlossary.glossary();
 
         String answer = service(model).chat("fresh", "How is it calculated?").text();
 
-        assertThat(answer).isEqualTo("It is price divided by earnings per share.\n\n"
-                + glossary.termsUsed(List.of(glossary.byKey("eps").orElseThrow())));
-        assertThat(answer).contains("- **Earnings per share (EPS)**: The profit attributable to shareholders");
+        assertThat(answer).isEqualTo("It is price divided by earnings per share.");
     }
 
     // Progress: each step of a tool-loop answer is reported as it starts and ends.

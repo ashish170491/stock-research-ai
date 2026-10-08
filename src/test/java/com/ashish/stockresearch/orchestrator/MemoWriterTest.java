@@ -66,7 +66,7 @@ class MemoWriterTest {
 
     private static MemoWriter writer(ChatModel model) {
         return new MemoWriter(ChatClient.builder(model), new PassThrough(), OLLAMA, new NumericClaimVerifier(),
-                new UnsupportedClaimFilter(), TestGlossary.glossary());
+                new UnsupportedClaimFilter());
     }
 
     // S8-5
