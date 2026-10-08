@@ -66,5 +66,13 @@
   which one. The final memo (MemoWriter) goes through the same verifiers as every other answer,
   and never a recommendation. Saved screens (watchlist/) are re-run deterministically, by preset
   and universe, never re-extracted by a model, so entered/left is comparable across snapshots.
+- The same verified tools are exposed over MCP (McpToolsConfiguration, POST /mcp) for any MCP client.
+  The bean is a List<McpServerFeatures.SyncToolSpecification>, never a ToolCallbackProvider or
+  ToolCallback bean: Spring AI's own ToolCallingAutoConfiguration sweeps every such bean into the
+  resolver its default tool-calling manager uses, which pulled a tool's full dependency chain (down to
+  LlmSymbolResolver's ChatClient.Builder) into the eager construction of ollamaChatModel - a bean
+  ChatClient.Builder itself depends on, and a real circular-dependency startup failure the first way
+  round was tried. spring.ai.mcp.server.protocol must be set explicitly to STREAMABLE: the webmvc
+  autoconfiguration that registers the /mcp endpoint checks the literal property, not its own default.
 - Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md

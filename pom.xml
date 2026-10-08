@@ -51,6 +51,12 @@
 			<artifactId>spring-ai-vector-store</artifactId>
 		</dependency>
 
+		<!-- Step 9: exposes the verified research tools over MCP to any MCP client (Claude Desktop, Claude Code). -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+		</dependency>
+
 		<!-- Caches Yahoo responses so a repeated question makes no HTTP calls. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
