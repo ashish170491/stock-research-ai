@@ -1,0 +1,170 @@
+[
+  {
+    "id": "quote-hdfcbank",
+    "question": "What is the current price of HDFCBANK?",
+    "expectedIntent": "QUOTE",
+    "expectedTools": [],
+    "requiredFacts": ["HDFCBANK"]
+  },
+  {
+    "id": "quote-techm",
+    "question": "What's TECHM trading at right now?",
+    "expectedIntent": "QUOTE",
+    "expectedTools": [],
+    "requiredFacts": ["TECHM"]
+  },
+  {
+    "id": "full-research-hdfcbank",
+    "question": "Give me a fundamental overview of HDFCBANK",
+    "expectedIntent": "FULL_RESEARCH",
+    "expectedTools": [],
+    "requiredFacts": ["HDFC Bank"]
+  },
+  {
+    "id": "full-research-techm",
+    "question": "Analyse TECHM",
+    "expectedIntent": "FULL_RESEARCH",
+    "expectedTools": [],
+    "requiredFacts": ["Tech Mahindra"]
+  },
+  {
+    "id": "compare-both",
+    "question": "Compare HDFCBANK and TECHM",
+    "expectedIntent": "COMPARE",
+    "expectedTools": [],
+    "requiredFacts": ["HDFCBANK", "TECHM"]
+  },
+  {
+    "id": "compare-profitability",
+    "question": "How do HDFCBANK and TECHM compare on profitability?",
+    "expectedIntent": "COMPARE",
+    "expectedTools": [],
+    "requiredFacts": ["HDFCBANK", "TECHM"]
+  },
+  {
+    "id": "profile-hdfcbank-sector",
+    "question": "What sector is HDFCBANK in?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getCompanyProfile"],
+    "requiredFacts": ["HDFCBANK"]
+  },
+  {
+    "id": "profile-techm-marketcap",
+    "question": "What is TECHM's market capitalisation?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getCompanyProfile"],
+    "requiredFacts": ["₹1.37 lakh crore"]
+  },
+  {
+    "id": "profile-hdfcbank-marketcap",
+    "question": "What is HDFCBANK's market capitalisation?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getCompanyProfile"],
+    "requiredFacts": ["₹11.34 lakh crore"]
+  },
+  {
+    "id": "financials-techm-margin",
+    "question": "What is TECHM's net profit margin?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getFinancialSummary"],
+    "requiredFacts": ["8.68%"]
+  },
+  {
+    "id": "financials-techm-debt-to-equity",
+    "question": "What is TECHM's debt-to-equity?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getFinancialSummary"],
+    "requiredFacts": ["7.27%"]
+  },
+  {
+    "id": "financials-techm-revenue-growth",
+    "question": "What was TECHM's revenue growth last fiscal year?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getFinancialSummary"],
+    "requiredFacts": ["7.22%"]
+  },
+  {
+    "id": "financials-techm-roe-missing",
+    "question": "What is TECHM's return on equity?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getFinancialSummary"],
+    "requiredFacts": ["TECHM"]
+  },
+  {
+    "id": "history-hdfcbank",
+    "question": "How has HDFCBANK performed over the past 5 years?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getHistoricalPerformance"],
+    "requiredFacts": ["HDFCBANK"]
+  },
+  {
+    "id": "history-techm",
+    "question": "How has TECHM's share price done over the last five years?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getHistoricalPerformance"],
+    "requiredFacts": ["TECHM"]
+  },
+  {
+    "id": "valuation-techm",
+    "question": "What is TECHM's trailing P/E ratio?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getValuation"],
+    "requiredFacts": ["2026-09-25"]
+  },
+  {
+    "id": "valuation-hdfcbank",
+    "question": "What is HDFCBANK's P/E ratio?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getValuation"],
+    "requiredFacts": ["2026-09-25"]
+  },
+  {
+    "id": "shareholding-techm",
+    "question": "Who are TECHM's major shareholders?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getShareholding"],
+    "requiredFacts": ["not available"]
+  },
+  {
+    "id": "shareholding-hdfcbank",
+    "question": "What is HDFCBANK's promoter shareholding?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["getShareholding"],
+    "requiredFacts": ["not available"]
+  },
+  {
+    "id": "documents-hdfcbank-npa",
+    "question": "What does HDFCBANK's annual report say about non-performing assets?",
+    "expectedIntent": "SPECIFIC_QUESTION",
+    "expectedTools": ["searchCompanyDocuments"],
+    "requiredFacts": ["Document sources"]
+  },
+  {
+    "id": "explain-roce",
+    "question": "What does ROCE mean?",
+    "expectedIntent": "EXPLAIN_TERM",
+    "expectedTools": [],
+    "requiredFacts": ["ROCE"]
+  },
+  {
+    "id": "explain-cagr",
+    "question": "What is CAGR?",
+    "expectedIntent": "EXPLAIN_TERM",
+    "expectedTools": [],
+    "requiredFacts": ["CAGR"]
+  },
+  {
+    "id": "not-stock-weather",
+    "question": "What's the weather like today?",
+    "expectedIntent": "NOT_STOCK_RELATED",
+    "expectedTools": [],
+    "requiredFacts": []
+  },
+  {
+    "id": "not-stock-joke",
+    "question": "Tell me a joke.",
+    "expectedIntent": "NOT_STOCK_RELATED",
+    "expectedTools": [],
+    "requiredFacts": []
+  }
+]

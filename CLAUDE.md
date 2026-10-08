@@ -74,5 +74,12 @@
   ChatClient.Builder itself depends on, and a real circular-dependency startup failure the first way
   round was tried. spring.ai.mcp.server.protocol must be set explicitly to STREAMABLE: the webmvc
   autoconfiguration that registers the /mcp endpoint checks the literal property, not its own default.
+- The golden set (src/test/resources/golden/golden-set.json, GoldenSetTest) runs real questions through
+  the real AiService and a real local Ollama model - only Yahoo is a fixture (HDFC Bank, Tech Mahindra).
+  Tagged @Tag("llm"), excluded from the default build (`./mvnw test -Dgroups=llm -DexcludedGroups=` to
+  run it); a baseline pass rate, not a strict gate, since a small local model varies run to run. Uses
+  Spring AI's RelevancyEvaluator alongside its own intent/tool/fact checks. Chat latency and token usage
+  are Micrometer observations (gen_ai.client.operation, gen_ai.client.token.usage) exposed at
+  /actuator/metrics once spring-boot-starter-actuator is on the classpath - no extra config needed.
 - Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md
