@@ -18,8 +18,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * start. Nothing here calls Ollama or Yahoo: beans are created, not used.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        // the snapshot database in memory, so the build never writes ./data
-        properties = "spring.datasource.url=jdbc:h2:mem:context-test;DB_CLOSE_DELAY=-1")
+        // the snapshot database in memory, and the document vector store under target/, so the
+        // build never writes or reads ./data
+        properties = {
+                "spring.datasource.url=jdbc:h2:mem:context-test;DB_CLOSE_DELAY=-1",
+                "app.documents.vector-store-path=target/test-data/vector-store.json"
+        })
 class StockResearchApplicationTests {
 
     @Test

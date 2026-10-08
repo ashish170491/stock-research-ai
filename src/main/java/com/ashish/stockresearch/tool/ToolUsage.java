@@ -30,7 +30,16 @@ public final class ToolUsage {
     public record Call(String tool, String symbol, String status, String evidence) {
     }
 
+    /**
+     * One passage a document-search tool actually returned, independent of whether the model's
+     * answer repeats it in words - the application shows it regardless (S7-5), the same way a
+     * report's sources are Java-rendered rather than left to the model to remember to mention.
+     */
+    public record Citation(String label) {
+    }
+
     private final List<Call> calls = Collections.synchronizedList(new ArrayList<>());
+    private final List<Citation> citations = Collections.synchronizedList(new ArrayList<>());
 
     public Map<String, Object> asToolContext() {
         return Map.of(CONTEXT_KEY, this);
@@ -43,9 +52,23 @@ public final class ToolUsage {
         }
     }
 
+    /** Records a citation a document-search tool returned, if the caller supplied a usage to record it on. */
+    public static void recordCitation(ToolContext context, Citation citation) {
+        if (context != null && context.getContext().get(CONTEXT_KEY) instanceof ToolUsage usage) {
+            usage.citations.add(citation);
+        }
+    }
+
     public List<Call> calls() {
         synchronized (calls) {
             return List.copyOf(calls);
+        }
+    }
+
+    /** Every document citation returned this request, in the order first seen, without repeats. */
+    public List<Citation> citations() {
+        synchronized (citations) {
+            return citations.stream().distinct().toList();
         }
     }
 

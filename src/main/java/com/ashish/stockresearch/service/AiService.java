@@ -12,6 +12,7 @@ import com.ashish.stockresearch.marketdata.model.StockQuote;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
 import com.ashish.stockresearch.research.comparison.ComparisonService;
 import com.ashish.stockresearch.research.report.AnswerChecks;
+import com.ashish.stockresearch.tool.DocumentSearchTools;
 import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
@@ -109,6 +110,7 @@ public class AiService {
 			StockPriceTool stockPriceTool,
 			StockResearchTools stockResearchTools,
 			ScreeningTools screeningTools,
+			DocumentSearchTools documentSearchTools,
 			Advisor conversationTraceAdvisor,
 			ResearchReportWriter researchReportWriter,
 			ComparisonService comparisonService,
@@ -123,7 +125,7 @@ public class AiService {
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
 				.defaultSystem(SYSTEM_PROMPT)
-				.defaultTools(stockPriceTool, stockResearchTools, screeningTools)
+				.defaultTools(stockPriceTool, stockResearchTools, screeningTools, documentSearchTools)
 				.defaultAdvisors(conversationTraceAdvisor)
 				.build();
 		this.generalClient = chatClientBuilder.clone()
@@ -214,6 +216,7 @@ public class AiService {
 				if (!terms.isBlank()) {
 					answer = answer + "\n\n" + terms;
 				}
+				answer = answer + documentSourcesSection(usage);
 				if (companies.isEmpty()) {
 					companies = usage.calls().stream().map(ToolUsage.Call::symbol)
 							.filter(symbol -> symbol != null && !symbol.isBlank()).distinct().toList();
@@ -239,6 +242,20 @@ public class AiService {
 	private String withTermsSection(String answer) {
 		String section = glossary.section(glossary.termsIn(answer));
 		return section.isBlank() ? answer : answer + "\n\n" + section;
+	}
+
+	/**
+	 * Every document citation {@code searchCompanyDocuments} returned this turn, Java-rendered so it is
+	 * shown whether or not the model's own words repeat it (S7-5).
+	 */
+	private static String documentSourcesSection(ToolUsage usage) {
+		List<ToolUsage.Citation> citations = usage.citations();
+		if (citations.isEmpty()) {
+			return "";
+		}
+		String lines = citations.stream().map(citation -> "- " + citation.label())
+				.collect(Collectors.joining("\n"));
+		return "\n\n**Document sources**\n" + lines;
 	}
 
 	/** What the request was understood as, for the progress shown while it is answered. */

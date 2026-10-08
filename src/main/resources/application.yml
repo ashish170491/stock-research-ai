@@ -49,6 +49,11 @@ spring:
           # Tool calling is a structured-output task; low randomness keeps the
           # model from improvising arguments or skipping a tool it should call.
           temperature: 0.3
+      embedding:
+        options:
+          # Pulled separately from the chat model (ollama pull nomic-embed-text); used only to
+          # embed and search ingested documents (Step 7), never for chat.
+          model: nomic-embed-text
 
 app:
   market-data:
@@ -88,6 +93,12 @@ app:
       document-directory: ./data/nse-filings
       # A filing never changes once made; a company's listings are asked for again after this long.
       listing-ttl: 12h
+
+  documents:
+    # Chunks embedded from ingested annual reports / concall transcripts (searchCompanyDocuments).
+    # A single JSON file (SimpleVectorStore), loaded on startup if present and saved again after
+    # every ingestion, so nothing needs re-ingesting after a restart.
+    vector-store-path: ./data/documents/vector-store.json
 
   research:
     valuation:
