@@ -217,3 +217,45 @@ returns the structured report with no model involved.
 ```bash
 ./mvnw test
 ```
+
+### Running the llm suite
+
+The golden set (`src/test/resources/golden/golden-set.json`, roadmap Step 10) is ~20 real questions,
+each with the intent it must route to, the tools (if any) the model must call, and facts its answer
+must contain. `GoldenSetTest` runs every one of them through the real `AiService` and a real local
+Ollama model - routing, report assembly, the critic loop, the comparison narrative and every verifier
+are the actual production code; only Yahoo is a fixture (HDFC Bank and Tech Mahindra, the two companies
+with recorded responses), so there is no live Yahoo call.
+
+It is tagged `@Tag("llm")` and excluded from the default build (it needs Ollama running locally with
+`qwen3:8b` pulled, and takes several minutes). Run it with:
+
+```bash
+./mvnw test -Dgroups=llm -DexcludedGroups=
+```
+
+The console prints a per-case breakdown (which of intent/tools/facts matched, plus a
+`RelevancyEvaluator` judgement from the same model) followed by a line like:
+
+```
+PASS RATE: 18/23 (78.3%)
+```
+
+This is a baseline to track over time, not a strict gate: a small local model does not answer every
+question identically from one run to the next, so the suite only fails if the pass rate drops below
+50% - a sign something is actually broken, not just ordinary model variance. The latest recorded
+baseline is in `docs/verification/step-10-*.md`.
+
+### Observability
+
+`/actuator/metrics` (enabled by `spring-boot-starter-actuator`) lists every metric Spring AI records
+through Micrometer as soon as a chat call is made - no extra configuration needed. The two that matter
+most here:
+
+- `gen_ai.client.operation` - a timer (COUNT, TOTAL_TIME, MAX, in seconds), tagged by
+  `gen_ai.request.model` and `gen_ai.operation.name`.
+- `gen_ai.client.token.usage` - input, output and total tokens, tagged by `gen_ai.token.type`.
+
+```bash
+curl -s localhost:8080/actuator/metrics/gen_ai.client.operation | jq
+```

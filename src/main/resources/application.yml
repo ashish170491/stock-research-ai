@@ -1,3 +1,15 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        # Chat latency and token usage (roadmap Step 10): Spring AI records them as Micrometer
+        # observations as soon as a MeterRegistry bean exists (spring-boot-starter-actuator), with no
+        # extra Spring AI property needed. /actuator/metrics lists every recorded name;
+        # /actuator/metrics/{name} drills into one - gen_ai.client.operation (a timer: COUNT, TOTAL_TIME
+        # and MAX in seconds, tagged by model and operation) and gen_ai.client.token.usage (input,
+        # output and total tokens, tagged the same way).
+        include: health,metrics
+
 spring:
   application:
     name: stock-research-ai

@@ -29,6 +29,9 @@
 	<properties>
 		<java.version>21</java.version>
 		<spring-ai.version>2.0.1</spring-ai.version>
+		<!-- Overridable on the command line (-DexcludedGroups=), unlike a literal value in the plugin's
+		     own <configuration>, which always wins over a -D of the same name. -->
+		<excludedGroups>llm</excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -55,6 +58,12 @@
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+		</dependency>
+
+		<!-- Step 10: exposes chat latency and token-usage metrics Spring AI records via Micrometer. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
 		<!-- Caches Yahoo responses so a repeated question makes no HTTP calls. -->
@@ -102,6 +111,16 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- The golden set and any other real-model test (roadmap Step 10) needs a running local
+					     Ollama and takes minutes, not seconds: excluded from the default build, run with
+					     `./mvnw test -Dgroups=llm -DexcludedGroups=`. -->
+					<excludedGroups>${excludedGroups}</excludedGroups>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
