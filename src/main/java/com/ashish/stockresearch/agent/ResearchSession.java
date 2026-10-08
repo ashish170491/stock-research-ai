@@ -1,8 +1,11 @@
 package com.ashish.stockresearch.agent;
 
+import com.ashish.stockresearch.orchestrator.OrchestratorCheckpoint;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What one conversation has established so far, beyond its chat history: the companies it is
@@ -19,6 +22,7 @@ public final class ResearchSession {
 
     private List<String> companies = List.of();
     private final Deque<String> evidence = new ArrayDeque<>();
+    private OrchestratorCheckpoint checkpoint;
 
     /** The companies the most recent company-specific turn was about, in order; empty at the start. */
     public synchronized List<String> companies() {
@@ -46,5 +50,18 @@ public final class ResearchSession {
     /** The evidence of the earlier turns still kept, oldest first. */
     public synchronized String earlierEvidence() {
         return String.join("\n", evidence);
+    }
+
+    /** The paused research plan (roadmap Step 8), if a SCREEN step is waiting for "continue". */
+    public synchronized Optional<OrchestratorCheckpoint> checkpoint() {
+        return Optional.ofNullable(checkpoint);
+    }
+
+    public synchronized void pause(OrchestratorCheckpoint checkpoint) {
+        this.checkpoint = checkpoint;
+    }
+
+    public synchronized void clearCheckpoint() {
+        this.checkpoint = null;
     }
 }

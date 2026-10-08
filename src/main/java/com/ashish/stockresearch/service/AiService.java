@@ -10,6 +10,7 @@ import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.marketdata.StockMarketDataService;
 import com.ashish.stockresearch.marketdata.model.StockQuote;
 import com.ashish.stockresearch.marketdata.model.StockQuoteResult;
+import com.ashish.stockresearch.orchestrator.ResearchOrchestrator;
 import com.ashish.stockresearch.research.comparison.ComparisonService;
 import com.ashish.stockresearch.research.report.AnswerChecks;
 import com.ashish.stockresearch.tool.DocumentSearchTools;
@@ -83,6 +84,10 @@ public class AiService {
 	private static final DateTimeFormatter QUOTE_TIME =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z").withZone(ZoneId.of("Asia/Kolkata"));
 
+	/** A reply to a paused research plan's checkpoint (roadmap Step 8): resumes it instead of routing. */
+	private static final java.util.regex.Pattern CONTINUE =
+			java.util.regex.Pattern.compile("^\\s*continue\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
 	private final RequestRouter router;
 	private final ChatClient toolClient;
 	private final ChatClient generalClient;
@@ -95,6 +100,7 @@ public class AiService {
 	private final ChatMemory chatMemory;
 	private final ResearchSessions sessions;
 	private final MetricGlossary glossary;
+	private final ResearchOrchestrator orchestrator;
 
 	/**
 	 * What a chat turn produced.
@@ -120,7 +126,8 @@ public class AiService {
 			OllamaCalls ollama,
 			ChatMemory chatMemory,
 			ResearchSessions sessions,
-			MetricGlossary glossary) {
+			MetricGlossary glossary,
+			ResearchOrchestrator orchestrator) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -142,6 +149,7 @@ public class AiService {
 		this.chatMemory = chatMemory;
 		this.sessions = sessions;
 		this.glossary = glossary;
+		this.orchestrator = orchestrator;
 	}
 
 	/**
@@ -169,6 +177,11 @@ public class AiService {
 	 */
 	public ChatAnswer chat(String conversationId, String message) {
 		ResearchSession session = sessions.get(conversationId);
+		if (session.checkpoint().isPresent() && CONTINUE.matcher(message).find()) {
+			String answer = orchestrator.resume(session);
+			remember(conversationId, message, answer);
+			return new ChatAnswer(Intent.ORCHESTRATE, session.companies(), answer);
+		}
 		RoutedRequest request;
 		try (Progress.Step understanding = Progress.start("Understanding your question")) {
 			request = router.route(message, session);
@@ -202,6 +215,11 @@ public class AiService {
 				// The table itself stays out of the memory, but follow-up answers may quote it.
 				session.addEvidence(screen.evidence());
 				remember(conversationId, message, screen.memoryNote());
+			}
+			case ORCHESTRATE -> {
+				answer = orchestrator.start(message, session);
+				remember(conversationId, message, "[A multi-step research plan for \"" + message
+						+ "\" was shown to the user.]");
 			}
 			case SPECIFIC_QUESTION -> {
 				if (RequestRouter.needsACompany(message, request, session)) {
@@ -267,6 +285,7 @@ public class AiService {
 			case QUOTE -> "the latest price of " + named;
 			case COMPARE -> "a comparison of " + named;
 			case SCREEN -> "a screen of stocks against criteria";
+			case ORCHESTRATE -> "a multi-step research goal";
 			case SPECIFIC_QUESTION -> companies.isEmpty() ? "a question for the research tools" : "a question about " + named;
 			case EXPLAIN_TERM -> "what a term means";
 			case NOT_STOCK_RELATED -> "a general question, not about stocks";

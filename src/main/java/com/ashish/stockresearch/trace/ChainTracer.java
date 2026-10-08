@@ -57,6 +57,11 @@ public class ChainTracer {
             return trace.id();
         }
 
+        /** Model calls made inside this chain's trace so far - including by a nested chain reusing it. */
+        public int modelCalls() {
+            return trace.modelCalls();
+        }
+
         /** One stage of the chain and what it produced. */
         public void stage(int number, String name, String outcome) {
             if (properties.enabled()) {

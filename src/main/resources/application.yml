@@ -100,6 +100,15 @@ app:
     # every ingestion, so nothing needs re-ingesting after a restart.
     vector-store-path: ./data/documents/vector-store.json
 
+  orchestrator:
+    # The autonomous research orchestrator's budgets (roadmap Step 8): exceeding any one stops the
+    # plan before its next step and returns a partial memo from whatever was gathered so far, stating
+    # which limit stopped it. A human "continue" after the SCREEN checkpoint starts a fresh request,
+    # so none of these reset what was already consumed before the pause.
+    max-steps: 12
+    max-llm-calls: 20
+    max-wall-clock: 10m
+
   research:
     valuation:
       # A provider multiple (P/E, price-to-book, dividend yield) must agree with
