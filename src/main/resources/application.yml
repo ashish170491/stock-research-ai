@@ -33,6 +33,17 @@ spring:
         initial-interval: 1s
         multiplier: 2
         max-interval: 2s
+    mcp:
+      server:
+        # Exposes the verified research tools (roadmap Step 9) to any MCP client - Claude Desktop,
+        # Claude Code (claude mcp add), or MCP Inspector - over the same servlet port as the REST API,
+        # at POST /mcp (streamable HTTP). The protocol must be set explicitly: the webmvc
+        # auto-configuration that registers the /mcp endpoint checks the literal property, not its
+        # own default.
+        name: stock-research-ai
+        version: 0.0.1-SNAPSHOT
+        type: SYNC
+        protocol: STREAMABLE
     ollama:
       base-url: http://localhost:11434
       chat:
