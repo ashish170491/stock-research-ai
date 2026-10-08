@@ -105,6 +105,17 @@ public class RequestRouter {
                     + "|\\binvestigate\\b[\\s\\S]*?\\bthoroughly\\b"
                     + "|\\bresearch\\s+(?:plan|memo)\\b",
             Pattern.CASE_INSENSITIVE);
+    /**
+     * A question asking whether to invest in a company, or whether it is a good one. The application does not
+     * judge, so such a question is answered with the research report and a note saying so, never a model's
+     * unaided opinion.
+     */
+    private static final Pattern JUDGEMENT = Pattern.compile(
+            "\\bshould\\s+(?:i|we)\\s+(?:buy|invest|sell|hold|purchase)\\b"
+                    + "|\\b(?:good|safe|bad|great|solid)\\s+(?:company|stock|investment|buy|bet)\\b"
+                    + "|\\bworth\\s+(?:buying|investing|holding)\\b|\\b(?:to|can i|should i)\\s+invest\\b"
+                    + "|\\bbuy\\s+(?:it|this|the stock)\\b",
+            Pattern.CASE_INSENSITIVE);
     /** Words around a company name in these requests, removed to leave the name itself. */
     private static final Set<String> FILLER = Set.of(
             "give", "me", "a", "an", "the", "of", "on", "for", "please", "can", "you", "provide", "do", "show",
@@ -160,6 +171,10 @@ public class RequestRouter {
                 && !SCREEN.matcher(message).find();
     }
 
+    public static boolean asksForAJudgement(String message) {
+        return message != null && JUDGEMENT.matcher(message).find();
+    }
+
     public RoutedRequest route(String message) {
         return route(message, null);
     }
@@ -168,6 +183,10 @@ public class RequestRouter {
     public RoutedRequest route(String message, ResearchSession session) {
         List<String> earlier = session == null ? List.of() : session.companies();
         RoutedRequest routed = byKeywords(message).orElseGet(() -> byModel(message, earlier));
+        if (routed.intent() == Intent.SPECIFIC_QUESTION && routed.companies().size() == 1
+                && asksForAJudgement(message)) {
+            routed = new RoutedRequest(Intent.FULL_RESEARCH, routed.companies());
+        }
         log.info("Routed '{}' -> {} {}{}", message, routed.intent(), routed.companies(),
                 earlier.isEmpty() ? "" : " (earlier: " + earlier + ")");
         return routed;
@@ -208,9 +227,17 @@ public class RequestRouter {
         Intent intent = OVERVIEW.matcher(message).find() ? Intent.FULL_RESEARCH
                 : QUOTE.matcher(message).find() && !VALUATION.matcher(message).find() ? Intent.QUOTE : null;
         if (intent == null) {
-            return Optional.empty();
+            // a message that is only a company's name or symbol asks for nothing narrower than the report
+            return nameOnly(message).map(symbol -> new RoutedRequest(Intent.FULL_RESEARCH, List.of(symbol)));
         }
         return listed(message).map(symbol -> new RoutedRequest(intent, List.of(symbol)));
+    }
+
+    private Optional<String> nameOnly(String message) {
+        String name = String.join(" ", Arrays.stream(message.split("[^\\p{Alnum}&.'-]+"))
+                .filter(word -> !word.isBlank() && !FILLER.contains(word.toLowerCase(Locale.ROOT)))
+                .toList());
+        return directory.exact(name).map(NseSymbolDirectory.Listing::symbol);
     }
 
     /** The NSE symbol of the company a phrase names, once the request's filler words are removed. */

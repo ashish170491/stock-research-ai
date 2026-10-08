@@ -196,6 +196,19 @@
   details.more { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
   details.more summary { cursor: pointer; font-weight: 600; }
   .notice { padding: 14px; border-radius: 10px; background: var(--na-bg); color: var(--na-text); margin-top: 16px; }
+  .guide h2 { font-size: 20px; margin: 0 0 4px; }
+  .guide h3 { font-size: 16px; margin: 26px 0 6px; }
+  .guide p, .guide li { max-width: 760px; }
+  .guide .lead { color: var(--muted); }
+  .guide .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 10px 0; }
+  .guide .card h4 { margin: 0 0 4px; font-size: 14px; }
+  .guide .card p { margin: 4px 0; }
+  .guide .try { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--bg); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+  .guide .try:hover { border-color: var(--accent); color: var(--accent); }
+  .guide .boundary { background: var(--na-bg); color: var(--na-text); border-radius: 10px; padding: 12px 16px; margin: 16px 0; }
+  .guide ol.flow { padding-left: 20px; }
+  .guide ol.flow li { margin: 6px 0; }
   @media (max-width: 600px) { .user .bubble { max-width: 92%; } header { gap: 8px; } }
 </style>
 </head>
@@ -206,6 +219,7 @@
     <button role="tab" aria-selected="true" data-view="chat">Chat</button>
     <button role="tab" aria-selected="false" data-view="report">Report</button>
     <button role="tab" aria-selected="false" data-view="screen">Screener</button>
+    <button role="tab" aria-selected="false" data-view="guide">Guide</button>
   </div>
   <div class="spacer"></div>
   <span class="conv">Conversation <code id="conv-id"></code></span>
@@ -238,6 +252,59 @@
     </div>
     <div class="scroll"><div class="column" id="report-out">
       <div class="empty"><h2>Full research report</h2>Facts, observations, data gaps and sources built in Java, plus a verified interpretation.</div>
+    </div></div>
+  </section>
+
+  <section class="view" id="view-guide">
+    <div class="scroll"><div class="column guide">
+      <h2>How this application helps you research a stock</h2>
+      <p class="lead">It gathers figures from company filings and market data, calculates ratios and changes in code,
+        checks them, and lays them out so you can judge a company yourself. A buy, sell or hold decision stays yours.</p>
+
+      <div class="boundary"><strong>What it will not do.</strong> It gives no buy, sell or hold call, no rating, no target price and
+        no fair value, and it never says a figure is good, bad, cheap or expensive. A language model only phrases
+        and summarises: every number is calculated and checked in code, and a sentence the checks cannot support is removed
+        and the answer says so. A screen lists the companies that meet the criteria you chose; it is not a list of picks.</div>
+
+      <h3>A way to work through a company</h3>
+      <ol class="flow">
+        <li><strong>Find candidates.</strong> Use the Screener to see which Nifty 50 or Nifty 500 companies meet criteria you choose.</li>
+        <li><strong>Learn the terms.</strong> Ask what any ratio in the results means before you rely on it.</li>
+        <li><strong>Read one company in depth.</strong> Build its report: the facts, the observations, what is missing, and the sources.</li>
+        <li><strong>Put it in context.</strong> See how a figure sits among the company's own years and among companies in its industry group.</li>
+        <li><strong>Compare.</strong> Line up companies on the same figures, the same period and the same currency.</li>
+        <li><strong>Check the other side.</strong> Read the risks, data gaps and failed rules, then the filings themselves if you have loaded them.</li>
+        <li><strong>Decide yourself.</strong> Weigh it against your goals, time horizon and the rest of your portfolio, and take advice where you need it.</li>
+      </ol>
+
+      <h3>The features</h3>
+      <div class="card"><h4>Stock screener (Screener tab)</h4><p>Choose a preset (quality compounder, reasonable value, dividend) or narrow it down yourself. Every rule is checked in code and the figure each result was decided on is shown. A company with a missing or conflicting figure never passes a rule on that figure. Results come from the latest stored snapshot, not live prices, and the snapshot date is shown. &quot;What this screen checks&quot; lists the exact criteria.</p></div>
+      <div class="card"><h4>Screening in plain words (Chat)</h4><p>Describe what you want and the application turns it into explicit criteria, checks them against your own words, and shows every assumption it made. The index comes from your words; if you name none, the Nifty 50 is used.</p><p><button type="button" class="try">Which Nifty 50 stocks meet the dividend criteria?</button></p></div>
+      <div class="card"><h4>Full research report (Report tab or Chat)</h4><p>Facts, observations, risks and data gaps, an interpretation and sources, with a calculation audit. Everything except the interpretation is built in Java. The interpretation is reviewed by a second model pass and then by the number and claim checks. Figures that disagree between sources are shown as conflicts, not averaged.</p><p><button type="button" class="try">Research Infosys</button><button type="button" class="try">Fundamental overview of HDFC Bank</button></p></div>
+      <div class="card"><h4>Specific questions</h4><p>Ask about a profile, financial figures, performance over a period, valuation figures, or what a loaded document says. Answers quote the tool output and say when a figure is unavailable.</p><p><button type="button" class="try">How has it performed over 5 years?</button><button type="button" class="try">And its debt?</button></p><p>Shareholding (promoter, FII, DII) is not available from the current data source, and the application says so instead of guessing.</p></div>
+      <div class="card"><h4>Terms explained</h4><p>&quot;What is ROCE?&quot; is answered from a fixed, reviewed glossary: what the figure measures, how this application calculates it, what moves it and what to read it with. The glossary gives no ideal value and no verdict on a value.</p><p><button type="button" class="try">What is ROCE?</button><button type="button" class="try">What does CAGR mean?</button></p></div>
+      <div class="card"><h4>Context beside each ratio</h4><p>Where it is available, a figure is shown with the company's own filed years (the range, and whether the latest is the highest or lowest of those shown) and with its industry group's median, range and rank from the stored snapshot. A peer figure always carries the snapshot date and the number of peers. With too few peers, or for a metric that does not apply to that industry (for example ROCE for a bank), no peer statistic is shown.</p></div>
+      <div class="card"><h4>Comparing companies</h4><p>Companies are lined up on the same metric, fiscal period and currency. A cell that cannot be compared is marked not comparable rather than placed beside a figure it cannot be read against. One narrative covers the aligned table.</p><p><button type="button" class="try">Compare it with Wipro</button></p></div>
+      <div class="card"><h4>Your own documents</h4><p>Annual reports, concall transcripts and investor presentations that have been ingested can be searched by company. Each result carries its document, fiscal year and page, and its figures are attributed to that document.</p></div>
+      <div class="card"><h4>Multi-step research and watchlist</h4><p>A goal with several stages, such as screening a shortlist and then comparing the candidates, runs as a plan executed in code. It pauses with the shortlist for you to review and continues when you reply &quot;continue&quot;. It ends with a memo that is never a recommendation. Saved screens are re-run the same way later, so you can see which companies entered or left.</p></div>
+      <div class="card"><h4>Other AI tools (MCP)</h4><p>The same checked tools can be used from any MCP client, such as Claude Desktop or Claude Code, at <code>/mcp</code>.</p></div>
+
+      <h3>Reading the results</h3>
+      <ul>
+        <li><strong>Unavailable</strong> means the figure could not be found. It is never treated as zero.</li>
+        <li><strong>Conflict</strong> means two sources disagree. The application shows both and picks neither.</li>
+        <li><strong>Removed sentences</strong> are model sentences the checks could not support. The answer lists them.</li>
+        <li><strong>Snapshot date</strong> matters for screens and peer context: those are not live prices.</li>
+        <li><strong>Sources</strong> are listed with each report so you can look at the original.</li>
+      </ul>
+
+      <h3>Limits to keep in mind</h3>
+      <ul>
+        <li>Data covers listed NSE companies from Yahoo Finance and NSE filings, and can be late or incomplete.</li>
+        <li>A screen shows companies that meet your criteria on past figures. It says nothing about what happens next.</li>
+        <li>A small local model can misread a question. Check the routing label and the sources on an answer.</li>
+        <li>This is a research aid, not investment advice.</li>
+      </ul>
     </div></div>
   </section>
 
@@ -484,6 +551,12 @@
     // the conversation controls belong to the chat
     document.querySelectorAll('.conv, #new-conv').forEach(e => e.hidden = tab.dataset.view !== 'chat');
     if (tab.dataset.view === 'screen') loadScreener().then(() => { if (!$('screen-out').hasChildNodes()) runScreen(); });
+  }));
+
+  // --- guide: example buttons open the chat with the question filled in ---
+  document.querySelectorAll('#view-guide .try').forEach(b => b.addEventListener('click', () => {
+    document.querySelector('.tabs button[data-view="chat"]').click();
+    input.value = b.textContent; input.focus();
   }));
 
   // --- report view ---

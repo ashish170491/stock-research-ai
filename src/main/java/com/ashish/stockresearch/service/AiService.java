@@ -35,6 +35,10 @@ import java.util.stream.Collectors;
 @Service
 public class AiService {
 
+	private static final String JUDGEMENT_NOTE = "_This application does not say whether %s is a good investment, "
+			+ "or whether to buy, sell or hold it. Below is the research on it - the facts, observations, risks and "
+			+ "data gaps - to read and weigh yourself._\n\n";
+
 	/**
 	 * Model-agnostic guardrails for the tool loop. The tools carry the data and
 	 * its metadata; this states the evidence rules once so a model cannot
@@ -192,6 +196,9 @@ public class AiService {
 		switch (request.intent()) {
 			case FULL_RESEARCH -> {
 				answer = researchReportWriter.write(companies.get(0));
+				if (RequestRouter.asksForAJudgement(message)) {
+					answer = JUDGEMENT_NOTE.formatted(companies.get(0)) + answer;
+				}
 				remember(conversationId, message, "[The full research report on " + companies.get(0)
 						+ " was shown to the user.]");
 			}
