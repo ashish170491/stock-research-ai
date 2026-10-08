@@ -189,27 +189,6 @@ class MetricGlossaryTest {
                 .containsExactly("roce");
     }
 
-    // S11-5: the section groups the entries under the questions.
-    @Test
-    void groupsTheSectionByQuestion() {
-        String section = glossary.section(List.of(entry("pe"), entry("roe"), entry("debt-to-equity"), entry("cagr")));
-
-        assertThat(section).startsWith("## Explain the terms\n\n" + MetricGlossary.SOURCE_NOTE);
-        assertThat(section.indexOf("### Is it profitable?")).isLessThan(section.indexOf("**Return on equity (ROE)**"));
-        assertThat(section.indexOf("**Return on equity (ROE)**")).isLessThan(section.indexOf("### Is it growing?"));
-        assertThat(section.indexOf("### Is it growing?")).isLessThan(section.indexOf("### Is it financially stretched?"));
-        assertThat(section.indexOf("### Is it financially stretched?"))
-                .isLessThan(section.indexOf("### How much does the market charge for it?"));
-        assertThat(glossary.section(List.of())).isEmpty();
-
-        // an industry's reason is given once, at the end, however many entries it applies to
-        String withNotes = glossary.section(List.of(entry("roce"), entry("operating-margin"), entry("debt-to-equity")));
-        assertThat(withNotes).contains("- *By industry:* Not a primary measure for banks, NBFCs (non-bank lenders), "
-                + "insurers and other financial companies");
-        assertThat(withNotes.split(Pattern.quote(IndustryGroup.BANK.note()), -1)).hasSize(2);
-        assertThat(withNotes.indexOf("### Industry notes")).isGreaterThan(withNotes.indexOf("**Debt to equity (D/E)**"));
-    }
-
     // S11-5: a screen's criteria, arranged by question, one column per set of companies.
     @Test
     void arrangesAScreensCriteriaByQuestion() {

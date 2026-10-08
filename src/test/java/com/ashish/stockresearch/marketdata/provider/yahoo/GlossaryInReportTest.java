@@ -114,22 +114,14 @@ class GlossaryInReportTest {
                 .allSatisfy(metric -> assertThat(glossary.forMetricKey(metric)).as(metric).isPresent());
     }
 
-    // S11-6: the report ends with the terms it uses, rendered by Java and never shown to the model.
+    // The report carries no term explanations - they are on the Terms tab - and the model never sees them.
     @ParameterizedTest
     @ValueSource(strings = {"HDFCBANK", "TECHM"})
-    void endsWithTheTermsItUsesAndNeverShowsThemToTheModel(String symbol) {
+    void carriesNoTermExplanationsAndNeverShowsThemToTheModel(String symbol) {
         String report = report(symbol);
 
-        int section = report.indexOf("## Explain the terms");
-        assertThat(section).isGreaterThan(report.indexOf("## 4. INTERPRETATION"))
-                .isGreaterThan(report.indexOf("## Appendix - calculation audit"));
-        String body = report.substring(0, section);
-        String terms = report.substring(section);
-        List<GlossaryEntry> used = glossary.termsIn(body);
-        assertThat(terms).isEqualTo(glossary.section(used));
-        // only the terms the report uses
-        assertThat(glossary.entries()).filteredOn(entry -> !used.contains(entry))
-                .allSatisfy(entry -> assertThat(terms).doesNotContain("**" + entry.name() + "**"));
+        assertThat(report).doesNotContain("## Explain the terms").doesNotContain("Industry notes")
+                .doesNotContain("How it is calculated here");
         assertThat(model.prompts).singleElement().satisfies(prompt -> assertThat(prompt.getContents())
                 .doesNotContain("Explain the terms").doesNotContain("At a glance, by question")
                 .doesNotContain(glossary.entries().get(0).meaning()));

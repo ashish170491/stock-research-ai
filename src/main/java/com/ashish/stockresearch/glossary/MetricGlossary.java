@@ -235,32 +235,6 @@ public class MetricGlossary {
 
     // --- Rendering -------------------------------------------------------------------------------
 
-    /** The "Explain the terms" section for an answer: the entries given, grouped by question. */
-    public String section(Collection<GlossaryEntry> chosen) {
-        List<GlossaryEntry> ordered = ordered(chosen);
-        if (ordered.isEmpty()) {
-            return "";
-        }
-        StringBuilder md = new StringBuilder("## Explain the terms\n\n").append(SOURCE_NOTE).append("\n\n");
-        MetricQuestion current = null;
-        for (GlossaryEntry entry : ordered) {
-            if (entry.question() != current) {
-                current = entry.question();
-                md.append("### ").append(current.heading()).append("\n\n");
-            }
-            md.append(render(entry, false)).append("\n");
-        }
-        // each industry's reason once, rather than under every entry it applies to
-        List<IndustryGroup> named = GROUP_NAMES.keySet().stream()
-                .filter(group -> ordered.stream().anyMatch(entry -> notPrimaryFor(entry, group))).toList();
-        if (!named.isEmpty()) {
-            md.append("### Industry notes\n\n");
-            named.forEach(group -> md.append("- **").append(capitalised(GROUP_NAMES.get(group))).append("**: ")
-                    .append(group.note()).append("\n"));
-        }
-        return md.toString();
-    }
-
     /**
      * A screen's criteria arranged by the question each answers, one column per set of companies they apply to,
      * so a reader sees what the screen asks of a company before the terms are explained.
@@ -293,22 +267,6 @@ public class MetricGlossary {
                         .append(" |\n");
             }
         }
-        return md.toString();
-    }
-
-    /**
-     * A short list of the terms an answer uses, one line each, for a chat answer that is not a report: the
-     * full entry is a "what is X?" away.
-     */
-    public String termsUsed(Collection<GlossaryEntry> chosen) {
-        List<GlossaryEntry> ordered = ordered(chosen);
-        if (ordered.isEmpty()) {
-            return "";
-        }
-        StringBuilder md = new StringBuilder("**Terms used** _(from the application's glossary, not the language "
-                + "model; ask “what is %s?” for how it is calculated and read)_\n".formatted(shortName(ordered.get(0))));
-        ordered.forEach(entry -> md.append("- **").append(entry.name()).append("**: ").append(entry.meaning())
-                .append("\n"));
         return md.toString();
     }
 

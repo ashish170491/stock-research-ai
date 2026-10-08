@@ -163,7 +163,7 @@ public class ResearchReportWriter {
 		String withBearCase = rendered + "\n## Bear case\n\n_What could go wrong, drawn only from the data gaps, "
 				+ "data-quality issues and failed screening rules above - never from the facts or observations._\n\n"
 				+ bearCase + "\n";
-		return withBearCase + "\n" + glossary.section(glossary.termsIn(withBearCase));
+		return withBearCase;
 	}
 
 	private String writeInterpretation(String prompt) {

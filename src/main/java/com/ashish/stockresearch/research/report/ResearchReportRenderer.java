@@ -213,7 +213,7 @@ public class ResearchReportRenderer {
             return;
         }
         md.append("## At a glance, by question\n\n_The latest figures from the FACTS below, grouped by the question "
-                + "each helps answer. What each measures and how to read it is under Explain the terms at the end._\n\n");
+                + "each helps answer. What each measures and how to read it is on the Terms tab._\n\n");
         md.append("| Question | Figure | Value | Period |\n|---|---|---|---|\n");
         byQuestion.forEach((question, unordered) -> {
             boolean first = true;

@@ -196,6 +196,18 @@
   details.more { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
   details.more summary { cursor: pointer; font-weight: 600; }
   .notice { padding: 14px; border-radius: 10px; background: var(--na-bg); color: var(--na-text); margin-top: 16px; }
+  .terms h2 { font-size: 20px; margin: 0 0 4px; }
+  .terms .lead { color: var(--muted); max-width: 760px; margin: 0 0 12px; }
+  .terms input[type="search"] { width: 100%; max-width: 760px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--text); font: inherit; margin-bottom: 8px; }
+  .terms h3 { font-size: 15px; margin: 22px 0 6px; color: var(--muted); }
+  .terms details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 6px 0; max-width: 820px; }
+  .terms summary { cursor: pointer; font-weight: 600; }
+  .terms .meaning { margin: 4px 0 0; }
+  .terms dl { margin: 10px 0 2px; }
+  .terms dt { font-weight: 600; font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .terms dd { margin: 2px 0 0; }
+  .terms .none { color: var(--muted); }
   .guide h2 { font-size: 20px; margin: 0 0 4px; }
   .guide h3 { font-size: 16px; margin: 26px 0 6px; }
   .guide p, .guide li { max-width: 760px; }
@@ -219,6 +231,7 @@
     <button role="tab" aria-selected="true" data-view="chat">Chat</button>
     <button role="tab" aria-selected="false" data-view="report">Report</button>
     <button role="tab" aria-selected="false" data-view="screen">Screener</button>
+    <button role="tab" aria-selected="false" data-view="terms">Terms</button>
     <button role="tab" aria-selected="false" data-view="guide">Guide</button>
   </div>
   <div class="spacer"></div>
@@ -255,6 +268,17 @@
     </div></div>
   </section>
 
+  <section class="view" id="view-terms">
+    <div class="scroll"><div class="column terms">
+      <h2>Financial terms</h2>
+      <p class="lead">What each figure in the answers measures and how to read it. This text was written and reviewed in advance;
+        the language model does not write it, and it gives no ideal value or verdict on a figure. Open a term for how this
+        application calculates it.</p>
+      <input type="search" id="terms-search" placeholder="Search a term, e.g. ROE or debt" aria-label="Search the terms">
+      <div id="terms-body"><p class="none">Loading the terms…</p></div>
+    </div></div>
+  </section>
+
   <section class="view" id="view-guide">
     <div class="scroll"><div class="column guide">
       <h2>How this application helps you research a stock</h2>
@@ -282,7 +306,7 @@
       <div class="card"><h4>Screening in plain words (Chat)</h4><p>Describe what you want and the application turns it into explicit criteria, checks them against your own words, and shows every assumption it made. The index comes from your words; if you name none, the Nifty 50 is used.</p><p><button type="button" class="try">Which Nifty 50 stocks meet the dividend criteria?</button></p></div>
       <div class="card"><h4>Full research report (Report tab or Chat)</h4><p>Facts, observations, risks and data gaps, an interpretation and sources, with a calculation audit. Everything except the interpretation is built in Java. The interpretation is reviewed by a second model pass and then by the number and claim checks. Figures that disagree between sources are shown as conflicts, not averaged.</p><p><button type="button" class="try">Research Infosys</button><button type="button" class="try">Fundamental overview of HDFC Bank</button></p></div>
       <div class="card"><h4>Specific questions</h4><p>Ask about a profile, financial figures, performance over a period, valuation figures, or what a loaded document says. Answers quote the tool output and say when a figure is unavailable.</p><p><button type="button" class="try">How has it performed over 5 years?</button><button type="button" class="try">And its debt?</button></p><p>Shareholding (promoter, FII, DII) is not available from the current data source, and the application says so instead of guessing.</p></div>
-      <div class="card"><h4>Terms explained</h4><p>&quot;What is ROCE?&quot; is answered from a fixed, reviewed glossary: what the figure measures, how this application calculates it, what moves it and what to read it with. The glossary gives no ideal value and no verdict on a value.</p><p><button type="button" class="try">What is ROCE?</button><button type="button" class="try">What does CAGR mean?</button></p></div>
+      <div class="card"><h4>Terms explained</h4><p>Answers do not explain the terms they use. The Terms tab lists every figure, grouped by the question it helps answer, with what it measures, how this application calculates it, how to read it and what to read it with. Asking &quot;What is ROCE?&quot; in the chat gives the same text. It is fixed, reviewed text, with no ideal value and no verdict on a value.</p><p><button type="button" class="try">What is ROCE?</button><button type="button" class="try">What does CAGR mean?</button></p></div>
       <div class="card"><h4>Context beside each ratio</h4><p>Where it is available, a figure is shown with the company's own filed years (the range, and whether the latest is the highest or lowest of those shown) and with its industry group's median, range and rank from the stored snapshot. A peer figure always carries the snapshot date and the number of peers. With too few peers, or for a metric that does not apply to that industry (for example ROCE for a bank), no peer statistic is shown.</p></div>
       <div class="card"><h4>Comparing companies</h4><p>Companies are lined up on the same metric, fiscal period and currency. A cell that cannot be compared is marked not comparable rather than placed beside a figure it cannot be read against. One narrative covers the aligned table.</p><p><button type="button" class="try">Compare it with Wipro</button></p></div>
       <div class="card"><h4>Your own documents</h4><p>Annual reports, concall transcripts and investor presentations that have been ingested can be searched by company. Each result carries its document, fiscal year and page, and its figures are attributed to that document.</p></div>
@@ -550,6 +574,7 @@
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab.dataset.view));
     // the conversation controls belong to the chat
     document.querySelectorAll('.conv, #new-conv').forEach(e => e.hidden = tab.dataset.view !== 'chat');
+    if (tab.dataset.view === 'terms') loadTerms();
     if (tab.dataset.view === 'screen') loadScreener().then(() => { if (!$('screen-out').hasChildNodes()) runScreen(); });
   }));
 
@@ -558,6 +583,49 @@
     document.querySelector('.tabs button[data-view="chat"]').click();
     input.value = b.textContent; input.focus();
   }));
+
+  // --- terms: the glossary page; answers carry no term explanations ---
+  let termsLoaded = false;
+  async function loadTerms() {
+    if (termsLoaded) return;
+    const body = $('terms-body');
+    try {
+      const data = await (await fetch('/api/glossary')).json();
+      termsLoaded = true;
+      renderTerms(data, '');
+      $('terms-search').addEventListener('input', e => renderTerms(data, e.target.value.trim().toLowerCase()));
+    } catch (e) {
+      body.replaceChildren(el('p', 'none', 'The terms could not be loaded. Try again in a moment.'));
+    }
+  }
+  function renderTerms(data, query) {
+    const body = $('terms-body');
+    body.replaceChildren();
+    const matches = data.entries.filter(e => !query
+      || (e.name + ' ' + e.key + ' ' + e.meaning).toLowerCase().includes(query));
+    if (!matches.length) { body.append(el('p', 'none', 'No term matches “' + query + '”.')); return; }
+    const groups = new Map();
+    matches.forEach(e => { if (!groups.has(e.question)) groups.set(e.question, []); groups.get(e.question).push(e); });
+    groups.forEach((entries, question) => {
+      body.append(el('h3', null, question));
+      entries.forEach(e => {
+        const d = el('details');
+        d.id = 'term-' + e.key;
+        if (query) d.open = true;
+        d.append(el('summary', null, e.name), el('p', 'meaning', e.meaning));
+        const dl = el('dl');
+        const add = (label, text) => { if (text) { dl.append(el('dt', null, label), el('dd', null, text)); } };
+        add('How this application calculates it', e.calculation);
+        add('How to read it', e.howToRead);
+        if (e.readWith && e.readWith.length) add('Read it with', e.readWith.join('; '));
+        (e.industryNotes || []).forEach(n => add('By industry', n));
+        (e.screenSettings || []).forEach(n => add('In the screens', n));
+        d.append(dl);
+        body.append(d);
+      });
+    });
+    if (!query) body.append(el('p', 'none', data.note));
+  }
 
   // --- report view ---
   $('report-form').addEventListener('submit', async e => {

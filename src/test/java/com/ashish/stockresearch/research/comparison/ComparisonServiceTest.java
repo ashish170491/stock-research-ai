@@ -100,7 +100,7 @@ class ComparisonServiceTest {
 
     private ComparisonService service(ChatModel model) {
         return new ComparisonService(ChatClient.builder(model), new PassThrough(), researchReportService, contextService,
-                builder, glossary, new NumericClaimVerifier(), new UnsupportedClaimFilter(),
+                builder, new NumericClaimVerifier(), new UnsupportedClaimFilter(),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"));
     }
 

@@ -171,8 +171,8 @@ public class AiService {
 	 *   <li>NOT_STOCK_RELATED - a plain answer without tools.</li>
 	 * </ul>
 	 *
-	 * Screen and tool answers end with the glossary's explanation of the terms they use, added by Java after
-	 * the answer checks; a report carries its own ({@link ResearchReportWriter}).
+	 * Answers do not carry term explanations: the glossary has its own page (the Terms tab, GET /api/glossary),
+	 * and "what is X?" is answered from it in chat.
 	 *
 	 * The conversation's history is passed to the two model paths. What is remembered is what the
 	 * user was shown - the screened answer, never the model's draft, so a removed claim cannot come
@@ -218,7 +218,6 @@ public class AiService {
 				ScreenerAgent.ScreenAnswer screen = screenerAgent.answer(message);
 				answer = screen.criteria() == null ? screen.text()
 						: screen.text() + "\n\n" + glossary.criteriaByQuestion(screen.criteria());
-				answer = withTermsSection(answer);
 				// The table itself stays out of the memory, but follow-up answers may quote it.
 				session.addEvidence(screen.evidence());
 				remember(conversationId, message, screen.memoryNote());
@@ -237,10 +236,6 @@ public class AiService {
 				}
 				ToolUsage usage = new ToolUsage();
 				answer = answerWithTools(conversationId, message, companies, usage, session);
-				String terms = glossary.termsUsed(glossary.termsIn(answer));
-				if (!terms.isBlank()) {
-					answer = answer + "\n\n" + terms;
-				}
 				answer = answer + documentSourcesSection(usage);
 				if (companies.isEmpty()) {
 					companies = usage.calls().stream().map(ToolUsage.Call::symbol)
@@ -261,12 +256,6 @@ public class AiService {
 		}
 		session.rememberCompanies(companies);
 		return new ChatAnswer(request.intent(), companies, answer);
-	}
-
-	/** The answer, followed by the glossary's entries for the terms it uses, if any. */
-	private String withTermsSection(String answer) {
-		String section = glossary.section(glossary.termsIn(answer));
-		return section.isBlank() ? answer : answer + "\n\n" + section;
 	}
 
 	/**

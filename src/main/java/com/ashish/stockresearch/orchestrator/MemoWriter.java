@@ -1,6 +1,5 @@
 package com.ashish.stockresearch.orchestrator;
 
-import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
 import com.ashish.stockresearch.service.OllamaCalls;
@@ -47,10 +46,9 @@ public class MemoWriter {
     private final OllamaCalls ollama;
     private final NumericClaimVerifier numericVerifier;
     private final UnsupportedClaimFilter claimFilter;
-    private final MetricGlossary glossary;
 
     public MemoWriter(ChatClient.Builder chatClientBuilder, Advisor conversationTraceAdvisor, OllamaCalls ollama,
-            NumericClaimVerifier numericVerifier, UnsupportedClaimFilter claimFilter, MetricGlossary glossary) {
+            NumericClaimVerifier numericVerifier, UnsupportedClaimFilter claimFilter) {
         // No tools: every fact the memo may state is already in the evidence text it is handed.
         this.memoClient = chatClientBuilder.clone()
                 .defaultSystem(MEMO_PROMPT)
@@ -60,7 +58,6 @@ public class MemoWriter {
         this.ollama = ollama;
         this.numericVerifier = numericVerifier;
         this.claimFilter = claimFilter;
-        this.glossary = glossary;
     }
 
     public String write(String goal, String evidence) {
@@ -81,6 +78,6 @@ public class MemoWriter {
                     + "does not support: " + String.join(" | ", screened.removedSentences()) + "_");
         }
         String rendered = text.toString();
-        return rendered + "\n\n" + glossary.section(glossary.termsIn(rendered));
+        return rendered;
     }
 }
