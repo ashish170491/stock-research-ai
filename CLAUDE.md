@@ -51,5 +51,11 @@
 - Fiscal-year figures come from the filings (FiledAnnualHistoryService); Yahoo's net profit
   is the cross-check, and a year they disagree on is a DATA_CONFLICT for that year only.
   Years are never mixed across sources.
+- Ingested documents (annual reports, concall transcripts, investor presentations) are chunked,
+  embedded and searched through searchCompanyDocuments, a plain @Tool like any other - never a
+  QuestionAnswerAdvisor, which would inject retrieved text before ToolUsage can record it as
+  evidence. Every chunk carries its symbol, document type, fiscal year and page; a search is
+  filtered to one symbol, and every result's citation is Java-rendered into the answer, not left
+  to the model to repeat. A chunk's figures are attributed to the document, never to Yahoo.
 - Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md

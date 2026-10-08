@@ -23,6 +23,7 @@ import com.ashish.stockresearch.research.report.UnsupportedClaimFilter;
 import com.ashish.stockresearch.research.sector.SectorClassifier;
 import com.ashish.stockresearch.screening.ScreeningRenderer;
 import com.ashish.stockresearch.screening.ScreeningService;
+import com.ashish.stockresearch.tool.DocumentSearchTools;
 import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
@@ -45,6 +46,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.vectorstore.VectorStore;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -138,9 +140,14 @@ class AiServiceRoutingTest {
     private final ResearchSessions sessions = new ResearchSessions(chatMemory);
 
     private AiService service(ChatModel model) {
+        return service(model, mock(VectorStore.class));
+    }
+
+    private AiService service(ChatModel model, VectorStore documentVectorStore) {
         StockResearchTools tools = new StockResearchTools(research, new ResearchReportRenderer(), new SectorClassifier());
         return new AiService(ChatClient.builder(model), router, new StockPriceTool(quotes), tools,
-                new ScreeningTools(mock(ScreeningService.class), new ScreeningRenderer()), new PassThrough(),
+                new ScreeningTools(mock(ScreeningService.class), new ScreeningRenderer()),
+                new DocumentSearchTools(documentVectorStore), new PassThrough(),
                 reportWriter, comparisonService, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
                         new ScreeningCountVerifier(), new UnsupportedClaimFilter()),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions,
@@ -480,6 +487,39 @@ class AiServiceRoutingTest {
                         "Fetching the latest price of TCS (Yahoo Finance)",
                         "Understood: what a term means",
                         "Looking the term up in the application's glossary");
+    }
+
+    // Step 7: a tool-loop answer that used searchCompanyDocuments shows the citation regardless of
+    // whether the model's own words repeat it (S7-5), and the document's figure grounds the answer
+    // (S7-6) without the application ever saying it came from Yahoo.
+    @Test
+    void aDocumentSearchAnswerShowsItsCitationAndIsNotAttributedToYahoo() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("doc-vector-store");
+        org.springframework.ai.vectorstore.SimpleVectorStore store = org.springframework.ai.vectorstore.SimpleVectorStore
+                .builder(new com.ashish.stockresearch.documents.FixedEmbeddingModel()).build();
+        new com.ashish.stockresearch.documents.DocumentIngestionService(store,
+                new com.ashish.stockresearch.documents.DocumentsProperties(dir.resolve("store.json").toString()))
+                .ingest(new org.springframework.core.io.ClassPathResource("fixtures/documents/hdfcbank-annual-report-fy2026.pdf"),
+                        "HDFCBANK", com.ashish.stockresearch.documents.DocType.ANNUAL_REPORT, 2026,
+                        "HDFC Bank Annual Report FY2026.pdf");
+
+        String question = "What was HDFC Bank's Gross NPA ratio?";
+        routes(question, Intent.SPECIFIC_QUESTION, "HDFCBANK");
+        ScriptedModel model = new ScriptedModel(messages -> {
+            Message last = messages.get(messages.size() - 1);
+            if (!(last instanceof ToolResponseMessage)) {
+                return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall(
+                        "1", "function", "searchCompanyDocuments",
+                        "{\"symbol\":\"HDFCBANK\",\"question\":\"Gross NPA ratio\"}"))).build();
+            }
+            return text("The Gross NPA ratio was 1.24%.");
+        });
+
+        String answer = service(model, store).chat(CONVERSATION, question).text();
+
+        assertThat(answer).contains("The Gross NPA ratio was 1.24%.").doesNotContain("Yahoo")
+                .contains("**Document sources**").contains("HDFCBANK").contains("ANNUAL_REPORT")
+                .contains("FY2026").contains("p. 2");
     }
 
     // A screen's first step names no index: the screen itself says which one the request's words chose.
