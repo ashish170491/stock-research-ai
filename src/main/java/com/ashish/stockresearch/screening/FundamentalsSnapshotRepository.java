@@ -100,6 +100,16 @@ public class FundamentalsSnapshotRepository {
                 .optional();
     }
 
+    /** The run before the newest completed one - what a watchlist diffs the newest run against. */
+    public Optional<SnapshotRun> previousCompletedRun(Universe universe) {
+        return jdbc.sql("""
+                        SELECT * FROM snapshot_run WHERE universe = :universe AND status = 'COMPLETED'
+                        ORDER BY finished_at DESC, id DESC OFFSET 1 ROW FETCH FIRST 1 ROWS ONLY""")
+                .param("universe", universe.name())
+                .query(FundamentalsSnapshotRepository::run)
+                .optional();
+    }
+
     /** The newest run of the universe in any state, to report progress. */
     public Optional<SnapshotRun> latestRun(Universe universe) {
         return jdbc.sql("SELECT * FROM snapshot_run WHERE universe = :universe ORDER BY id DESC FETCH FIRST 1 ROWS ONLY")

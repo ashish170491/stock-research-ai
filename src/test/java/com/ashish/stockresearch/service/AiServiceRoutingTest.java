@@ -128,6 +128,8 @@ class AiServiceRoutingTest {
     private final ScreenerAgent screenerAgent = mock(ScreenerAgent.class);
     private final com.ashish.stockresearch.research.comparison.ComparisonService comparisonService =
             mock(com.ashish.stockresearch.research.comparison.ComparisonService.class);
+    private final com.ashish.stockresearch.orchestrator.ResearchOrchestrator orchestrator =
+            mock(com.ashish.stockresearch.orchestrator.ResearchOrchestrator.class);
     private final StockResearchService research = new StockResearchService(
             new MockStockResearchProvider(), new MockStockResearchProvider(), new UnsupportedShareholdingProvider(),
             new MockStockResearchProvider(), new FinancialMetricsService(), new HistoricalPerformanceService(),
@@ -151,7 +153,7 @@ class AiServiceRoutingTest {
                 reportWriter, comparisonService, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
                         new ScreeningCountVerifier(), new UnsupportedClaimFilter()),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions,
-                com.ashish.stockresearch.glossary.TestGlossary.glossary());
+                com.ashish.stockresearch.glossary.TestGlossary.glossary(), orchestrator);
     }
 
     private void routes(String message, Intent intent, String... companies) {
@@ -237,6 +239,38 @@ class AiServiceRoutingTest {
         assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo("[A screen was shown to the user]");
     }
 
+    // Step 8: an orchestrated goal is handed straight to the orchestrator, which lays out and runs its own plan.
+    @Test
+    void orchestrateRequestsGoToTheOrchestrator() {
+        String goal = "Find 3 long-term candidates in pharma and explain the trade-offs";
+        routes(goal, Intent.ORCHESTRATE);
+        when(orchestrator.start(eq(goal), any())).thenReturn("THE RESEARCH PLAN'S ANSWER");
+
+        AiService.ChatAnswer answer = service(UNUSED).chat(CONVERSATION, goal);
+
+        assertThat(answer.intent()).isEqualTo(Intent.ORCHESTRATE);
+        assertThat(answer.text()).isEqualTo("THE RESEARCH PLAN'S ANSWER");
+    }
+
+    // S8-4: a reply of "continue" to a paused plan resumes it - it never goes through the router at all.
+    @Test
+    void continueResumesAPausedOrchestratorPlanWithoutRouting() {
+        com.ashish.stockresearch.orchestrator.ResearchPlan plan = new com.ashish.stockresearch.orchestrator.ResearchPlan(
+                "find candidates", List.of(new com.ashish.stockresearch.orchestrator.PlanStep(
+                        com.ashish.stockresearch.orchestrator.StepType.WRITE_MEMO, null, List.of())));
+        com.ashish.stockresearch.orchestrator.OrchestratorCheckpoint checkpoint =
+                new com.ashish.stockresearch.orchestrator.OrchestratorCheckpoint(plan, 0, List.of(), List.of(), 0, 0,
+                        java.time.Duration.ZERO);
+        com.ashish.stockresearch.agent.ResearchSession session = sessions.get(CONVERSATION);
+        session.pause(checkpoint);
+        when(orchestrator.resume(session)).thenReturn("THE REST OF THE PLAN");
+
+        AiService.ChatAnswer answer = service(UNUSED).chat(CONVERSATION, "continue");
+
+        assertThat(answer.text()).isEqualTo("THE REST OF THE PLAN");
+        verify(router, never()).route(org.mockito.ArgumentMatchers.anyString(), any());
+    }
+
     // S11-6: a screen's answer ends with the glossary's entries for its criteria, added after the checks.
     @Test
     void aScreenAnswerEndsWithTheTermsItsCriteriaUse() {
@@ -261,7 +295,7 @@ class AiServiceRoutingTest {
         com.ashish.stockresearch.screening.ScreeningCriteria quality = com.ashish.stockresearch.screening
                 .ScreeningPresetsTest.presets().find("quality-compounder").orElseThrow();
         when(screenerAgent.answer(question)).thenReturn(new ScreenerAgent.ScreenAnswer("5 stocks meet every criterion.",
-                "TOOL RESULT: screenStocks - status OK", "[A screen was shown to the user]", quality));
+                "TOOL RESULT: screenStocks - status OK", "[A screen was shown to the user]", quality, List.of()));
         MetricGlossary glossary = com.ashish.stockresearch.glossary.TestGlossary.glossary();
 
         String text = service(UNUSED).chat(CONVERSATION, question).text();

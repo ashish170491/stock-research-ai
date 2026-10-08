@@ -127,12 +127,19 @@ public class ScreenerAgent {
      * @param evidence   what the answer rests on (the rendered screen), for checking later answers that quote it;
      *                   empty when no screen ran
      * @param memoryNote a one-line record of the turn for the conversation's memory
+     * @param criteria   the criteria the screen ran with; null when no screen was run
+     * @param shortlist  symbols meeting every criterion, ranked; empty when no screen ran. The orchestrator
+     *                   (roadmap Step 8) uses this, not the rendered text, as its SCREEN step's structured output.
      */
-    /** @param criteria the criteria the screen ran with; null when no screen was run */
-    public record ScreenAnswer(String text, String evidence, String memoryNote, ScreeningCriteria criteria) {
+    public record ScreenAnswer(String text, String evidence, String memoryNote, ScreeningCriteria criteria,
+                               List<String> shortlist) {
+
+        public ScreenAnswer {
+            shortlist = shortlist == null ? List.of() : List.copyOf(shortlist);
+        }
 
         public ScreenAnswer(String text, String evidence, String memoryNote) {
-            this(text, evidence, memoryNote, null);
+            this(text, evidence, memoryNote, null, List.of());
         }
     }
 
@@ -243,7 +250,8 @@ public class ScreenerAgent {
                 summarising.failed("the local model did not answer");
             }
             return new ScreenAnswer(compose(interpretation, summary, ScreeningRenderer.forReaders(result)), result,
-                    memoryNote(interpretation.criteria().get(), outcome), interpretation.criteria().get());
+                    memoryNote(interpretation.criteria().get(), outcome), interpretation.criteria().get(),
+                    meetingAll(outcome));
         }
     }
 

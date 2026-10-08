@@ -57,5 +57,14 @@
   evidence. Every chunk carries its symbol, document type, fiscal year and page; a search is
   filtered to one symbol, and every result's citation is Java-rendered into the answer, not left
   to the model to repeat. A chunk's figures are attributed to the document, never to Yahoo.
+- The research orchestrator (ResearchOrchestrator) turns a multi-step goal into a ResearchPlan of
+  steps from a fixed StepType enum; PlanValidator rejects an unknown or malformed step before
+  anything runs. Java executes every step itself - the planner is never given tools and never
+  calls a data provider. A SCREEN step always pauses for a human checkpoint (the shortlist, saved
+  on the ResearchSession) until the conversation replies "continue"; OrchestratorBudget stops a
+  plan that exceeds its step, model-call or wall-clock limit and returns a partial memo naming
+  which one. The final memo (MemoWriter) goes through the same verifiers as every other answer,
+  and never a recommendation. Saved screens (watchlist/) are re-run deterministically, by preset
+  and universe, never re-extracted by a model, so entered/left is comparable across snapshots.
 - Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md

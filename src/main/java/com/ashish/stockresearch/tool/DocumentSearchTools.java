@@ -58,17 +58,32 @@ public class DocumentSearchTools {
             @ToolParam(description = "The question to search this company's ingested documents for") String question,
             ToolContext toolContext) {
         log.info("TOOL CALLED: searchCompanyDocuments symbol={} question={}", symbol, question);
+        List<Document> results = results(symbol, question);
+        String status = results.isEmpty() ? "NO_MATCH" : "OK";
+        String normalized = symbol.strip().toUpperCase(Locale.ROOT).replace("'", "");
+        String text = render(normalized, results);
+        results.forEach(chunk -> ToolUsage.recordCitation(toolContext, new ToolUsage.Citation(citation(chunk))));
+        return recorded(toolContext, SEARCH_TOOL, normalized, status, text);
+    }
+
+    /**
+     * The same search and rendering, callable directly in Java - by the autonomous orchestrator's
+     * SEARCH_DOCS step (roadmap Step 8), which executes every step itself rather than letting a model
+     * call a tool. Records no {@link ToolUsage}: there is no {@link ToolContext} outside the tool-calling
+     * loop, and the orchestrator folds this text into its own evidence pack instead.
+     */
+    public String search(String symbol, String question) {
+        return render(symbol.strip().toUpperCase(Locale.ROOT).replace("'", ""), results(symbol, question));
+    }
+
+    private List<Document> results(String symbol, String question) {
         String normalized = symbol.strip().toUpperCase(Locale.ROOT).replace("'", "");
         SearchRequest request = SearchRequest.builder()
                 .query(question)
                 .topK(TOP_K)
                 .filterExpression(DocumentMetadataKeys.SYMBOL + " == '" + normalized + "'")
                 .build();
-        List<Document> results = vectorStore.similaritySearch(request);
-        String status = results.isEmpty() ? "NO_MATCH" : "OK";
-        String text = render(normalized, results);
-        results.forEach(chunk -> ToolUsage.recordCitation(toolContext, new ToolUsage.Citation(citation(chunk))));
-        return recorded(toolContext, SEARCH_TOOL, normalized, status, text);
+        return vectorStore.similaritySearch(request);
     }
 
     private static String render(String symbol, List<Document> results) {

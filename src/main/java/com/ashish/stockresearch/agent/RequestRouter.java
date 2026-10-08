@@ -51,6 +51,9 @@ public class RequestRouter {
             - QUOTE: the current, latest or live share price of one or more companies.
             - COMPARE: two or more companies compared side by side.
             - SCREEN: find, filter, screen or shortlist stocks that meet criteria, naming no single company.
+            - ORCHESTRATE: a multi-step research goal needing several stages - screening a shortlist, then a
+              deep dive or comparison, then a memo - not answerable by a single screen, comparison or report.
+              Naming no single company.
             - SPECIFIC_QUESTION: any narrower question about a company or stock (a metric, a period,
               ownership, performance over time, what the company does).
             - EXPLAIN_TERM: what a financial term, ratio or metric means or how to read it, naming no
@@ -89,6 +92,18 @@ public class RequestRouter {
                     + "|\\b(?:stocks|companies|shares)\\s+(?:that|which|with)\\s+(?:meet|pass|satisfy|clear|have)\\b"
                     // the Screener page's question: "Which Nifty 50 other financial companies meet the dividend criteria?"
                     + "|\\b(?:meet|meets|pass|passes|satisfy|satisfies)\\s+the\\s+[\\w-]+\\s+(?:criteria|preset|screen)\\b",
+            Pattern.CASE_INSENSITIVE);
+    /**
+     * A multi-step research goal - the roadmap's own example is "Find 3 long-term candidates in pharma
+     * from the Nifty 200 and explain the trade-offs" - as opposed to a plain screen or comparison. Checked
+     * before {@link #SCREEN}: it is narrower, so it must win the match.
+     */
+    static final Pattern ORCHESTRATE = Pattern.compile(
+            "\\bcandidates?\\b[\\s\\S]*?\\b(?:compare|trade[- ]offs?|deep[- ]dive)\\b"
+                    + "|\\b(?:compare|trade[- ]offs?)\\b[\\s\\S]*?\\bcandidates?\\b"
+                    + "|\\bdeep[- ]dive\\b[\\s\\S]*?\\bcompar(?:e|ison)\\b"
+                    + "|\\binvestigate\\b[\\s\\S]*?\\bthoroughly\\b"
+                    + "|\\bresearch\\s+(?:plan|memo)\\b",
             Pattern.CASE_INSENSITIVE);
     /** Words around a company name in these requests, removed to leave the name itself. */
     private static final Set<String> FILLER = Set.of(
@@ -167,6 +182,9 @@ public class RequestRouter {
         if (glossary.asked(message).flatMap(MetricGlossary.Asked::entry).isPresent()
                 && directory.namedIn(message).isEmpty()) {
             return Optional.of(new RoutedRequest(Intent.EXPLAIN_TERM, List.of()));
+        }
+        if (ORCHESTRATE.matcher(message).find() && directory.namedIn(message).isEmpty()) {
+            return Optional.of(new RoutedRequest(Intent.ORCHESTRATE, List.of()));
         }
         if (SCREEN.matcher(message).find()) {
             // "Which companies does Reliance Industries own?" is about one company, not a screen
@@ -264,8 +282,9 @@ public class RequestRouter {
         return switch (routed.intent()) {
             case FULL_RESEARCH, QUOTE, SPECIFIC_QUESTION ->
                     named.isEmpty() ? new RoutedRequest(routed.intent(), earlier) : routed;
-            // a screen is about many stocks, never the one discussed before
+            // a screen or an orchestrated goal is about many stocks, never the one discussed before
             case SCREEN -> new RoutedRequest(Intent.SCREEN, List.of());
+            case ORCHESTRATE -> new RoutedRequest(Intent.ORCHESTRATE, List.of());
             case COMPARE -> {
                 if (named.size() >= 2) {
                     yield routed;
@@ -293,6 +312,8 @@ public class RequestRouter {
             };
             // a screen names no company; one the model listed is not screened on its own
             case SCREEN -> new RoutedRequest(Intent.SCREEN, List.of());
+            // likewise an orchestrated goal: the plan names its own candidates as it runs
+            case ORCHESTRATE -> new RoutedRequest(Intent.ORCHESTRATE, List.of());
             // "what is TCS's ROE?" is a question about TCS, not about the term
             case EXPLAIN_TERM -> routed.companies().isEmpty() ? routed
                     : new RoutedRequest(Intent.SPECIFIC_QUESTION, routed.companies());

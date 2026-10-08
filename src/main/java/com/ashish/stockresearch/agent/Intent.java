@@ -28,5 +28,13 @@ public enum Intent {
     EXPLAIN_TERM,
 
     /** Not about stocks at all. Answered without tools. */
-    NOT_STOCK_RELATED
+    NOT_STOCK_RELATED,
+
+    /**
+     * A multi-step research goal - screen for candidates, then deep-dive or compare them, then a memo -
+     * not answerable by a single screen, comparison or report. Names no single company. Answered by the
+     * autonomous research orchestrator (roadmap Step 8), which pauses after screening for a human
+     * checkpoint before continuing.
+     */
+    ORCHESTRATE
 }

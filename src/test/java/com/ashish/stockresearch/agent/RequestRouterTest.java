@@ -399,6 +399,43 @@ class RequestRouterTest {
         assertThat(RequestRouter.ROUTING_PROMPT).contains("SCREEN:");
     }
 
+    // Step 8: a multi-step research goal is routed to the orchestrator without asking the model.
+    @ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "Find 3 long-term candidates in pharma from the Nifty 200 and explain the trade-offs",
+            "Find candidates in IT services and compare them",
+            "Shortlist quality banks, then deep-dive the best ones and compare them",
+            "Please investigate the NBFC sector thoroughly",
+            "Write a research memo on quality compounders"})
+    void routesAMultiStepGoalToTheOrchestratorWithoutAskingTheModel(String message) {
+        StubModel model = new StubModel("{\"intent\":\"FULL_RESEARCH\",\"companies\":[\"RELIANCE\"]}");
+
+        RoutedRequest routed = router(model).route(message);
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.ORCHESTRATE, List.of()));
+        assertThat(model.prompts).isEmpty();
+    }
+
+    // A goal-like phrase that names a company is left to the model, same as a screen-like one.
+    @Test
+    void leavesAGoalLikeQuestionThatNamesACompanyToTheModel() {
+        StubModel model = new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[]}");
+
+        RoutedRequest routed = router(model).route("Find candidates similar to Infosys and compare them");
+
+        assertThat(routed.intent()).isEqualTo(Intent.SPECIFIC_QUESTION);
+        assertThat(model.prompts).hasSize(1);
+    }
+
+    @Test
+    void theModelCanRouteAnOrchestrationButNeverWithACompany() {
+        RoutedRequest routed = router(new StubModel("{\"intent\":\"ORCHESTRATE\",\"companies\":[\"Infosys\"]}"))
+                .route("Find me some long-term pharma bets, weigh them up and tell me what you'd watch for");
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.ORCHESTRATE, List.of()));
+        assertThat(RequestRouter.ROUTING_PROMPT).contains("ORCHESTRATE:");
+    }
+
     // S4-1: the screen rule does not take requests about one company.
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
