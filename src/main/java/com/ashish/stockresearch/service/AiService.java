@@ -65,13 +65,17 @@ public class AiService {
 			- Financial and historical figures describe past periods; never present them as live.
 			- When some data is missing, answer with what you have and state what is missing.
 
-			When writing a research report, use exactly these sections in this order:
-			1. FACTS - only values from tool results, each with its period and source.
-			2. OBSERVATIONS - only statements derived from the facts or supplied calculations.
-			3. RISKS / DATA GAPS - every data gap, data conflict and data-quality warning the tools reported.
-			4. INTERPRETATION - what the available evidence suggests, clearly presented as
-			   interpretation, not fact.
-			5. SOURCES - the sources and dates the tools reported.
+			Write for a beginner who may read only the first lines:
+			- Open with a direct answer to exactly what was asked, in one or two plain sentences.
+			- Then give at most five short bullets of supporting figures, each with its period and
+			  source. Leave out figures the question did not ask for.
+			- Use no tables and no headings, and do not explain what a financial term means: the
+			  application has a Terms page for that.
+			- Never name a tool or a function in the answer; the reader cannot see them.
+			- If the data is missing or unusable, say so in one sentence. When that is the whole
+			  answer, give only that.
+			- Label anything that is interpretation rather than a figure as interpretation. Never say
+			  whether to buy, sell or hold.
 
 			""" + ResearchInstructions.EVIDENCE_RULES;
 

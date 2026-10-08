@@ -194,6 +194,7 @@
   tr.detail li { margin: 4px 0; }
   tr.detail .src { color: var(--muted); font-size: 12px; }
   details.more { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
+  .bubble details.more { margin-top: 8px; }
   details.more summary { cursor: pointer; font-weight: 600; }
   .notice { padding: 14px; border-radius: 10px; background: var(--na-bg); color: var(--na-text); margin-top: 16px; }
   .terms h2 { font-size: 20px; margin: 0 0 4px; }
@@ -398,6 +399,40 @@
     return pre;
   }
 
+  // A long answer (a report, comparison or memo) opens on its plain-words interpretation and the at-a-glance
+  // figures; every other section is a collapsed heading, so a beginner is not handed the whole report at once.
+  const OPEN_SECTION = /^(?:\d+\.\s*)?(interpretation|at a glance)/i;
+  function sectioned(text) {
+    const parts = (text || '').split(/^(?=## )/m);
+    if (parts.length < 4) return markdown(text);
+    const intro = parts[0].startsWith('## ') ? '' : parts.shift();
+    const sections = parts.map(part => {
+      const nl = part.indexOf('\n');
+      return { title: part.slice(3, nl < 0 ? undefined : nl).trim(), text: part };
+    });
+    const open = sections.filter(x => OPEN_SECTION.test(x.title))
+      .sort((a, b) => /interpretation/i.test(b.title) - /interpretation/i.test(a.title));
+    const box = document.createElement('div');
+    if (intro.trim()) box.append(markdown(intro));
+    open.forEach(x => box.append(markdown(x.text)));
+    const rest = sections.filter(x => !open.includes(x));
+    if (rest.length) {
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = 'More detail, one section at a time:';
+      box.append(hint);
+      rest.forEach(x => {
+        const d = document.createElement('details');
+        d.className = 'more';
+        const sum = document.createElement('summary');
+        sum.textContent = x.title;
+        d.append(sum, markdown(x.text.slice(x.text.indexOf('\n') + 1)));
+        box.append(d);
+      });
+    }
+    return box;
+  }
+
   function chip(text, plain) {
     const c = document.createElement('span');
     c.className = plain ? 'chip plain' : 'chip';
@@ -426,7 +461,7 @@
     }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    if (m.role === 'assistant' && !m.error) bubble.append(markdown(m.text));
+    if (m.role === 'assistant' && !m.error) bubble.append(sectioned(m.text));
     else bubble.textContent = m.text;
     row.append(bubble);
     return row;
