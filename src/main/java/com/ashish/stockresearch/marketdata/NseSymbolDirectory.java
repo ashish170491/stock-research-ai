@@ -105,6 +105,15 @@ public class NseSymbolDirectory {
         return bestOverlap(tokens(normalised));
     }
 
+    /** A listing whose symbol or whole normalised name is exactly the text; never a partial match. */
+    public Optional<Listing> exact(String symbolOrName) {
+        if (symbolOrName == null || symbolOrName.isBlank()) {
+            return Optional.empty();
+        }
+        Listing bySym = bySymbol.get(symbolOrName.strip().toUpperCase(Locale.ROOT));
+        return bySym != null ? Optional.of(bySym) : Optional.ofNullable(byNormalisedName.get(normalise(symbolOrName)));
+    }
+
     /** Abbreviations a question about metrics or sectors uses that are not companies, even where a symbol matches. */
     private static final Set<String> NOT_COMPANIES = Set.of("ROE", "ROA", "ROCE", "OCF", "PAT", "EPS", "CAGR", "EBIT",
             "EBITDA", "NBFC", "NBFCS", "FMCG", "NSE", "BSE", "NIFTY", "IT", "PE", "PB", "DE", "FY", "TTM", "YOY", "INR");

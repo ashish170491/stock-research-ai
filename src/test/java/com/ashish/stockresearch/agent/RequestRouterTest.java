@@ -467,6 +467,42 @@ class RequestRouterTest {
         assertThat(router(model).route("Infosys stock price")).isEqualTo(new RoutedRequest(Intent.QUOTE, List.of("INFY")));
     }
 
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {"Marksans Pharma", "marksans pharma.", "TCS", "Infosys", "MARKSANS"})
+    void aMessageThatIsOnlyACompanyNameAsksForTheReportWithoutTheModel(String message) {
+        StubModel model = new StubModel("not used", new IllegalStateException("the model must not be called"));
+
+        RoutedRequest routed = router(model).route(message);
+
+        assertThat(routed.intent()).isEqualTo(Intent.FULL_RESEARCH);
+        assertThat(routed.companies()).hasSize(1);
+        assertThat(model.prompts).isEmpty();
+    }
+
+    @Test
+    void aNameInsideAQuestionIsNotTakenForARequestForTheReport() {
+        assertThat(router(new StubModel("not used")).byKeywords("Marksans Pharma debt levels")).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "Is Marksans Pharma a good company to invest in?",
+            "Should I buy Marksans Pharma?",
+            "Is Marksans Pharma worth investing in?",
+    })
+    void aQuestionAboutWhetherToInvestGetsTheReportNotAnUnaidedAnswer(String message) {
+        RoutedRequest routed = router(new StubModel("{\"intent\":\"SPECIFIC_QUESTION\",\"companies\":[\"Marksans Pharma\"]}"))
+                .route(message);
+
+        assertThat(routed).isEqualTo(new RoutedRequest(Intent.FULL_RESEARCH, List.of("Marksans Pharma")));
+        assertThat(RequestRouter.asksForAJudgement(message)).isTrue();
+    }
+
+    @Test
+    void anOrdinaryFactualQuestionIsNotAJudgementQuestion() {
+        assertThat(RequestRouter.asksForAJudgement("What is the debt of Marksans Pharma?")).isFalse();
+    }
+
     // S11-7: a question about a term is answered from the glossary, routed without any model call.
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
