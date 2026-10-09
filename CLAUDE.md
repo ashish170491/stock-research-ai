@@ -16,7 +16,14 @@
   Only VALID values are used; non-VALID never passes a screening rule.
 - Every model answer that states figures goes through NumericClaimVerifier and
   UnsupportedClaimFilter.
-- No buy/sell/hold, price targets, or fair values anywhere in prompts or output.
+- Only VerdictEngine (verdict/, Java, deterministic) gives a Buy / Hold / Sell / No rating, and only for a
+  question asking whether to invest. It counts how many of the quality-compounder preset's rules a company meets
+  and how many of the price rules reasonable-value adds (same StockScreener.evaluate as a screen: only VALID,
+  cross-checked figures; a rule that cannot be checked is never met); thresholds are app.verdict.*, and with
+  less than minimum-cover of a pillar checkable the rating is No rating. The rating is rendered by VerdictRenderer
+  with every check and figure, a not-personal-advice notice, and what it does not cover. No model chooses or
+  words it, and no prompt, model answer, report or other code may say buy/sell/hold, give a price target or a
+  fair value.
 - What a term means comes only from MetricGlossary (fixed, reviewed text): never a model-written
   definition, and never an ideal value or a good/bad judgement. Industry notes come from
   IndustryGroup and screen thresholds from ScreeningPresets, not written a second time.

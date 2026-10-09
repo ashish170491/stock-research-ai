@@ -194,6 +194,7 @@
   tr.detail li { margin: 4px 0; }
   tr.detail .src { color: var(--muted); font-size: 12px; }
   details.more { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
+  .bubble details.more { margin-top: 8px; }
   details.more summary { cursor: pointer; font-weight: 600; }
   .notice { padding: 14px; border-radius: 10px; background: var(--na-bg); color: var(--na-text); margin-top: 16px; }
   .terms h2 { font-size: 20px; margin: 0 0 4px; }
@@ -283,12 +284,15 @@
     <div class="scroll"><div class="column guide">
       <h2>How this application helps you research a stock</h2>
       <p class="lead">It gathers figures from company filings and market data, calculates ratios and changes in code,
-        checks them, and lays them out so you can judge a company yourself. A buy, sell or hold decision stays yours.</p>
+        checks them, and lays them out in plain words. Ask &quot;Is X a good company to invest in?&quot; and it gives a Buy, Hold
+        or Sell rating with every check behind it. What you do with it is your decision.</p>
 
-      <div class="boundary"><strong>What it will not do.</strong> It gives no buy, sell or hold call, no rating, no target price and
-        no fair value, and it never says a figure is good, bad, cheap or expensive. A language model only phrases
-        and summarises: every number is calculated and checked in code, and a sentence the checks cannot support is removed
-        and the answer says so. A screen lists the companies that meet the criteria you chose; it is not a list of picks.</div>
+      <div class="boundary"><strong>How the rating works, and what it is not.</strong> The rating is worked out in code from fixed rules,
+        never by the language model: how many of the quality checks the company meets, and whether its price passes
+        the price check. Each check shows the figure it was decided on. If too few checks can be run on reliable data, the answer is
+        &quot;No rating&quot; instead of a guess. It looks at past figures only and does not know your goals, your time horizon or what
+        else you own, so it is general research information, not personal investment advice. Consider a SEBI-registered investment
+        adviser before you act. It gives no price target or fair value.</div>
 
       <h3>A way to work through a company</h3>
       <ol class="flow">
@@ -298,12 +302,14 @@
         <li><strong>Put it in context.</strong> See how a figure sits among the company's own years and among companies in its industry group.</li>
         <li><strong>Compare.</strong> Line up companies on the same figures, the same period and the same currency.</li>
         <li><strong>Check the other side.</strong> Read the risks, data gaps and failed rules, then the filings themselves if you have loaded them.</li>
+        <li><strong>Ask for the rating.</strong> &quot;Is X a good company to invest in?&quot; gives Buy, Hold, Sell or No rating, with every check shown.</li>
         <li><strong>Decide yourself.</strong> Weigh it against your goals, time horizon and the rest of your portfolio, and take advice where you need it.</li>
       </ol>
 
       <h3>The features</h3>
       <div class="card"><h4>Stock screener (Screener tab)</h4><p>Choose a preset (quality compounder, reasonable value, dividend) or narrow it down yourself. Every rule is checked in code and the figure each result was decided on is shown. A company with a missing or conflicting figure never passes a rule on that figure. Results come from the latest stored snapshot, not live prices, and the snapshot date is shown. &quot;What this screen checks&quot; lists the exact criteria.</p></div>
       <div class="card"><h4>Screening in plain words (Chat)</h4><p>Describe what you want and the application turns it into explicit criteria, checks them against your own words, and shows every assumption it made. The index comes from your words; if you name none, the Nifty 50 is used.</p><p><button type="button" class="try">Which Nifty 50 stocks meet the dividend criteria?</button></p></div>
+      <div class="card"><h4>Buy, Hold or Sell rating (Chat)</h4><p>Ask whether a company is a good one to invest in. The answer opens on the rating, a bar for the quality of the business and for the price, and the five plain questions with one or two figures each. Every check and its figure is one tap away, and the full report is on the Report tab.</p><p><button type="button" class="try">Is Infosys a good company to invest in?</button></p></div>
       <div class="card"><h4>Full research report (Report tab or Chat)</h4><p>Facts, observations, risks and data gaps, an interpretation and sources, with a calculation audit. Everything except the interpretation is built in Java. The interpretation is reviewed by a second model pass and then by the number and claim checks. Figures that disagree between sources are shown as conflicts, not averaged.</p><p><button type="button" class="try">Research Infosys</button><button type="button" class="try">Fundamental overview of HDFC Bank</button></p></div>
       <div class="card"><h4>Specific questions</h4><p>Ask about a profile, financial figures, performance over a period, valuation figures, or what a loaded document says. Answers quote the tool output and say when a figure is unavailable.</p><p><button type="button" class="try">How has it performed over 5 years?</button><button type="button" class="try">And its debt?</button></p><p>Shareholding (promoter, FII, DII) is not available from the current data source, and the application says so instead of guessing.</p></div>
       <div class="card"><h4>Terms explained</h4><p>Answers do not explain the terms they use. The Terms tab lists every figure, grouped by the question it helps answer, with what it measures, how this application calculates it, how to read it and what to read it with. Asking &quot;What is ROCE?&quot; in the chat gives the same text. It is fixed, reviewed text, with no ideal value and no verdict on a value.</p><p><button type="button" class="try">What is ROCE?</button><button type="button" class="try">What does CAGR mean?</button></p></div>
@@ -398,6 +404,41 @@
     return pre;
   }
 
+  // A long answer (a report, comparison or memo) opens on its plain-words interpretation and the at-a-glance
+  // figures; every other section is a collapsed heading, so a beginner is not handed the whole report at once.
+  const OPEN_SECTION = /^(?:\d+\.\s*)?(interpretation|at a glance|why this rating|the five questions)/i;
+  function sectioned(text) {
+    const parts = (text || '').split(/^(?=## )/m);
+    if (parts.length < 4) return markdown(text);
+    // a rating card keeps its own order; a report puts the interpretation first
+    const intro = parts[0].startsWith('## ') ? '' : parts.shift();
+    const sections = parts.map(part => {
+      const nl = part.indexOf('\n');
+      return { title: part.slice(3, nl < 0 ? undefined : nl).trim(), text: part };
+    });
+    const open = sections.filter(x => OPEN_SECTION.test(x.title))
+      .sort((a, b) => /interpretation/i.test(b.title) - /interpretation/i.test(a.title));
+    const box = document.createElement('div');
+    if (intro.trim()) box.append(markdown(intro));
+    open.forEach(x => box.append(markdown(x.text)));
+    const rest = sections.filter(x => !open.includes(x));
+    if (rest.length) {
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = 'More detail, one section at a time:';
+      box.append(hint);
+      rest.forEach(x => {
+        const d = document.createElement('details');
+        d.className = 'more';
+        const sum = document.createElement('summary');
+        sum.textContent = x.title;
+        d.append(sum, markdown(x.text.slice(x.text.indexOf('\n') + 1)));
+        box.append(d);
+      });
+    }
+    return box;
+  }
+
   function chip(text, plain) {
     const c = document.createElement('span');
     c.className = plain ? 'chip plain' : 'chip';
@@ -426,7 +467,7 @@
     }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    if (m.role === 'assistant' && !m.error) bubble.append(markdown(m.text));
+    if (m.role === 'assistant' && !m.error) bubble.append(sectioned(m.text));
     else bubble.textContent = m.text;
     row.append(bubble);
     return row;

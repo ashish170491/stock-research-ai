@@ -128,6 +128,8 @@ class AiServiceRoutingTest {
     private final ScreenerAgent screenerAgent = mock(ScreenerAgent.class);
     private final com.ashish.stockresearch.research.comparison.ComparisonService comparisonService =
             mock(com.ashish.stockresearch.research.comparison.ComparisonService.class);
+    private final com.ashish.stockresearch.verdict.VerdictService verdictService =
+            mock(com.ashish.stockresearch.verdict.VerdictService.class);
     private final com.ashish.stockresearch.orchestrator.ResearchOrchestrator orchestrator =
             mock(com.ashish.stockresearch.orchestrator.ResearchOrchestrator.class);
     private final StockResearchService research = new StockResearchService(
@@ -153,7 +155,7 @@ class AiServiceRoutingTest {
                 reportWriter, comparisonService, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
                         new ScreeningCountVerifier(), new UnsupportedClaimFilter()),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions,
-                com.ashish.stockresearch.glossary.TestGlossary.glossary(), orchestrator);
+                com.ashish.stockresearch.glossary.TestGlossary.glossary(), orchestrator, verdictService);
     }
 
     private void routes(String message, Intent intent, String... companies) {
@@ -237,6 +239,21 @@ class AiServiceRoutingTest {
         assertThat(answer.intent()).isEqualTo(Intent.SCREEN);
         assertThat(answer.text()).isEqualTo("**How I read your request**");
         assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo("[A screen was shown to the user]");
+    }
+
+    // "Is X a good company to invest in?" is answered by the Java rating, never by the report or a model.
+    @Test
+    void aQuestionAboutWhetherToInvestIsAnsweredByTheRatingNotTheReport() {
+        String question = "Should I buy Marksans Pharma?";
+        routes(question, Intent.FULL_RESEARCH, "MARKSANS");
+        when(verdictService.answer("MARKSANS")).thenReturn("THE RATING CARD");
+
+        AiService.ChatAnswer answer = service(UNUSED).chat(CONVERSATION, question);
+
+        assertThat(answer.text()).isEqualTo("THE RATING CARD");
+        verify(reportWriter, never()).write(anyString());
+        assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo(
+                "[A rating on MARKSANS, with its figures, was shown to the user.]");
     }
 
     // Step 8: an orchestrated goal is handed straight to the orchestrator, which lays out and runs its own plan.

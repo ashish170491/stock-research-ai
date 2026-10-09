@@ -18,6 +18,7 @@ import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
+import com.ashish.stockresearch.verdict.VerdictService;
 import com.ashish.stockresearch.trace.Progress;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
@@ -34,10 +35,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class AiService {
-
-	private static final String JUDGEMENT_NOTE = "_This application does not say whether %s is a good investment, "
-			+ "or whether to buy, sell or hold it. Below is the research on it - the facts, observations, risks and "
-			+ "data gaps - to read and weigh yourself._\n\n";
 
 	/**
 	 * Model-agnostic guardrails for the tool loop. The tools carry the data and
@@ -65,13 +62,17 @@ public class AiService {
 			- Financial and historical figures describe past periods; never present them as live.
 			- When some data is missing, answer with what you have and state what is missing.
 
-			When writing a research report, use exactly these sections in this order:
-			1. FACTS - only values from tool results, each with its period and source.
-			2. OBSERVATIONS - only statements derived from the facts or supplied calculations.
-			3. RISKS / DATA GAPS - every data gap, data conflict and data-quality warning the tools reported.
-			4. INTERPRETATION - what the available evidence suggests, clearly presented as
-			   interpretation, not fact.
-			5. SOURCES - the sources and dates the tools reported.
+			Write for a beginner who may read only the first lines:
+			- Open with a direct answer to exactly what was asked, in one or two plain sentences.
+			- Then give at most five short bullets of supporting figures, each with its period and
+			  source. Leave out figures the question did not ask for.
+			- Use no tables and no headings, and do not explain what a financial term means: the
+			  application has a Terms page for that.
+			- Never name a tool or a function in the answer; the reader cannot see them.
+			- If the data is missing or unusable, say so in one sentence. When that is the whole
+			  answer, give only that.
+			- Label anything that is interpretation rather than a figure as interpretation. Never say
+			  whether to buy, sell or hold.
 
 			""" + ResearchInstructions.EVIDENCE_RULES;
 
@@ -104,6 +105,7 @@ public class AiService {
 	private final ChatMemory chatMemory;
 	private final ResearchSessions sessions;
 	private final MetricGlossary glossary;
+	private final VerdictService verdictService;
 	private final ResearchOrchestrator orchestrator;
 
 	/**
@@ -131,7 +133,8 @@ public class AiService {
 			ChatMemory chatMemory,
 			ResearchSessions sessions,
 			MetricGlossary glossary,
-			ResearchOrchestrator orchestrator) {
+			ResearchOrchestrator orchestrator,
+			VerdictService verdictService) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -154,6 +157,7 @@ public class AiService {
 		this.sessions = sessions;
 		this.glossary = glossary;
 		this.orchestrator = orchestrator;
+		this.verdictService = verdictService;
 	}
 
 	/**
@@ -195,12 +199,17 @@ public class AiService {
 		String answer;
 		switch (request.intent()) {
 			case FULL_RESEARCH -> {
-				answer = researchReportWriter.write(companies.get(0));
 				if (RequestRouter.asksForAJudgement(message)) {
-					answer = JUDGEMENT_NOTE.formatted(companies.get(0)) + answer;
+					String company = companies.get(0);
+					answer = Progress.step("Rating %s against the fixed rules".formatted(company),
+							() -> verdictService.answer(company));
+					remember(conversationId, message, "[A rating on " + companies.get(0)
+							+ ", with its figures, was shown to the user.]");
+				} else {
+					answer = researchReportWriter.write(companies.get(0));
+					remember(conversationId, message, "[The full research report on " + companies.get(0)
+							+ " was shown to the user.]");
 				}
-				remember(conversationId, message, "[The full research report on " + companies.get(0)
-						+ " was shown to the user.]");
 			}
 			case QUOTE -> {
 				answer = companies.stream().map(company -> Progress.step(
