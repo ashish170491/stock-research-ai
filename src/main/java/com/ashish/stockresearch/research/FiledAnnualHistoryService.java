@@ -5,6 +5,7 @@ import com.ashish.stockresearch.research.model.AnnualFinancials;
 import com.ashish.stockresearch.research.model.DataGap;
 import com.ashish.stockresearch.research.model.FiledFinancials;
 import com.ashish.stockresearch.research.model.FiledPerShare;
+import com.ashish.stockresearch.research.model.FiledYear;
 import com.ashish.stockresearch.research.model.FinancialDataPoint;
 import com.ashish.stockresearch.research.model.ReportedFinancials;
 import org.slf4j.Logger;
@@ -27,9 +28,10 @@ import java.util.Optional;
  *       never filled from another source, so no calculation spans two sources.</li>
  *   <li><b>The cross-check</b> is the provider's net profit for the same year, which measures the same thing
  *       (profit attributable to the parent's owners). A year on which they disagree is a DATA_CONFLICT for that
- *       year ({@link FinancialMetricsService}). Revenue is not compared: the provider's revenue is defined
- *       differently (it may include other operating income or exclude excise duty), so a gap between the two
- *       says nothing about either.</li>
+ *       year ({@link FinancialMetricsService}). Revenue is not compared closely: the provider's revenue is
+ *       defined differently (it may include other operating income or exclude excise duty), so a small gap says
+ *       nothing about either. {@link FiledScaleCheck} only rejects a filed year whose revenue is several times
+ *       the provider's or a fraction of it, which is a scaling error in the filing.</li>
  *   <li><b>When there are no filings</b> - a company not listed on NSE, NSE unreachable, no filings source
  *       configured - the provider's own fiscal-year figures stand, cross-checked between its two feeds as
  *       before, and a gap says so.</li>
@@ -74,7 +76,9 @@ public class FiledAnnualHistoryService {
             return replace(fallback, fallback.annualHistory(), fallback.annualCrossCheckFigures(), gaps);
         }
 
-        List<AnnualFinancials> annual = filed.years().stream().map(FiledAnnualFinancials::from).toList();
+        List<AnnualFinancials> annual = filed.years().stream()
+                .map(year -> FiledScaleCheck.check(year, providerRevenue(provider, year)))
+                .map(FiledAnnualFinancials::from).toList();
         List<AnnualCrossCheckFigures> crossCheck = provider.annualHistory().stream()
                 .map(year -> new AnnualCrossCheckFigures(year.period(), notCompared(year.revenue(), provider),
                         year.netProfit()))
@@ -117,6 +121,13 @@ public class FiledAnnualHistoryService {
         gaps.add(new DataGap(AREA, "source", "The fiscal-year figures are %s's, not the company's filings: %s"
                 .formatted(provider.provenance().source(), why)));
         return replace(provider, provider.annualHistory(), provider.annualCrossCheckFigures(), gaps);
+    }
+
+    /** The provider's revenue for the fiscal year ending when the filed year does, or null. */
+    private static FinancialDataPoint providerRevenue(ReportedFinancials provider, FiledYear year) {
+        return provider.annualHistory().stream()
+                .filter(y -> y.period().known() && year.period().known() && y.period().end().equals(year.period().end()))
+                .map(AnnualFinancials::revenue).findFirst().orElse(null);
     }
 
     /** The provider's revenue, kept visible but marked as not compared. */
