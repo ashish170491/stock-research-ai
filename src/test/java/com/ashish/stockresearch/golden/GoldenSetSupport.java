@@ -39,6 +39,7 @@ import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.trace.ConversationTraceAdvisor;
 import com.ashish.stockresearch.trace.TraceProperties;
+import com.ashish.stockresearch.verdict.VerdictService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -146,7 +147,7 @@ final class GoldenSetSupport {
                 documentSearchTools, conversationTraceAdvisor, researchReportWriter, comparisonService,
                 marketDataService, mock(ScreenerAgent.class), new AnswerChecks(numericVerifier,
                         new ScreeningCountVerifier(), claimFilter), ollama, chatMemory, sessions, glossary,
-                mock(ResearchOrchestrator.class));
+                mock(ResearchOrchestrator.class), mock(VerdictService.class));
     }
 
     /** HDFC Bank's annual report, ingested with a deterministic embedding model (no live Ollama embedding call). */

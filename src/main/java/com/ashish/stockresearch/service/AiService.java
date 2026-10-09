@@ -18,6 +18,7 @@ import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
+import com.ashish.stockresearch.verdict.VerdictService;
 import com.ashish.stockresearch.trace.Progress;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
@@ -34,10 +35,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class AiService {
-
-	private static final String JUDGEMENT_NOTE = "_This application does not say whether %s is a good investment, "
-			+ "or whether to buy, sell or hold it. Below is the research on it - the facts, observations, risks and "
-			+ "data gaps - to read and weigh yourself._\n\n";
 
 	/**
 	 * Model-agnostic guardrails for the tool loop. The tools carry the data and
@@ -108,6 +105,7 @@ public class AiService {
 	private final ChatMemory chatMemory;
 	private final ResearchSessions sessions;
 	private final MetricGlossary glossary;
+	private final VerdictService verdictService;
 	private final ResearchOrchestrator orchestrator;
 
 	/**
@@ -135,7 +133,8 @@ public class AiService {
 			ChatMemory chatMemory,
 			ResearchSessions sessions,
 			MetricGlossary glossary,
-			ResearchOrchestrator orchestrator) {
+			ResearchOrchestrator orchestrator,
+			VerdictService verdictService) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -158,6 +157,7 @@ public class AiService {
 		this.sessions = sessions;
 		this.glossary = glossary;
 		this.orchestrator = orchestrator;
+		this.verdictService = verdictService;
 	}
 
 	/**
@@ -199,12 +199,17 @@ public class AiService {
 		String answer;
 		switch (request.intent()) {
 			case FULL_RESEARCH -> {
-				answer = researchReportWriter.write(companies.get(0));
 				if (RequestRouter.asksForAJudgement(message)) {
-					answer = JUDGEMENT_NOTE.formatted(companies.get(0)) + answer;
+					String company = companies.get(0);
+					answer = Progress.step("Rating %s against the fixed rules".formatted(company),
+							() -> verdictService.answer(company));
+					remember(conversationId, message, "[A rating on " + companies.get(0)
+							+ ", with its figures, was shown to the user.]");
+				} else {
+					answer = researchReportWriter.write(companies.get(0));
+					remember(conversationId, message, "[The full research report on " + companies.get(0)
+							+ " was shown to the user.]");
 				}
-				remember(conversationId, message, "[The full research report on " + companies.get(0)
-						+ " was shown to the user.]");
 			}
 			case QUOTE -> {
 				answer = companies.stream().map(company -> Progress.step(

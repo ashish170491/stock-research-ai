@@ -53,7 +53,7 @@ public class StockScreener {
         return new ScreeningResult(criteria, List.copyOf(screened), List.copyOf(notScreened), filteredOut);
     }
 
-    static RuleResult evaluate(Rule rule, SnapshotMetric metric) {
+    public static RuleResult evaluate(Rule rule, SnapshotMetric metric) {
         if (metric.status() != DataStatus.VALID || metric.value() == null) {
             return new RuleResult(rule, RuleOutcome.INSUFFICIENT_DATA, metric,
                     "%s is %s: %s".formatted(rule.metric().shortLabel(), metric.status(), metric.statusReason()));
