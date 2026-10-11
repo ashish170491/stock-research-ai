@@ -171,6 +171,27 @@ public class RequestRouter {
                 && !SCREEN.matcher(message).find();
     }
 
+    /** The NSE symbol of the listed company the message names itself, if any. */
+    public Optional<String> companyNamed(String message) {
+        return directory.namedIn(message).map(NseSymbolDirectory.Listing::symbol);
+    }
+
+    /** The NSE symbol of the company a reply names, by symbol or (part of) its name. */
+    public Optional<String> resolveCompany(String reply) {
+        return companyNamed(reply).or(() -> directory.resolve(reply == null ? null : reply.strip())
+                .map(NseSymbolDirectory.Listing::symbol));
+    }
+
+    /** Whether the message names a listed company itself (not by "it" or "they"). */
+    public boolean namesACompany(String message) {
+        return directory.namedIn(message).isPresent();
+    }
+
+    /** Whether the message reads as a screen of many stocks rather than a question about one company. */
+    public static boolean looksLikeScreen(String message) {
+        return message != null && SCREEN.matcher(message).find();
+    }
+
     public static boolean asksForAJudgement(String message) {
         return message != null && JUDGEMENT.matcher(message).find();
     }

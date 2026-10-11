@@ -24,6 +24,8 @@ public final class ResearchSession {
     private final Deque<String> evidence = new ArrayDeque<>();
     private OrchestratorCheckpoint checkpoint;
     private List<String> focus = List.of();
+    private String awaitingChoiceAbout;
+    private String awaitingCompanyFor;
 
     /** The companies the most recent company-specific turn was about, in order; empty at the start. */
     public synchronized List<String> companies() {
@@ -35,6 +37,31 @@ public final class ResearchSession {
         if (discussed != null && !discussed.isEmpty()) {
             companies = List.copyOf(discussed);
         }
+    }
+
+    /**
+     * The company the last answer asked the user to choose topics about; the next message may be that choice,
+     * typed. Taking it clears it, so it applies to the very next message only.
+     */
+    public synchronized Optional<String> takeAwaitingChoice() {
+        Optional<String> company = Optional.ofNullable(awaitingChoiceAbout);
+        awaitingChoiceAbout = null;
+        return company;
+    }
+
+    public synchronized void awaitChoiceAbout(String company) {
+        awaitingChoiceAbout = company;
+    }
+
+    /** The question asked before the user was asked which company it is about; taking it clears it. */
+    public synchronized Optional<String> takeAwaitingCompany() {
+        Optional<String> question = Optional.ofNullable(awaitingCompanyFor);
+        awaitingCompanyFor = null;
+        return question;
+    }
+
+    public synchronized void awaitCompanyFor(String question) {
+        awaitingCompanyFor = question;
     }
 
     /** The topics the user last chose to hear about (their ids), ticked first the next time they are asked. */

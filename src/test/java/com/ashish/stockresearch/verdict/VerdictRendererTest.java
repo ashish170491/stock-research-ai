@@ -70,6 +70,8 @@ class VerdictRendererTest {
                 .contains("- Met: revenue CAGR over the last 5 fiscal years ≥ 10.00% - 12.00%")
                 .contains("- Not met: net profit CAGR over the last 5 fiscal years ≥ 10.00% - 8.00%")
                 .doesNotContain("Return on equity").doesNotContain("Rating:");
+        assertThat(renderer.rating(verdict)).contains("The checks behind it:\n- Met: return on equity")
+                .contains("- Not met: net profit CAGR over the last 5 fiscal years ≥ 10.00% - 8.00%");
         assertThat(renderer.rating(verdict)).startsWith("### Overall rating\n\n**Rating: Buy**")
                 .contains(VerdictRenderer.NOT_ADVICE).doesNotContain("Is it growing?");
     }

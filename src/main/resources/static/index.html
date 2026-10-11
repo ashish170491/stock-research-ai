@@ -552,6 +552,13 @@
   // A question back to the user, with its choices as checkboxes (or radio buttons when only one may be chosen).
   function clarificationForm(m) {
     const c = m.clarification;
+    const byCompany = c.kind === 'company';
+    if (byCompany && !c.options.length) {
+      // nothing to pick from: the reply is the company's name, typed below
+      const p = document.createElement('p');
+      p.textContent = c.question + ' Type its name below, for example “Infosys” or “TCS”.';
+      return p;
+    }
     const form = document.createElement('form');
     form.className = 'ask';
     const fs = document.createElement('fieldset');
@@ -582,7 +589,8 @@
     const go = document.createElement('button');
     go.type = 'submit'; go.className = 'primary'; go.textContent = 'Show me';
     const note = document.createElement('span');
-    note.textContent = c.multiSelect ? 'Pick one or more, or type your own question below.'
+    note.textContent = byCompany ? 'Pick one, or type another company’s name below.'
+      : c.multiSelect ? 'Pick one or more, or type your own question below.'
       : 'Pick one, or type your own question below.';
     actions.append(go, note);
     form.append(actions);
@@ -592,7 +600,8 @@
       if (!chosen.length) { note.textContent = 'Pick at least one first.'; return; }
       m.answered = true; m.chosen = chosen;
       const labels = c.options.filter(o => chosen.includes(o.id)).map(o => o.label);
-      send(c.company + ': ' + labels.join('; '), { company: c.company, topics: chosen });
+      if (byCompany) send(labels[0]);
+      else send(c.company + ': ' + labels.join('; '), { company: c.company, topics: chosen });
     });
     return form;
   }

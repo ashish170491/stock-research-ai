@@ -46,6 +46,11 @@ public class VerdictRenderer {
         this.glossary = glossary;
     }
 
+    /** The headline figures a question shows, in order. */
+    public static List<ScreeningMetric> figuresFor(MetricQuestion question) {
+        return FIGURES.getOrDefault(question, List.of());
+    }
+
     /** "# Name (SYMBOL)" */
     public static String title(Verdict verdict) {
         String name = verdict.snapshot().companyName() == null ? verdict.snapshot().symbol()
@@ -59,14 +64,12 @@ public class VerdictRenderer {
         md.append("**Rating: ").append(verdict.rating().label()).append("** - ").append(summary(verdict)).append("\n\n");
         md.append(bar(verdict.quality())).append("\n\n").append(bar(verdict.price())).append("\n\n");
         verdict.notes().forEach(note -> md.append("_").append(note).append("_\n\n"));
-        if (verdict.rating() == Rating.NO_RATING) {
-            List<RuleResult> known = checks(verdict, false);
-            if (!known.isEmpty()) {
-                md.append("What could be checked:\n");
-                known.forEach(result -> md.append("- ").append(outcome(result)).append(": ")
-                        .append(result.rule().describe()).append(" - ").append(checkFigure(result)).append("\n"));
-                md.append("\n");
-            }
+        List<RuleResult> known = checks(verdict, false);
+        if (!known.isEmpty()) {
+            md.append(verdict.rating() == Rating.NO_RATING ? "What could be checked:\n" : "The checks behind it:\n");
+            known.forEach(result -> md.append("- ").append(outcome(result)).append(": ")
+                    .append(result.rule().describe()).append(" - ").append(checkFigure(result)).append("\n"));
+            md.append("\n");
         }
         List<RuleResult> unchecked = checks(verdict, true);
         if (!unchecked.isEmpty()) {

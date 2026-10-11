@@ -27,14 +27,17 @@ public class FocusService {
     private final StockResearchService research;
     private final ResearchReportWriter reportWriter;
     private final NseSymbolDirectory directory;
+    private final com.ashish.stockresearch.context.RatioContextService context;
 
     public FocusService(VerdictService verdicts, VerdictRenderer renderer, StockResearchService research,
-                        ResearchReportWriter reportWriter, NseSymbolDirectory directory) {
+                        ResearchReportWriter reportWriter, NseSymbolDirectory directory,
+                        com.ashish.stockresearch.context.RatioContextService context) {
         this.verdicts = verdicts;
         this.renderer = renderer;
         this.research = research;
         this.reportWriter = reportWriter;
         this.directory = directory;
+        this.context = context;
     }
 
     public String answer(String company, List<Topic> topics) {
@@ -60,7 +63,8 @@ public class FocusService {
             if (topic == Topic.RATING && verdict != null) {
                 md.append(renderer.rating(verdict)).append("\n");
             } else if (topic.question() != null && verdict != null) {
-                md.append(renderer.question(verdict, topic.question())).append("\n");
+                md.append(renderer.question(verdict, topic.question()));
+                md.append(peerLines(verdict, topic)).append("\n");
             } else if (topic == Topic.PERFORMANCE) {
                 md.append(performance(company, symbol)).append("\n");
             }
@@ -71,6 +75,27 @@ public class FocusService {
             return topics.size() == 1 ? report : md + "\n" + report;
         }
         return md.toString().stripTrailing() + "\n";
+    }
+
+    /**
+     * The same figures among the company's industry peers in the stored snapshot, so a beginner can see whether a
+     * value is usual for this kind of company. Not for growth, whose span may differ from the snapshot's.
+     */
+    private String peerLines(Verdict verdict, Topic topic) {
+        if (topic == Topic.GROWING) {
+            return "";
+        }
+        List<String> lines = new java.util.ArrayList<>();
+        for (com.ashish.stockresearch.screening.ScreeningMetric metric : VerdictRenderer.figuresFor(topic.question())) {
+            context.peers(metric, verdict.group(), verdict.snapshot().symbol())
+                    .map(com.ashish.stockresearch.context.ContextRenderer::peerLine).filter(line -> !line.isBlank())
+                    .ifPresent(line -> lines.add("- %s: %s".formatted(capitalised(metric.description()), line)));
+        }
+        return lines.isEmpty() ? "" : "\nBeside other companies in its industry:\n" + String.join("\n", lines) + "\n";
+    }
+
+    private static String capitalised(String text) {
+        return text == null || text.isEmpty() ? "" : Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
 
     private String performance(String company, String symbol) {

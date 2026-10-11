@@ -87,7 +87,10 @@ public class AiService {
 	static final String GENERAL_PROMPT = """
 			You are a helpful assistant inside an Indian equity research application. Answer the
 			question directly and briefly. Do not state any company's financial figures or share
-			prices; the research features of this application provide those.
+			prices; the research features of this application provide those. Never give, guess or
+			repeat a buy, sell or hold call or rating, a target price or a fair value: you have not
+			been given one. The application's own rating is shown when the user asks "Is <company>
+			a good company to invest in?".
 			""";
 
 	static final String NAME_THE_COMPANY = "Which company do you mean? This conversation has not discussed one yet. "
@@ -95,6 +98,80 @@ public class AiService {
 
 	private static final DateTimeFormatter QUOTE_TIME =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z").withZone(ZoneId.of("Asia/Kolkata"));
+
+	/** A blank left where a figure, date or name should be ("[X]", "[date]"). */
+	static final java.util.regex.Pattern PLACEHOLDER = java.util.regex.Pattern.compile(
+			"\\[(?:[A-Z]|[a-z ]*(?:date|value|figure|amount|number|period|name|company|metric)[a-z ]*)\\]");
+	static final String NO_RELIABLE_ANSWER = "I could not get the figures for that reliably, so I am not showing a "
+			+ "guess. Try naming the company and asking about one thing, for example \"How much debt does Infosys have?\" "
+			+ "or \"Is Infosys growing?\".";
+	/** A sentence naming one of the application's internal tools, which the reader cannot see or use. */
+	private static final java.util.regex.Pattern TOOL_NAME = java.util.regex.Pattern.compile(
+			"\\b(?:get|search|screen)[A-Z]\\w+\\b|\\btools?\\b");
+
+	/** The answer without sentences that talk about the application's internal tools. */
+	static String withoutToolNames(String answer) {
+		if (answer == null || !TOOL_NAME.matcher(answer).find()) {
+			return answer;
+		}
+		List<String> kept = new java.util.ArrayList<>();
+		for (String paragraph : answer.split("\n", -1)) {
+			if (paragraph.startsWith("_")) {
+				kept.add(paragraph); // the application's own note (e.g. what the verifiers removed), not the model's
+				continue;
+			}
+			List<String> sentences = new java.util.ArrayList<>();
+			for (String sentence : paragraph.split("(?<=[.!?])\\s+")) {
+				if (!TOOL_NAME.matcher(sentence).find()) {
+					sentences.add(sentence);
+				}
+			}
+			kept.add(String.join(" ", sentences));
+		}
+		String cleaned = String.join("\n", kept).replaceAll("\n{3,}", "\n\n").strip();
+		return cleaned.isBlank() ? NO_RELIABLE_ANSWER : cleaned;
+	}
+
+	/** A question about a rating: answered by the rule-based rating, never by a model. */
+	static final java.util.regex.Pattern RATING_QUESTION = java.util.regex.Pattern.compile(
+			"\\b(?:rating|rated)\\b|\\b(?:buy|sell|hold)\\s+(?:rating|call|verdict)\\b"
+					+ "|\\bshould\\s+(?:i|we)\\s+(?:buy|sell|hold)\\s+(?:it|this|them|the (?:stock|shares?))\\b",
+			java.util.regex.Pattern.CASE_INSENSITIVE);
+	/** A model sentence that gives or explains a buy, sell or hold call, a rating, a target price or a fair value. */
+	private static final java.util.regex.Pattern RATING_CLAIM = java.util.regex.Pattern.compile(
+			"\\b(?:buy|sell|hold|rating|rated|recommend\\w*|target price|price target|fair value|undervalued|overvalued)\\b",
+			java.util.regex.Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * A model answer without any sentence that rates a stock: only VerdictEngine rates, so a model's "the rating is
+	 * Hold" is always invented. The answer says what was removed and where the real rating is.
+	 */
+	static String withoutRatingClaims(String answer, List<String> companies) {
+		if (answer == null || !RATING_CLAIM.matcher(answer).find()) {
+			return answer;
+		}
+		List<String> kept = new java.util.ArrayList<>();
+		int removed = 0;
+		for (String paragraph : answer.split("\n", -1)) {
+			if (paragraph.startsWith("_")) {
+				kept.add(paragraph);
+				continue;
+			}
+			List<String> sentences = new java.util.ArrayList<>();
+			for (String sentence : paragraph.split("(?<=[.!?])\\s+")) {
+				if (RATING_CLAIM.matcher(sentence).find()) {
+					removed++;
+				} else {
+					sentences.add(sentence);
+				}
+			}
+			kept.add(String.join(" ", sentences));
+		}
+		String company = companies == null || companies.size() != 1 ? "a company" : companies.get(0);
+		return String.join("\n", kept).strip() + "\n\n_%d sentence(s) were removed because only the application's "
+				.formatted(removed) + "rule-based rating may say buy, hold or sell. To see it, ask \"Is %s a good company "
+				.formatted(company) + "to invest in?\"_";
+	}
 
 	/** A reply to a paused research plan's checkpoint (roadmap Step 8): resumes it instead of routing. */
 	private static final java.util.regex.Pattern CONTINUE =
@@ -215,6 +292,45 @@ public class AiService {
 			remember(conversationId, message, answer);
 			return new ChatAnswer(Intent.ORCHESTRATE, session.companies(), answer);
 		}
+		// The answer to "which company is this about?": the original question, now about that company.
+		Optional<String> waitingQuestion = session.takeAwaitingCompany();
+		if (waitingQuestion.isPresent()) {
+			Optional<String> chosen = router.resolveCompany(message);
+			if (chosen.isPresent()) {
+				session.rememberCompanies(List.of(chosen.get()));
+				return chat(conversationId, waitingQuestion.get() + " (" + chosen.get() + ")");
+			}
+		}
+		// A typed reply to the choices just offered ("Overall rating: Buy, Hold or Sell", "debt and growth").
+		Optional<String> awaiting = session.takeAwaitingChoice();
+		if (awaiting.isPresent() && !router.namesACompany(message)) {
+			List<Topic> typed = Topic.matching(message);
+			if (!typed.isEmpty()) {
+				return focus(conversationId, message, awaiting.get(), typed.stream().map(Topic::id).toList());
+			}
+		}
+		// A question about the rating of the company being discussed ("what is the reason for the Hold rating?")
+		// is answered by the rating itself; no model may state or explain a rating it has not been given.
+		if (session.companies().size() == 1 && RATING_QUESTION.matcher(message).find()
+				&& !router.namesACompany(message) && !RequestRouter.looksLikeScreen(message)) {
+			return focus(conversationId, message, session.companies().get(0), List.of(Topic.RATING.id()));
+		}
+		// A general question on one of the topics ("are valuations expensive?", "how much debt does TCS have?") about
+		// the company it names, or the one being discussed: the checked figures, rendered in code.
+		List<Topic> asked = Topic.askedAbout(message);
+		Optional<String> named = asked.isEmpty() ? Optional.empty() : router.companyNamed(message);
+		// "what is ROE?" asks what a term means, about no company; the glossary answers it
+		boolean termQuestion = named.isEmpty()
+				&& glossary.asked(message).flatMap(MetricGlossary.Asked::entry).isPresent();
+		if (!asked.isEmpty() && !termQuestion && !RequestRouter.looksLikeScreen(message)) {
+			Optional<String> company = named.isPresent() ? named
+					: session.companies().size() == 1 ? Optional.of(session.companies().get(0)) : Optional.empty();
+			if (company.isPresent()) {
+				return focus(conversationId, message, company.get(), asked.stream().map(Topic::id).toList());
+			}
+			// none named, and no single company under discussion: ask rather than guess
+			return askWhichCompany(conversationId, message, session);
+		}
 		RoutedRequest request;
 		try (Progress.Step understanding = Progress.start("Understanding your question")) {
 			request = router.route(message, session);
@@ -227,8 +343,19 @@ public class AiService {
 			remember(conversationId, message, "[Asked which parts of " + clarification.get().company()
 					+ " the user wants to hear about.]");
 			session.rememberCompanies(request.companies());
+			session.awaitChoiceAbout(clarification.get().company());
 			return new ChatAnswer(request.intent(), request.companies(), Clarifier.asText(clarification.get()),
 					clarification.get(), List.of(), List.of());
+		}
+		boolean companyFromEarlier = false;
+		if (request.intent() == Intent.SPECIFIC_QUESTION && request.companies().isEmpty()
+				&& !session.companies().isEmpty()) {
+			if (session.companies().size() > 1) {
+				return askWhichCompany(conversationId, message, session);
+			}
+			// the one company being discussed; the answer says so
+			request = new RoutedRequest(Intent.SPECIFIC_QUESTION, session.companies());
+			companyFromEarlier = true;
 		}
 		List<String> companies = request.companies();
 		String answer;
@@ -276,10 +403,21 @@ public class AiService {
 					// Never let the model pick a company the user did not name.
 					answer = NAME_THE_COMPANY;
 					remember(conversationId, message, answer);
-					break;
+					session.awaitCompanyFor(message);
+					return new ChatAnswer(request.intent(), List.of(), answer, Clarifier.whichCompany(List.of()),
+							List.of(), List.of());
 				}
 				ToolUsage usage = new ToolUsage();
-				answer = answerWithTools(conversationId, message, companies, usage, session);
+				answer = withoutRatingClaims(answerWithTools(conversationId, message, companies, usage, session),
+						companies);
+				if (PLACEHOLDER.matcher(answer).find()) {
+					// a draft with "[X]" where a figure should be: the model did not fetch the figures it describes
+					answer = NO_RELIABLE_ANSWER;
+				}
+				answer = withoutToolNames(answer);
+				if (companyFromEarlier) {
+					answer = "_About %s, the company discussed earlier._\n\n".formatted(companies.get(0)) + answer;
+				}
 				answer = answer + documentSourcesSection(usage);
 				if (companies.isEmpty()) {
 					companies = usage.calls().stream().map(ToolUsage.Call::symbol)
@@ -292,8 +430,9 @@ public class AiService {
 			}
 			case NOT_STOCK_RELATED -> {
 				List<Message> history = chatMemory.get(conversationId);
-				answer = Progress.step("Answering (local model)", () -> ollama.call(() -> ResearchReportWriter.stripThinking(
-						generalClient.prompt().messages(history).user(message).call().content())));
+				answer = withoutRatingClaims(Progress.step("Answering (local model)", () -> ollama.call(() ->
+						ResearchReportWriter.stripThinking(generalClient.prompt().messages(history).user(message).call()
+								.content()))), session.companies());
 				remember(conversationId, message, answer);
 			}
 			default -> throw new IllegalStateException("Unhandled intent " + request.intent());
@@ -302,6 +441,15 @@ public class AiService {
 		List<Suggestion> suggestions = session.checkpoint().isPresent() ? List.of(Suggestion.ask("continue"))
 				: Suggestions.after(request.intent(), companies, answer, glossary);
 		return new ChatAnswer(request.intent(), companies, answer, null, suggestions, List.of());
+	}
+
+	/** Asks which company a question is about, offering those discussed so far, and keeps the question for the reply. */
+	private ChatAnswer askWhichCompany(String conversationId, String message, ResearchSession session) {
+		Clarification question = Clarifier.whichCompany(session.companies());
+		session.awaitCompanyFor(message);
+		remember(conversationId, message, "[Asked which company the question is about.]");
+		return new ChatAnswer(Intent.SPECIFIC_QUESTION, List.of(), Clarifier.asText(question), question, List.of(),
+				List.of());
 	}
 
 	/**

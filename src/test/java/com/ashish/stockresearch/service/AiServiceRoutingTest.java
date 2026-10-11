@@ -286,6 +286,117 @@ class AiServiceRoutingTest {
                 .extracting(com.ashish.stockresearch.focus.Clarification.Option::id).containsExactly("growing", "stretched");
     }
 
+    // The choices typed back (an old page, or a client that shows them as text) are read as the choice, in code.
+    @Test
+    void aTypedReplyToTheChoicesIsAnsweredAsThatChoiceWithoutRouting() {
+        routes("Is Lupin a good company to invest in?", Intent.FULL_RESEARCH, "LUPIN");
+        AiService service = service(UNUSED);
+        service.chat(CONVERSATION, "Is Lupin a good company to invest in?");
+        when(focusService.answer("LUPIN", List.of(com.ashish.stockresearch.focus.Topic.RATING))).thenReturn("THE RATING");
+
+        AiService.ChatAnswer answer = service.chat(CONVERSATION, "Overall rating: Buy, Hold or Sell");
+
+        assertThat(answer.text()).isEqualTo("THE RATING");
+        verify(router, never()).route(eq("Overall rating: Buy, Hold or Sell"), any());
+    }
+
+    // "Why a Hold?" is answered by the rating itself, never by a model that has not been given it.
+    @Test
+    void aQuestionAboutTheRatingOfTheCompanyDiscussedIsAnsweredByTheRating() {
+        routes("Research Lupin", Intent.FULL_RESEARCH, "LUPIN");
+        when(reportWriter.write("LUPIN")).thenReturn("# Research report: Lupin");
+        AiService service = service(UNUSED);
+        service.chat(CONVERSATION, "Research Lupin");
+        when(focusService.answer("LUPIN", List.of(com.ashish.stockresearch.focus.Topic.RATING))).thenReturn("THE RATING");
+
+        assertThat(service.chat(CONVERSATION, "What is the reason of HOLD rating?").text()).isEqualTo("THE RATING");
+        verify(router, never()).route(eq("What is the reason of HOLD rating?"), any());
+    }
+
+    // A model that invents a rating has those sentences removed, and is told where the real one is.
+    @Test
+    void aModelAnswerNeverCarriesARating() {
+        String cleaned = AiService.withoutRatingClaims("Lupin makes generic medicines. The overall rating for Lupin is "
+                + "**Hold**. The recommendation is based on market conditions.\nIt is based in Mumbai.", List.of("LUPIN"));
+
+        assertThat(cleaned).startsWith("Lupin makes generic medicines.\nIt is based in Mumbai.")
+                .doesNotContain("Hold**").doesNotContain("recommendation is")
+                .contains("_2 sentence(s) were removed because only the application's rule-based rating may say buy, "
+                        + "hold or sell. To see it, ask \"Is LUPIN a good company to invest in?\"_");
+        assertThat(AiService.withoutRatingClaims("Lupin makes medicines.", List.of("LUPIN"))).isEqualTo("Lupin makes medicines.");
+    }
+
+    // "Are valuations expensive?" about the one company being discussed: the checked figures, in code, no model.
+    @Test
+    void aGeneralTopicQuestionIsAnsweredFromTheFiguresOfTheCompanyBeingDiscussed() {
+        routes("Research Lupin", Intent.FULL_RESEARCH, "LUPIN");
+        when(reportWriter.write("LUPIN")).thenReturn("# Research report: Lupin");
+        AiService service = service(UNUSED);
+        service.chat(CONVERSATION, "Research Lupin");
+        when(focusService.answer("LUPIN", List.of(com.ashish.stockresearch.focus.Topic.PRICE))).thenReturn("THE PRICE");
+
+        assertThat(service.chat(CONVERSATION, "Are valuations expensive?").text()).isEqualTo("THE PRICE");
+        verify(router, never()).route(eq("Are valuations expensive?"), any());
+    }
+
+    // With no company named and none discussed, the application asks which one, then answers the question asked.
+    @Test
+    void asksWhichCompanyWhenItIsNotClearThenAnswersTheOriginalQuestion() {
+        AiService service = service(UNUSED);
+
+        AiService.ChatAnswer asked = service.chat(CONVERSATION, "Are valuations expensive?");
+
+        assertThat(asked.clarification().kind()).isEqualTo(com.ashish.stockresearch.focus.Clarification.COMPANY);
+        assertThat(asked.clarification().options()).isEmpty();
+        assertThat(asked.text()).startsWith("Which company is this about? Type its name");
+        verify(focusService, never()).answer(anyString(), any());
+
+        when(router.resolveCompany("Sky Gold")).thenReturn(java.util.Optional.of("SKYGOLD"));
+        when(router.companyNamed("Are valuations expensive? (SKYGOLD)")).thenReturn(java.util.Optional.of("SKYGOLD"));
+        when(focusService.answer("SKYGOLD", List.of(com.ashish.stockresearch.focus.Topic.PRICE))).thenReturn("THE PRICE");
+
+        assertThat(service.chat(CONVERSATION, "Sky Gold").text()).isEqualTo("THE PRICE");
+    }
+
+    // After a comparison, "how much debt?" could be about either company: ask, offering both.
+    @Test
+    void offersTheCompaniesDiscussedWhenAQuestionCouldBeAboutAnyOfThem() {
+        routes("Compare TCS and Infosys", Intent.COMPARE, "TCS", "INFY");
+        when(comparisonService.compare(List.of("TCS", "INFY"))).thenReturn("## Comparison");
+        AiService service = service(UNUSED);
+        service.chat(CONVERSATION, "Compare TCS and Infosys");
+
+        AiService.ChatAnswer asked = service.chat(CONVERSATION, "Is the debt high?");
+
+        assertThat(asked.clarification().multiSelect()).isFalse();
+        assertThat(asked.clarification().options()).extracting(com.ashish.stockresearch.focus.Clarification.Option::id)
+                .containsExactly("TCS", "INFY");
+        verify(focusService, never()).answer(anyString(), any());
+    }
+
+    // "What is ROE?" asks what a term means, even while a company is being discussed.
+    @Test
+    void aTermQuestionStaysWithTheGlossaryWhileACompanyIsDiscussed() {
+        routes("Research Lupin", Intent.FULL_RESEARCH, "LUPIN");
+        when(reportWriter.write("LUPIN")).thenReturn("# Research report: Lupin");
+        routes("What is ROE?", Intent.EXPLAIN_TERM);
+        AiService service = service(UNUSED);
+        service.chat(CONVERSATION, "Research Lupin");
+
+        assertThat(service.chat(CONVERSATION, "What is ROE?").intent()).isEqualTo(Intent.EXPLAIN_TERM);
+        verify(focusService, never()).answer(anyString(), any());
+    }
+
+    @Test
+    void anAnswerWithBlanksWhereFiguresShouldBeOrToolNamesIsNotShownAsIs() {
+        assertThat(AiService.PLACEHOLDER.matcher("Trailing P/E: [X] (as of [date])").find()).isTrue();
+        assertThat(AiService.PLACEHOLDER.matcher("Trailing P/E: 45.20x (as of 2026-10-09)").find()).isFalse();
+        assertThat(AiService.withoutToolNames("P/E is 45.20x. Use the getValuation tool for the exact figures.\n"
+                + "_Removed 1 statement(s) containing figures that do not appear in the data the tools returned._"))
+                .isEqualTo("P/E is 45.20x.\n_Removed 1 statement(s) containing figures that do not appear in the data "
+                        + "the tools returned._");
+    }
+
     @Test
     void aFocusWithNoKnownTopicIsRejected() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service(UNUSED).focus(CONVERSATION, "x", "TCS",
@@ -487,10 +598,10 @@ class AiServiceRoutingTest {
 
     @Test
     void screensAnAnswerGivenWithoutAnyToolOrEarlierEvidence() {
-        routes("Is ICICI Bank profitable?", Intent.SPECIFIC_QUESTION);
+        routes("What did ICICI Bank earn?", Intent.SPECIFIC_QUESTION);
         ScriptedModel model = new ScriptedModel(messages -> text("Net profit was ₹12,345.67 crore. I need more data."));
 
-        String answer = service(model).chat(CONVERSATION, "Is ICICI Bank profitable?").text();
+        String answer = service(model).chat(CONVERSATION, "What did ICICI Bank earn?").text();
 
         assertThat(answer).startsWith("I need more data.").doesNotContain("₹12,345.67");
     }
@@ -516,7 +627,8 @@ class AiServiceRoutingTest {
 
         AiService.ChatAnswer answer = service(UNUSED).chat("fresh", "And its debt?");
 
-        assertThat(answer.text()).isEqualTo(AiService.NAME_THE_COMPANY);
+        assertThat(answer.text()).startsWith("Which company is this about?");
+        assertThat(answer.clarification().kind()).isEqualTo(com.ashish.stockresearch.focus.Clarification.COMPANY);
         assertThat(answer.companies()).isEmpty();
         // Remembered, so the reply "Infosys" is understood as the answer to the question.
         assertThat(chatMemory.get("fresh")).hasSize(2);

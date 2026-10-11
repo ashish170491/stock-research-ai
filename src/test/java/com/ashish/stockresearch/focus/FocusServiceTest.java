@@ -31,8 +31,10 @@ class FocusServiceTest {
     private final VerdictService verdicts = mock(VerdictService.class);
     private final StockResearchService research = mock(StockResearchService.class);
     private final ResearchReportWriter reportWriter = mock(ResearchReportWriter.class);
+    private final com.ashish.stockresearch.context.RatioContextService context =
+            mock(com.ashish.stockresearch.context.RatioContextService.class);
     private final FocusService focus = new FocusService(verdicts, new VerdictRenderer(TestGlossary.glossary()), research,
-            reportWriter, new NseSymbolDirectory());
+            reportWriter, new NseSymbolDirectory(), context);
 
     private void ratedInfosys() {
         VerdictEngine engine = new VerdictEngine(ScreeningPresetsTest.presets(), VerdictProperties.defaults());

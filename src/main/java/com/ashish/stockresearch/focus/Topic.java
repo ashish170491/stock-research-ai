@@ -60,6 +60,91 @@ public enum Topic {
         return prompt.formatted(company);
     }
 
+    private static final java.util.Map<Topic, java.util.regex.Pattern> WORDS = new java.util.EnumMap<>(Topic.class);
+
+    static {
+        int flags = java.util.regex.Pattern.CASE_INSENSITIVE;
+        WORDS.put(RATING, java.util.regex.Pattern.compile("\\b(?:rating|rated|buy|sell|hold)\\b", flags));
+        WORDS.put(PROFITABLE, java.util.regex.Pattern.compile(
+                "\\b(?:profitab\\w*|roe|roce|return on (?:equity|capital)|margins?)\\b", flags));
+        WORDS.put(GROWING, java.util.regex.Pattern.compile("\\b(?:grow\\w*|cagr|sales|revenue)\\b", flags));
+        WORDS.put(CASH, java.util.regex.Pattern.compile("\\bcash\\b", flags));
+        WORDS.put(STRETCHED, java.util.regex.Pattern.compile("\\b(?:debt|borrow\\w*|leverag\\w*|stretched|loans?)\\b", flags));
+        WORDS.put(PRICE, java.util.regex.Pattern.compile(
+                "\\b(?:valuation|valued|p\\s*/\\s*e|expensive|cheap|market charge|earnings yield|price to)\\b", flags));
+        WORDS.put(PERFORMANCE, java.util.regex.Pattern.compile(
+                "\\b(?:share price|stock price|price history|returns?|perform\\w*|drawdown)\\b", flags));
+        WORDS.put(FULL_REPORT, java.util.regex.Pattern.compile(
+                "\\b(?:everything|full report|full research|whole report|all of (?:it|them))\\b", flags));
+    }
+
+    /** How a question asks about a topic in its own words: "are valuations expensive?", "how much debt?". */
+    private static final java.util.Map<Topic, java.util.regex.Pattern> ASKED = new java.util.EnumMap<>(Topic.class);
+    /** A question about a particular period or a comparison wants more than the topic's summary. */
+    private static final java.util.regex.Pattern NARROWER = java.util.regex.Pattern.compile(
+            "\\b(?:fy\\s?\\d{2,4}|20\\d\\d|quarter\\w*|q[1-4]|ttm|last year|this year|month\\w*|compare\\w*|vs\\.?|versus|than)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    static {
+        int flags = java.util.regex.Pattern.CASE_INSENSITIVE;
+        ASKED.put(PRICE, java.util.regex.Pattern.compile("\\b(?:expensive|cheap|over-?valued|under-?valued|fairly valued"
+                + "|valuations?|over-?priced|under-?priced|p\\s*/\\s*e|pe ratio|price to (?:earnings|book))\\b", flags));
+        ASKED.put(STRETCHED, java.util.regex.Pattern.compile(
+                "\\b(?:debt|borrowings?|leverage[d]?|financially stretched)\\b", flags));
+        ASKED.put(CASH, java.util.regex.Pattern.compile("\\b(?:cash flows?|real cash|cash conversion)\\b", flags));
+        ASKED.put(PROFITABLE, java.util.regex.Pattern.compile("\\b(?:profitable|profitability|roe|roce)\\b", flags));
+        ASKED.put(GROWING, java.util.regex.Pattern.compile("\\b(?:growing|growth)\\b", flags));
+        ASKED.put(PERFORMANCE, java.util.regex.Pattern.compile(
+                "\\b(?:performed|performance|how has (?:the |its )?(?:share|stock) price|(?:share|stock) price history)\\b",
+                flags));
+    }
+
+    /**
+     * The topics a question asks about in its own words, when it asks about them in general ("is the debt
+     * high?"); empty for one about a particular period or a comparison ("FY24 debt", "debt compared with TCS"),
+     * which the research tools answer.
+     */
+    public static List<Topic> askedAbout(String question) {
+        List<Topic> topics = new ArrayList<>();
+        if (question == null || question.isBlank() || NARROWER.matcher(question).find()) {
+            return topics;
+        }
+        for (Topic topic : values()) {
+            java.util.regex.Pattern asked = ASKED.get(topic);
+            if (asked != null && asked.matcher(question).find()) {
+                topics.add(topic);
+            }
+        }
+        return topics;
+    }
+
+    /**
+     * The topics a typed reply picks, in this enum's order: the options whose label it contains (a reply that
+     * repeats the choices as they were shown), else those its words name ("rating and debt"). Empty when it
+     * names none.
+     */
+    public static List<Topic> matching(String text) {
+        List<Topic> topics = new ArrayList<>();
+        if (text == null || text.isBlank()) {
+            return topics;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        for (Topic topic : values()) {
+            if (lower.contains(topic.label.toLowerCase(Locale.ROOT))) {
+                topics.add(topic);
+            }
+        }
+        if (!topics.isEmpty()) {
+            return topics;
+        }
+        for (Topic topic : values()) {
+            if (WORDS.get(topic).matcher(text).find()) {
+                topics.add(topic);
+            }
+        }
+        return topics;
+    }
+
     /** The topics named by these ids, in this enum's order; an unknown id is ignored. */
     public static List<Topic> parse(List<String> ids) {
         List<Topic> topics = new ArrayList<>();

@@ -113,6 +113,18 @@ public class RatioContextService {
         return new ReportContext(symbol, group, run.orElse(null), ratios, notPrimary, peerNote);
     }
 
+    /**
+     * One metric's industry peers in the latest snapshot, as a report's context gives them; empty when the group has
+     * no peers, the metric is not primary for it, or no snapshot exists.
+     */
+    public Optional<PeerContext> peers(ScreeningMetric metric, IndustryGroup group, String symbol) {
+        if (group == null || NO_PEERS.contains(group) || group.isNonPrimary(metric.sectorKey())) {
+            return Optional.empty();
+        }
+        return latestSnapshot().flatMap(run -> PeerContext.of(metric, group, symbol, run,
+                repository.snapshots(run.id()), minimumPeers));
+    }
+
     /** The latest completed snapshot of the widest universe that has one: more companies make more peers. */
     private Optional<SnapshotRun> latestSnapshot() {
         Universe[] universes = Universe.values();
