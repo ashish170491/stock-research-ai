@@ -38,22 +38,31 @@ public class VerdictService {
         this.clock = clock;
     }
 
+    /** A company's verdict, or why there is none: exactly one of the two is set. */
+    public record Lookup(Verdict verdict, String failure) {
+    }
+
     /** The rated answer for a company's symbol or name, or a plain message when it could not be rated. */
     public String answer(String symbolOrName) {
+        Lookup lookup = lookup(symbolOrName);
+        return lookup.verdict() == null ? lookup.failure() : renderer.render(lookup.verdict());
+    }
+
+    public Lookup lookup(String symbolOrName) {
         Optional<NseSymbolDirectory.Listing> listing = directory.resolve(symbolOrName);
         if (listing.isEmpty()) {
-            return ("I could not find \"%s\" among the companies listed on the NSE, so I cannot rate it. Check the "
-                    + "name or use its NSE symbol.").formatted(symbolOrName);
+            return new Lookup(null, ("I could not find \"%s\" among the companies listed on the NSE. Check the "
+                    + "name or use its NSE symbol.").formatted(symbolOrName));
         }
         try {
             FundamentalsSnapshot snapshot = snapshots.build(
                     new Universes.Member(listing.get().symbol(), listing.get().name(), null),
                     LocalDate.now(clock.withZone(ZoneId.of("Asia/Kolkata"))));
-            return renderer.render(engine.assess(snapshot));
+            return new Lookup(engine.assess(snapshot), null);
         } catch (SnapshotBuilder.NothingRetrievedException ex) {
-            log.warn("No rating for {}: {}", listing.get().symbol(), ex.getMessage());
-            return ("I could not retrieve the figures I need to rate %s right now, so there is no rating. Please try "
-                    + "again in a few minutes.").formatted(listing.get().name());
+            log.warn("No figures for {}: {}", listing.get().symbol(), ex.getMessage());
+            return new Lookup(null, ("I could not retrieve %s's figures right now. Please try again in a few "
+                    + "minutes.").formatted(listing.get().name()));
         }
     }
 }

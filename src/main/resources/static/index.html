@@ -54,7 +54,25 @@
   .view.active { display: flex; }
   .scroll { flex: 1; overflow-y: auto; padding: 20px 16px; }
   .column { max-width: 920px; margin: 0 auto; }
-  .empty { color: var(--muted); text-align: center; margin-top: 12vh; }
+  .empty { color: var(--muted); text-align: center; margin-top: 8vh; }
+  .starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 18px auto 0;
+    max-width: 720px; text-align: left; }
+  .starters button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 12px;
+    padding: 10px 12px; font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+  .starters button:hover { border-color: var(--accent); }
+  .starters button small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  form.ask { margin-top: 8px; }
+  form.ask fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+  form.ask legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+  form.ask label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer; background: var(--bg); }
+  form.ask label:hover { border-color: var(--accent); }
+  form.ask input { margin-top: 3px; accent-color: var(--accent); }
+  form.ask label small { display: block; color: var(--muted); font-size: 12px; }
+  form.ask .actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  form.ask .actions button { padding: 8px 16px; }
+  form.ask .actions span { color: var(--muted); font-size: 12px; }
+  form.ask[aria-disabled="true"] label { cursor: default; opacity: .75; }
   .empty h2 { color: var(--text); font-size: 18px; margin-bottom: 6px; }
   .msg { margin: 0 0 18px; display: flex; flex-direction: column; }
   .msg.user { align-items: flex-end; }
@@ -94,6 +112,7 @@
   .md em.verifier::before { content: "Verifier: "; font-weight: 700; }
   .composer { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px; }
   .suggestions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .suggestions[hidden] { display: none; }
   .suggestions button { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 999px;
     padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
   .suggestions button:hover { border-color: var(--accent); color: var(--accent); }
@@ -249,10 +268,10 @@
       <div class="column">
         <div class="suggestions" id="suggestions"></div>
         <form class="row" id="chat-form">
-          <textarea id="chat-input" rows="2" placeholder="Ask about an NSE/BSE company…"></textarea>
+          <textarea id="chat-input" rows="2" placeholder="Ask anything, e.g. “Is TCS a good company to invest in?” or “What is ROCE?”"></textarea>
           <button class="primary" id="send" type="submit">Send</button>
         </form>
-        <div class="hint">Enter sends · Shift+Enter adds a line · answers are checked against the data before they are shown</div>
+        <div class="hint">Enter sends · Shift+Enter adds a line · broad questions get a quick question back first · answers are checked against the data before they are shown</div>
       </div>
     </div>
   </section>
@@ -309,7 +328,7 @@
       <h3>The features</h3>
       <div class="card"><h4>Stock screener (Screener tab)</h4><p>Choose a preset (quality compounder, reasonable value, dividend) or narrow it down yourself. Every rule is checked in code and the figure each result was decided on is shown. A company with a missing or conflicting figure never passes a rule on that figure. Results come from the latest stored snapshot, not live prices, and the snapshot date is shown. &quot;What this screen checks&quot; lists the exact criteria.</p></div>
       <div class="card"><h4>Screening in plain words (Chat)</h4><p>Describe what you want and the application turns it into explicit criteria, checks them against your own words, and shows every assumption it made. The index comes from your words; if you name none, the Nifty 50 is used.</p><p><button type="button" class="try">Which Nifty 50 stocks meet the dividend criteria?</button></p></div>
-      <div class="card"><h4>Buy, Hold or Sell rating (Chat)</h4><p>Ask whether a company is a good one to invest in. The answer opens on the rating, a bar for the quality of the business and for the price, and the five plain questions with one or two figures each. Every check and its figure is one tap away, and the full report is on the Report tab.</p><p><button type="button" class="try">Is Infosys a good company to invest in?</button></p></div>
+      <div class="card"><h4>Buy, Hold or Sell rating (Chat)</h4><p>Ask whether a company is a good one to invest in, or just name it. You get a short list of choices first (the rating, profit, growth, cash, debt, price, share-price history or the full report); tick what matters to you and only that is answered. The rating shows a bar for the quality of the business and for the price, and every check with its figure. After each answer, suggested follow-ups appear above the message box.</p><p><button type="button" class="try">Is Infosys a good company to invest in?</button></p></div>
       <div class="card"><h4>Full research report (Report tab or Chat)</h4><p>Facts, observations, risks and data gaps, an interpretation and sources, with a calculation audit. Everything except the interpretation is built in Java. The interpretation is reviewed by a second model pass and then by the number and claim checks. Figures that disagree between sources are shown as conflicts, not averaged.</p><p><button type="button" class="try">Research Infosys</button><button type="button" class="try">Fundamental overview of HDFC Bank</button></p></div>
       <div class="card"><h4>Specific questions</h4><p>Ask about a profile, financial figures, performance over a period, valuation figures, or what a loaded document says. Answers quote the tool output and say when a figure is unavailable.</p><p><button type="button" class="try">How has it performed over 5 years?</button><button type="button" class="try">And its debt?</button></p><p>Shareholding (promoter, FII, DII) is not available from the current data source, and the application says so instead of guessing.</p></div>
       <div class="card"><h4>Terms explained</h4><p>Answers do not explain the terms they use. The Terms tab lists every figure, grouped by the question it helps answer, with what it measures, how this application calculates it, how to read it and what to read it with. Asking &quot;What is ROCE?&quot; in the chat gives the same text. It is fixed, reviewed text, with no ideal value and no verdict on a value.</p><p><button type="button" class="try">What is ROCE?</button><button type="button" class="try">What does CAGR mean?</button></p></div>
@@ -371,8 +390,15 @@
 <script>
 (() => {
   const STORE_KEY = 'stock-research-chat';
-  const SUGGESTIONS = ['Research Infosys', 'How has it performed over 5 years?', 'And its debt?',
-                       'Price of TCS', 'Compare it with Wipro', 'Which Nifty 50 stocks meet the dividend criteria?'];
+  // Shown in a new conversation; after each answer, the application's own follow-ups replace them.
+  const STARTERS = [
+    { group: 'Check a company', text: 'Is Infosys a good company to invest in?' },
+    { group: 'Get to know a company', text: 'Tell me about TCS' },
+    { group: 'Learn a term', text: 'What is ROE?' },
+    { group: 'Find stocks', text: 'Which Nifty 50 stocks meet the dividend criteria?' },
+    { group: 'Compare two companies', text: 'Compare TCS and Infosys' },
+    { group: 'Latest price', text: 'Price of Reliance' }
+  ];
   const $ = id => document.getElementById(id);
   const messagesEl = $('messages'), scrollEl = $('chat-scroll'), input = $('chat-input'), sendBtn = $('send');
 
@@ -452,7 +478,8 @@
     if (m.role === 'assistant' && !m.error && m.intent) {
       const meta = document.createElement('div');
       meta.className = 'meta';
-      meta.append(chip(m.intent.replace(/_/g, ' ')));
+      meta.append(chip(m.clarification ? 'QUESTION FOR YOU' : (m.focus && m.focus.length ? 'FOCUSED ANSWER'
+        : m.intent.replace(/_/g, ' '))));
       (m.companies || []).forEach(c => meta.append(chip(c, true)));
       meta.append(document.createTextNode((m.elapsedMillis / 1000).toFixed(m.elapsedMillis < 10000 ? 2 : 1) + 's'));
       row.append(meta);
@@ -467,7 +494,8 @@
     }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    if (m.role === 'assistant' && !m.error) bubble.append(sectioned(m.text));
+    if (m.role === 'assistant' && !m.error && m.clarification) bubble.append(clarificationForm(m));
+    else if (m.role === 'assistant' && !m.error) bubble.append(sectioned(m.text));
     else bubble.textContent = m.text;
     row.append(bubble);
     return row;
@@ -480,11 +508,93 @@
     if (!state.messages.length) {
       const e = document.createElement('div');
       e.className = 'empty';
-      e.innerHTML = '<h2>Ask about a listed company</h2>Try the suggestions below in order: the follow-ups name no company, so they show whether the conversation is remembered.';
+      e.innerHTML = '<h2>What would you like to know?</h2>Ask about any company listed on the NSE in your own words. '
+        + 'If a question is broad, I will ask what matters to you first, so the answer stays short.';
+      const grid = document.createElement('div');
+      grid.className = 'starters';
+      STARTERS.forEach(st => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        const g = document.createElement('small');
+        g.textContent = st.group;
+        b.append(g, document.createTextNode(st.text));
+        b.addEventListener('click', () => send(st.text));
+        grid.append(b);
+      });
+      e.append(grid);
       messagesEl.append(e);
     }
     state.messages.forEach(m => messagesEl.append(renderMessage(m)));
+    renderSuggestions();
     scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+
+  // The chips above the input: the last answer's follow-ups, or the starters in a new conversation.
+  function renderSuggestions() {
+    const box = $('suggestions');
+    box.replaceChildren();
+    const last = state.messages[state.messages.length - 1];
+    let list;
+    if (!state.messages.length || last.role === 'user') list = [];
+    else if (last && last.role === 'assistant' && last.suggestions && last.suggestions.length) list = last.suggestions;
+    else if (last && last.clarification && !last.answered) list = [];
+    else list = STARTERS.slice(0, 3).map(st => ({ text: st.text }));
+    list.forEach(sg => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = sg.text;
+      b.addEventListener('click', () => sg.topics && sg.topics.length
+        ? send(sg.text, { company: sg.company, topics: sg.topics }) : send(sg.text));
+      box.append(b);
+    });
+    box.hidden = !list.length;
+  }
+
+  // A question back to the user, with its choices as checkboxes (or radio buttons when only one may be chosen).
+  function clarificationForm(m) {
+    const c = m.clarification;
+    const form = document.createElement('form');
+    form.className = 'ask';
+    const fs = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    legend.textContent = c.question;
+    fs.append(legend);
+    const name = 'ask-' + Math.random().toString(36).slice(2);
+    c.options.forEach(o => {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = c.multiSelect ? 'checkbox' : 'radio';
+      box.name = name; box.value = o.id;
+      box.checked = m.answered ? (m.chosen || []).includes(o.id) : o.selected;
+      box.disabled = !!m.answered;
+      const text = document.createElement('span');
+      text.textContent = o.label;
+      if (o.hint) { const h = document.createElement('small'); h.textContent = o.hint; text.append(h); }
+      label.append(box, text);
+      fs.append(label);
+    });
+    form.append(fs);
+    if (m.answered) {
+      form.setAttribute('aria-disabled', 'true');
+      return form;
+    }
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const go = document.createElement('button');
+    go.type = 'submit'; go.className = 'primary'; go.textContent = 'Show me';
+    const note = document.createElement('span');
+    note.textContent = c.multiSelect ? 'Pick one or more, or type your own question below.'
+      : 'Pick one, or type your own question below.';
+    actions.append(go, note);
+    form.append(actions);
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const chosen = [...form.querySelectorAll('input:checked')].map(i => i.value);
+      if (!chosen.length) { note.textContent = 'Pick at least one first.'; return; }
+      m.answered = true; m.chosen = chosen;
+      const labels = c.options.filter(o => chosen.includes(o.id)).map(o => o.label);
+      send(c.company + ': ' + labels.join('; '), { company: c.company, topics: chosen });
+    });
+    return form;
   }
 
   // --- progress: the steps the application reports while it works ---
@@ -534,7 +644,7 @@
   }
 
   // --- sending ---
-  async function send(text) {
+  async function send(text, focus) {
     text = text.trim();
     if (!text || sendBtn.disabled) return;
     state.messages.push({ role: 'user', text });
@@ -565,7 +675,7 @@
     try {
       const res = await fetch('/api/ai/chat/stream', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-        body: JSON.stringify({ conversationId: state.conversationId, message: text })
+        body: JSON.stringify({ conversationId: state.conversationId, message: text, focus: focus || null })
       });
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
@@ -585,7 +695,8 @@
       if (failure) throw new Error(failure.message || ('HTTP ' + failure.status));
       if (!reply) throw new Error('the answer did not arrive');
       state.messages.push({ role: 'assistant', text: reply.answer, intent: reply.intent, companies: reply.companies,
-                            elapsedMillis: reply.elapsedMillis,
+                            elapsedMillis: reply.elapsedMillis, clarification: reply.clarification,
+                            suggestions: reply.suggestions || [], focus: reply.focus || [],
                             steps: steps.map(({ id, status, label, elapsedMillis }) => ({ id, status, label, elapsedMillis })) });
     } catch (err) {
       state.messages.push({ role: 'assistant', error: true, text: 'Request failed: ' + err.message });
@@ -600,12 +711,6 @@
   $('chat-form').addEventListener('submit', e => { e.preventDefault(); send(input.value); });
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(input.value); }
-  });
-  SUGGESTIONS.forEach(s => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.textContent = s;
-    b.addEventListener('click', () => send(s));
-    $('suggestions').append(b);
   });
   $('new-conv').addEventListener('click', () => { state = fresh(); save(); renderAll(); input.focus(); });
 
