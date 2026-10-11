@@ -1,6 +1,8 @@
 package com.ashish.stockresearch.controller;
 
 import com.ashish.stockresearch.agent.Intent;
+import com.ashish.stockresearch.focus.Clarification;
+import com.ashish.stockresearch.focus.Suggestion;
 import com.ashish.stockresearch.service.AiService;
 import com.ashish.stockresearch.trace.Progress;
 import org.slf4j.Logger;
@@ -35,26 +37,51 @@ public class AiController {
 		this.aiService = aiService;
 	}
 
-	/** @param conversationId continues that conversation; omit it to start a new one */
-	public record ChatRequest(String conversationId, String message) {
+	/**
+	 * @param conversationId continues that conversation; omit it to start a new one
+	 * @param focus          the user's choice from a clarification or a suggestion: answer only these topics about
+	 *                       this company; {@code message} is how the choice reads in the conversation
+	 */
+	public record ChatRequest(String conversationId, String message, Focus focus) {
+
+		public ChatRequest(String conversationId, String message) {
+			this(conversationId, message, null);
+		}
+	}
+
+	public record Focus(String company, List<String> topics) {
 	}
 
 	/**
 	 * @param intent        how the message was routed
 	 * @param companies     the companies the answer is about
 	 * @param elapsedMillis how long the answer took, end to end
+	 * @param clarification a question back to the user with choices, instead of an answer; null otherwise
+	 * @param suggestions   follow-ups the user can tap
+	 * @param focus         the topics a focused answer covers; empty otherwise
 	 */
 	public record ChatReply(String conversationId, Intent intent, List<String> companies, String answer,
-			long elapsedMillis) {
+			long elapsedMillis, Clarification clarification, List<Suggestion> suggestions, List<String> focus) {
+
+		static ChatReply of(String conversationId, AiService.ChatAnswer answer, long startNanos) {
+			return new ChatReply(conversationId, answer.intent(), answer.companies(), answer.text(),
+					(System.nanoTime() - startNanos) / 1_000_000, answer.clarification(), answer.suggestions(),
+					answer.focus());
+		}
 	}
 
 	@PostMapping("/api/ai/chat")
 	public ChatReply chat(@RequestBody ChatRequest request) {
 		String conversationId = conversationId(request);
 		long start = System.nanoTime();
-		AiService.ChatAnswer answer = aiService.chat(conversationId, request.message().strip());
-		return new ChatReply(conversationId, answer.intent(), answer.companies(), answer.text(),
-				(System.nanoTime() - start) / 1_000_000);
+		return ChatReply.of(conversationId, answer(conversationId, request), start);
+	}
+
+	private AiService.ChatAnswer answer(String conversationId, ChatRequest request) {
+		String message = request.message().strip();
+		Focus focus = request.focus();
+		return focus == null ? aiService.chat(conversationId, message)
+				: aiService.focus(conversationId, message, focus.company(), focus.topics());
 	}
 
 	/** A failed answer on the stream: the HTTP status it would have had, and why. */
@@ -77,9 +104,7 @@ public class AiController {
 			Progress.Sink sink = event -> send(emitter, lock, "step", event);
 			long start = System.nanoTime();
 			try (Progress.Scope scope = Progress.open(sink)) {
-				AiService.ChatAnswer answer = aiService.chat(conversationId, message);
-				send(emitter, lock, "answer", new ChatReply(conversationId, answer.intent(), answer.companies(),
-						answer.text(), (System.nanoTime() - start) / 1_000_000));
+				send(emitter, lock, "answer", ChatReply.of(conversationId, answer(conversationId, request), start));
 			} catch (UncheckedIOException ex) {
 				log.info("The reader left before the answer to '{}' was sent; it was still remembered", message);
 			} catch (ResponseStatusException ex) {

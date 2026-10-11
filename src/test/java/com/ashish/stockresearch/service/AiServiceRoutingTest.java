@@ -128,6 +128,8 @@ class AiServiceRoutingTest {
     private final ScreenerAgent screenerAgent = mock(ScreenerAgent.class);
     private final com.ashish.stockresearch.research.comparison.ComparisonService comparisonService =
             mock(com.ashish.stockresearch.research.comparison.ComparisonService.class);
+    private final com.ashish.stockresearch.focus.FocusService focusService =
+            mock(com.ashish.stockresearch.focus.FocusService.class);
     private final com.ashish.stockresearch.verdict.VerdictService verdictService =
             mock(com.ashish.stockresearch.verdict.VerdictService.class);
     private final com.ashish.stockresearch.orchestrator.ResearchOrchestrator orchestrator =
@@ -155,7 +157,7 @@ class AiServiceRoutingTest {
                 reportWriter, comparisonService, quotes, screenerAgent, new AnswerChecks(new NumericClaimVerifier(),
                         new ScreeningCountVerifier(), new UnsupportedClaimFilter()),
                 new OllamaCalls("qwen3:8b", "http://localhost:11434"), chatMemory, sessions,
-                com.ashish.stockresearch.glossary.TestGlossary.glossary(), orchestrator, verdictService);
+                com.ashish.stockresearch.glossary.TestGlossary.glossary(), orchestrator, verdictService, focusService);
     }
 
     private void routes(String message, Intent intent, String... companies) {
@@ -241,10 +243,59 @@ class AiServiceRoutingTest {
         assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo("[A screen was shown to the user]");
     }
 
-    // "Is X a good company to invest in?" is answered by the Java rating, never by the report or a model.
+    // A broad question gets a question back, with choices, before anything is fetched or a model is called.
     @Test
-    void aQuestionAboutWhetherToInvestIsAnsweredByTheRatingNotTheReport() {
+    void aBroadQuestionAboutACompanyIsAnsweredWithChoicesFirst() {
         String question = "Should I buy Marksans Pharma?";
+        routes(question, Intent.FULL_RESEARCH, "MARKSANS");
+
+        AiService.ChatAnswer answer = service(UNUSED).chat(CONVERSATION, question);
+
+        assertThat(answer.clarification()).isNotNull();
+        assertThat(answer.clarification().company()).isEqualTo("MARKSANS");
+        assertThat(answer.clarification().multiSelect()).isTrue();
+        // a question about whether to invest starts with the rating ticked
+        assertThat(answer.clarification().options()).filteredOn(com.ashish.stockresearch.focus.Clarification.Option::selected)
+                .extracting(com.ashish.stockresearch.focus.Clarification.Option::id).containsExactly("rating");
+        assertThat(answer.text()).contains("What would you like to know about MARKSANS?").contains("- Is it growing?");
+        verify(reportWriter, never()).write(anyString());
+        verify(verdictService, never()).answer(anyString());
+        verify(focusService, never()).answer(anyString(), any());
+    }
+
+    // The choice is answered by FocusService alone, remembered, and ticked first the next time.
+    @Test
+    void aChosenFocusIsAnsweredRememberedAndTickedNextTime() {
+        when(focusService.answer("MARKSANS", List.of(com.ashish.stockresearch.focus.Topic.GROWING,
+                com.ashish.stockresearch.focus.Topic.STRETCHED))).thenReturn("# Marksans\n\n### Is it growing?\n");
+
+        AiService.ChatAnswer answer = service(UNUSED).focus(CONVERSATION, "MARKSANS: Is it growing?; debt",
+                "MARKSANS", List.of("stretched", "growing", "nonsense"));
+
+        assertThat(answer.text()).startsWith("# Marksans");
+        assertThat(answer.focus()).containsExactly("Is it growing?", "Does it carry a lot of debt?");
+        assertThat(answer.suggestions()).extracting(com.ashish.stockresearch.focus.Suggestion::text)
+                .startsWith("Is MARKSANS a good company to invest in?", "Is MARKSANS profitable?")
+                .contains("Show me the full report on MARKSANS");
+        assertThat(chatMemory.get(CONVERSATION).get(1).getText()).isEqualTo(
+                "[An answer on MARKSANS covering Is it growing?; Does it carry a lot of debt? was shown to the user.]");
+
+        routes("Tell me about Infosys", Intent.FULL_RESEARCH, "INFY");
+        AiService.ChatAnswer next = service(UNUSED).chat(CONVERSATION, "Tell me about Infosys");
+        assertThat(next.clarification().options()).filteredOn(com.ashish.stockresearch.focus.Clarification.Option::selected)
+                .extracting(com.ashish.stockresearch.focus.Clarification.Option::id).containsExactly("growing", "stretched");
+    }
+
+    @Test
+    void aFocusWithNoKnownTopicIsRejected() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service(UNUSED).focus(CONVERSATION, "x", "TCS",
+                List.of("nonsense"))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
+
+    // Asking for the analysis in words skips the question; asking whether to buy it as well gets the rating card.
+    @Test
+    void aQuestionAboutWhetherToInvestThatAsksForTheAnalysisIsAnsweredByTheRating() {
+        String question = "Should I buy Marksans Pharma? Give me the full analysis";
         routes(question, Intent.FULL_RESEARCH, "MARKSANS");
         when(verdictService.answer("MARKSANS")).thenReturn("THE RATING CARD");
 

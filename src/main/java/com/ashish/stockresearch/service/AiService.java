@@ -18,6 +18,12 @@ import com.ashish.stockresearch.tool.ScreeningTools;
 import com.ashish.stockresearch.tool.StockPriceTool;
 import com.ashish.stockresearch.tool.StockResearchTools;
 import com.ashish.stockresearch.tool.ToolUsage;
+import com.ashish.stockresearch.focus.Clarification;
+import com.ashish.stockresearch.focus.Clarifier;
+import com.ashish.stockresearch.focus.FocusService;
+import com.ashish.stockresearch.focus.Suggestion;
+import com.ashish.stockresearch.focus.Suggestions;
+import com.ashish.stockresearch.focus.Topic;
 import com.ashish.stockresearch.verdict.VerdictService;
 import com.ashish.stockresearch.trace.Progress;
 import org.springframework.ai.chat.client.ChatClient;
@@ -31,6 +37,7 @@ import org.springframework.stereotype.Service;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -106,6 +113,7 @@ public class AiService {
 	private final ResearchSessions sessions;
 	private final MetricGlossary glossary;
 	private final VerdictService verdictService;
+	private final FocusService focusService;
 	private final ResearchOrchestrator orchestrator;
 
 	/**
@@ -114,7 +122,22 @@ public class AiService {
 	 * @param companies the companies the answer is about: those routed to, or else those the tools
 	 *                  were called for; empty when none
 	 */
-	public record ChatAnswer(Intent intent, List<String> companies, String text) {
+	/**
+	 * @param clarification a question back to the user, with choices, instead of an answer; null otherwise
+	 * @param suggestions   follow-ups the user can tap
+	 * @param focus         the topics a focused answer covers (their labels); empty otherwise
+	 */
+	public record ChatAnswer(Intent intent, List<String> companies, String text, Clarification clarification,
+			List<Suggestion> suggestions, List<String> focus) {
+
+		public ChatAnswer {
+			suggestions = suggestions == null ? List.of() : List.copyOf(suggestions);
+			focus = focus == null ? List.of() : List.copyOf(focus);
+		}
+
+		public ChatAnswer(Intent intent, List<String> companies, String text) {
+			this(intent, companies, text, null, List.of(), List.of());
+		}
 	}
 
 	public AiService(ChatClient.Builder chatClientBuilder,
@@ -134,7 +157,8 @@ public class AiService {
 			ResearchSessions sessions,
 			MetricGlossary glossary,
 			ResearchOrchestrator orchestrator,
-			VerdictService verdictService) {
+			VerdictService verdictService,
+			FocusService focusService) {
 		// Specific questions: the model picks among the individual research
 		// tools and Spring AI runs the tool-calling loop.
 		this.toolClient = chatClientBuilder.clone()
@@ -158,6 +182,7 @@ public class AiService {
 		this.glossary = glossary;
 		this.orchestrator = orchestrator;
 		this.verdictService = verdictService;
+		this.focusService = focusService;
 	}
 
 	/**
@@ -194,6 +219,16 @@ public class AiService {
 		try (Progress.Step understanding = Progress.start("Understanding your question")) {
 			request = router.route(message, session);
 			understanding.done("Understood: " + understood(request));
+		}
+		Optional<Clarification> clarification = Clarifier.clarification(message, request,
+				Topic.parse(session.focus()));
+		if (clarification.isPresent()) {
+			// Too broad to answer well: ask what the user wants to know first.
+			remember(conversationId, message, "[Asked which parts of " + clarification.get().company()
+					+ " the user wants to hear about.]");
+			session.rememberCompanies(request.companies());
+			return new ChatAnswer(request.intent(), request.companies(), Clarifier.asText(clarification.get()),
+					clarification.get(), List.of(), List.of());
 		}
 		List<String> companies = request.companies();
 		String answer;
@@ -264,7 +299,31 @@ public class AiService {
 			default -> throw new IllegalStateException("Unhandled intent " + request.intent());
 		}
 		session.rememberCompanies(companies);
-		return new ChatAnswer(request.intent(), companies, answer);
+		List<Suggestion> suggestions = session.checkpoint().isPresent() ? List.of(Suggestion.ask("continue"))
+				: Suggestions.after(request.intent(), companies, answer, glossary);
+		return new ChatAnswer(request.intent(), companies, answer, null, suggestions, List.of());
+	}
+
+	/**
+	 * Answers only the topics the user chose about a company (from a clarification's choices, or a suggestion),
+	 * rendered in Java. {@code message} is how the choice reads in the conversation.
+	 */
+	public ChatAnswer focus(String conversationId, String message, String company, List<String> topicIds) {
+		List<Topic> topics = Topic.parse(topicIds);
+		if (company == null || company.isBlank() || topics.isEmpty()) {
+			throw new org.springframework.web.server.ResponseStatusException(
+					org.springframework.http.HttpStatus.BAD_REQUEST, "choose a company and at least one topic");
+		}
+		ResearchSession session = sessions.get(conversationId);
+		String answer = focusService.answer(company, topics);
+		List<String> labels = topics.stream().map(Topic::label).toList();
+		session.addEvidence(answer);
+		session.rememberCompanies(List.of(company));
+		session.rememberFocus(topics.stream().map(Topic::id).toList());
+		remember(conversationId, message, "[An answer on " + company + " covering " + String.join("; ", labels)
+				+ " was shown to the user.]");
+		return new ChatAnswer(Intent.FULL_RESEARCH, List.of(company), answer, null,
+				Suggestions.afterFocus(company, topics, answer, glossary), labels);
 	}
 
 	/**

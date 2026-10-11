@@ -147,7 +147,8 @@ final class GoldenSetSupport {
                 documentSearchTools, conversationTraceAdvisor, researchReportWriter, comparisonService,
                 marketDataService, mock(ScreenerAgent.class), new AnswerChecks(numericVerifier,
                         new ScreeningCountVerifier(), claimFilter), ollama, chatMemory, sessions, glossary,
-                mock(ResearchOrchestrator.class), mock(VerdictService.class));
+                mock(ResearchOrchestrator.class), mock(VerdictService.class),
+                mock(com.ashish.stockresearch.focus.FocusService.class));
     }
 
     /** HDFC Bank's annual report, ingested with a deterministic embedding model (no live Ollama embedding call). */

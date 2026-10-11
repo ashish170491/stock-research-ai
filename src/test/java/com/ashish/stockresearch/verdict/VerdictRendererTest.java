@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VerdictRendererTest {
 
     private final VerdictEngine engine = new VerdictEngine(ScreeningPresetsTest.presets(), VerdictProperties.defaults());
-    private final VerdictRenderer renderer = new VerdictRenderer();
+    private final VerdictRenderer renderer = new VerdictRenderer(com.ashish.stockresearch.glossary.TestGlossary.glossary());
 
     private String rendered(Rating expected, String earningsYield) {
         Verdict verdict = engine.assess(stock("PHARMA1", IndustryGroup.PHARMA)
@@ -54,5 +54,23 @@ class VerdictRendererTest {
         assertThat(verdict.rating()).isEqualTo(Rating.NO_RATING);
         assertThat(md).contains("**Rating: No rating** - Too few of the checks could be run on reliable data")
                 .contains("the application will not guess").contains("| Return on equity, average of the last 3 fiscal years ≥ 15.00% | Could not check | the figures it is built from contradict each other");
+    }
+
+    // A chosen question shows only its own figures and the rating checks that belong to it.
+    @Test
+    void aSingleQuestionShowsItsFiguresAndOnlyItsOwnChecks() {
+        Verdict verdict = engine.assess(stock("PHARMA1", IndustryGroup.PHARMA)
+                .with(ROE_3Y_AVG_PERCENT, "20").with(ROCE_PERCENT, "20").with(REVENUE_CAGR_5Y_PERCENT, "12")
+                .with(NET_PROFIT_CAGR_5Y_PERCENT, "8").with(OCF_TO_PAT_3Y_MULTIPLE, "1.0")
+                .with(DEBT_TO_EQUITY_MULTIPLE, "0.1").with(EARNINGS_YIELD_PERCENT, "5").build());
+
+        String growing = renderer.question(verdict, com.ashish.stockresearch.glossary.MetricQuestion.GROWING);
+
+        assertThat(growing).startsWith("### Is it growing?\n\n")
+                .contains("- Met: revenue CAGR over the last 5 fiscal years ≥ 10.00% - 12.00%")
+                .contains("- Not met: net profit CAGR over the last 5 fiscal years ≥ 10.00% - 8.00%")
+                .doesNotContain("Return on equity").doesNotContain("Rating:");
+        assertThat(renderer.rating(verdict)).startsWith("### Overall rating\n\n**Rating: Buy**")
+                .contains(VerdictRenderer.NOT_ADVICE).doesNotContain("Is it growing?");
     }
 }

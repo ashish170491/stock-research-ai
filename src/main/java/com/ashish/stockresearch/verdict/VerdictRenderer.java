@@ -1,5 +1,6 @@
 package com.ashish.stockresearch.verdict;
 
+import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.glossary.MetricQuestion;
 import com.ashish.stockresearch.research.model.DataStatus;
 import com.ashish.stockresearch.screening.RuleOutcome;
@@ -36,11 +37,54 @@ public class VerdictRenderer {
                 ScreeningMetric.EARNINGS_YIELD_PERCENT));
     }
 
-    public String render(Verdict verdict) {
+    private final MetricGlossary glossary;
+
+    public VerdictRenderer(MetricGlossary glossary) {
+        this.glossary = glossary;
+    }
+
+    /** "# Name (SYMBOL)" */
+    public static String title(Verdict verdict) {
         String name = verdict.snapshot().companyName() == null ? verdict.snapshot().symbol()
                 : verdict.snapshot().companyName();
+        return "# " + name + " (" + verdict.snapshot().symbol() + ")";
+    }
+
+    /** The rating on its own: the headline, a bar for each pillar, the rule that decided it, and its limits. */
+    public String rating(Verdict verdict) {
+        StringBuilder md = new StringBuilder("### Overall rating\n\n");
+        md.append("**Rating: ").append(verdict.rating().label()).append("** - ").append(summary(verdict)).append("\n\n");
+        md.append(bar(verdict.quality())).append("\n\n").append(bar(verdict.price())).append("\n\n");
+        md.append(ruleText(verdict.rule())).append("\n\n");
+        md.append("_").append(NOT_ADVICE).append(" It looks only at past figures, not news, management or the "
+                + "economy._\n");
+        return md.toString();
+    }
+
+    /**
+     * One of the five questions: its headline figures, then each rating check that belongs to it, met or not,
+     * with the figure it was decided on.
+     */
+    public String question(Verdict verdict, MetricQuestion question) {
+        StringBuilder md = new StringBuilder("### ").append(question.heading()).append("\n\n");
+        FIGURES.getOrDefault(question, List.of())
+                .forEach(metric -> md.append("- ").append(figure(verdict, metric)).append("\n"));
+        List<RuleResult> checks = java.util.stream.Stream.concat(verdict.quality().results().stream(),
+                        verdict.price().results().stream())
+                .filter(result -> glossary.forScreeningMetric(result.rule().metric())
+                        .map(entry -> entry.question() == question).orElse(false))
+                .toList();
+        if (!checks.isEmpty()) {
+            md.append("\nAgainst the rating's rules of thumb:\n");
+            checks.forEach(result -> md.append("- ").append(outcome(result)).append(": ")
+                    .append(result.rule().describe()).append(" - ").append(checkFigure(result)).append("\n"));
+        }
+        return md.toString();
+    }
+
+    public String render(Verdict verdict) {
         StringBuilder md = new StringBuilder();
-        md.append("# ").append(name).append(" (").append(verdict.snapshot().symbol()).append("), in plain words\n\n");
+        md.append(title(verdict)).append(", in plain words\n\n");
         md.append("**Rating: ").append(verdict.rating().label()).append("** - ").append(summary(verdict)).append("\n\n");
         md.append("_").append(NOT_ADVICE).append("_\n\n");
         md.append("_Want every figure? Open the Report tab for the full research report._\n\n");
@@ -128,17 +172,23 @@ public class VerdictRenderer {
 
     private static void checks(StringBuilder md, Pillar pillar) {
         for (RuleResult result : pillar.results()) {
-            String outcome = switch (result.outcome()) {
-                case PASS -> "Met";
-                case FAIL -> "Not met";
-                case INSUFFICIENT_DATA -> "Could not check";
-            };
-            String figure = result.outcome() == RuleOutcome.INSUFFICIENT_DATA ? plainReason(result.metric())
-                    : result.metric().display() + (result.metric().periodLabel() == null ? ""
-                    : " (" + result.metric().periodLabel() + ")");
-            md.append("| ").append(capitalised(result.rule().describe())).append(" | ").append(outcome).append(" | ")
-                    .append(figure.replace("|", "/")).append(" |\n");
+            md.append("| ").append(capitalised(result.rule().describe())).append(" | ").append(outcome(result))
+                    .append(" | ").append(checkFigure(result).replace("|", "/")).append(" |\n");
         }
+    }
+
+    private static String outcome(RuleResult result) {
+        return switch (result.outcome()) {
+            case PASS -> "Met";
+            case FAIL -> "Not met";
+            case INSUFFICIENT_DATA -> "Could not check";
+        };
+    }
+
+    private static String checkFigure(RuleResult result) {
+        return result.outcome() == RuleOutcome.INSUFFICIENT_DATA ? plainReason(result.metric())
+                : result.metric().display() + (result.metric().periodLabel() == null ? ""
+                : " (" + result.metric().periodLabel() + ")");
     }
 
     private static String capitalised(String text) {

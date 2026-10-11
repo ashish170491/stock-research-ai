@@ -23,6 +23,7 @@ public final class ResearchSession {
     private List<String> companies = List.of();
     private final Deque<String> evidence = new ArrayDeque<>();
     private OrchestratorCheckpoint checkpoint;
+    private List<String> focus = List.of();
 
     /** The companies the most recent company-specific turn was about, in order; empty at the start. */
     public synchronized List<String> companies() {
@@ -33,6 +34,17 @@ public final class ResearchSession {
     public synchronized void rememberCompanies(List<String> discussed) {
         if (discussed != null && !discussed.isEmpty()) {
             companies = List.copyOf(discussed);
+        }
+    }
+
+    /** The topics the user last chose to hear about (their ids), ticked first the next time they are asked. */
+    public synchronized List<String> focus() {
+        return focus;
+    }
+
+    public synchronized void rememberFocus(List<String> topics) {
+        if (topics != null && !topics.isEmpty()) {
+            focus = List.copyOf(topics);
         }
     }
 

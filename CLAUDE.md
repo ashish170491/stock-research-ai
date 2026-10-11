@@ -12,6 +12,12 @@
 - A snapshot stores a universe member only from its own NSE listing; a symbol that resolves to another
   listing is a recorded failure. Universe CSVs are kept as downloaded from NSE Indices.
 - Every model answer about a screen also goes through ScreeningCountVerifier (AnswerChecks).
+- A broad request about one company (its name alone, "tell me about X", "is X a good investment?", "how is X
+  doing?") is answered first with a Clarification: checkbox choices of Topic (focus/). Clarifier decides this in
+  code, never a model; asking for the report in words ("research X", "full analysis") or a precise question skips
+  it. The choice comes back as ChatRequest.focus and FocusService answers only those topics, rendered in Java from
+  the VerdictService figures (the full report is the only model-written part). Suggestions after every answer are
+  chosen in Java (Suggestions).
 - Every number is a FinancialDataPoint with unit, period, source and DataStatus.
   Only VALID values are used; non-VALID never passes a screening rule.
 - Every model answer that states figures goes through NumericClaimVerifier and
