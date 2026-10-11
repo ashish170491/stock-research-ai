@@ -96,6 +96,20 @@ public final class ContextRenderer {
         return text.toString();
     }
 
+    /**
+     * Peers in one short line for a beginner: the median and range only, with the snapshot date and the peer count;
+     * empty when there is no peer statistic. Neutral words only, never "high" or "cheap".
+     */
+    public static String peerLine(PeerContext peers) {
+        if (!peers.calculated()) {
+            return "";
+        }
+        return "Other %s companies (%s snapshot of %s, %d with a usable figure): median %s, range %s to %s".formatted(
+                peers.group().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' '),
+                peers.run().universe().displayName(), peers.snapshotDate(), peers.count(), peers.median().display(),
+                peers.lowest().display(), peers.highest().display());
+    }
+
     static String peers(PeerContext peers) {
         StringBuilder text = new StringBuilder().append(peers.group()).append(" peers in the ")
                 .append(peers.run().universe().displayName()).append(" snapshot of ").append(peers.snapshotDate());

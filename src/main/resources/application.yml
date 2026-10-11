@@ -14,6 +14,12 @@ spring:
   application:
     name: stock-research-ai
   web:
+    # The page is one file that changes with the application: the browser must check for a newer copy on every
+    # load, or an open tab keeps running an older page against a newer server.
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true
     error:
       # The reasons this application gives (e.g. "Could not reach Ollama...") are
       # written for the user; show them in error responses and in the UI.

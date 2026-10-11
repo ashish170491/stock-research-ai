@@ -59,8 +59,24 @@ public final class Clarifier {
                 true, options));
     }
 
+    /** "Which company is this about?", offering the companies discussed so far; the user may also type a name. */
+    public static Clarification whichCompany(List<String> discussed) {
+        List<Clarification.Option> options = discussed == null ? List.of() : discussed.stream()
+                .map(company -> new Clarification.Option(company, company, "discussed earlier", false)).toList();
+        return new Clarification("Which company is this about?", null, false, options, Clarification.COMPANY);
+    }
+
     /** The question as plain text, for a client that does not draw the choices. */
     public static String asText(Clarification clarification) {
+        if (Clarification.COMPANY.equals(clarification.kind())) {
+            StringBuilder md = new StringBuilder(clarification.question());
+            if (clarification.options().isEmpty()) {
+                return md.append(" Type its name, for example \"Infosys\" or \"TCS\".").toString();
+            }
+            md.append(" Pick one, or type another company's name:\n\n");
+            clarification.options().forEach(option -> md.append("- ").append(option.label()).append("\n"));
+            return md.toString().stripTrailing();
+        }
         StringBuilder md = new StringBuilder(clarification.question()).append(" Pick one or more:\n\n");
         clarification.options().forEach(option -> md.append("- ").append(option.label()).append("\n"));
         md.append("\nOr type your own question.");

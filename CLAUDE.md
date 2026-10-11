@@ -17,7 +17,15 @@
   code, never a model; asking for the report in words ("research X", "full analysis") or a precise question skips
   it. The choice comes back as ChatRequest.focus and FocusService answers only those topics, rendered in Java from
   the VerdictService figures (the full report is the only model-written part). Suggestions after every answer are
-  chosen in Java (Suggestions).
+  chosen in Java (Suggestions). A typed reply to the choices (Topic.matching) and any question about the rating of
+  the company being discussed are answered by FocusService before routing; no model is ever asked about a rating,
+  and AiService.withoutRatingClaims removes any buy/sell/hold, rating, target-price or fair-value sentence from
+  every model answer (tool and general paths). A general question on a topic ("are valuations expensive?", Topic.askedAbout)
+  is answered by FocusService too, with its industry peers' median and range (RatioContextService.peers). When it is not
+  clear which company a question is about - none named and not exactly one under discussion - the app asks
+  (Clarifier.whichCompany, radio buttons of the companies discussed) and answers the original question once told;
+  it never lets a model guess. A tool answer with placeholders ("[X]") is not shown, and sentences naming internal
+  tools are removed.
 - Every number is a FinancialDataPoint with unit, period, source and DataStatus.
   Only VALID values are used; non-VALID never passes a screening rule.
 - Every model answer that states figures goes through NumericClaimVerifier and

@@ -5,6 +5,7 @@ import com.ashish.stockresearch.agent.RoutedRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 
@@ -62,5 +63,54 @@ class ClarifierTest {
                 .containsExactly("profitable", "growing");
         assertThat(Clarifier.asText(c)).startsWith("What would you like to know about TCS? Pick one or more:")
                 .contains("- Overall rating: Buy, Hold or Sell").endsWith("Or type your own question.");
+    }
+
+    // A typed reply to the choices: the labels as shown, or plain words.
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "Overall rating: Buy, Hold or Sell|rating",
+            "Is it growing?; Does it carry a lot of debt?|growing,stretched",
+            "rating and debt|rating,stretched",
+            "how profitable is it, and is it growing|profitable,growing",
+            "Are the profits real cash?|cash",
+            "show me everything|full-report",
+    })
+    void readsATypedChoice(String reply, String ids) {
+        assertThat(Topic.matching(reply)).extracting(Topic::id).containsExactly(ids.split(","));
+    }
+
+    @Test
+    void aReplyThatNamesNoTopicPicksNothing() {
+        assertThat(Topic.matching("ok thanks")).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "Are valuations expensive?|price",
+            "Is the stock overvalued?|price",
+            "Is the debt high?|stretched",
+            "Is it profitable?|profitable",
+            "Is the company growing?|growing",
+            "How has the share price performed?|performance",
+    })
+    void readsAGeneralQuestionOnATopic(String question, String ids) {
+        assertThat(Topic.askedAbout(question)).extracting(Topic::id).containsExactly(ids.split(","));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"What was the debt in FY24?", "Compare its debt with TCS", "What is the share price of TCS?",
+            "What was the revenue last quarter?", "Who is the CEO?"})
+    void aNarrowerQuestionIsLeftToTheResearchTools(String question) {
+        assertThat(Topic.askedAbout(question)).isEmpty();
+    }
+
+    @Test
+    void asksWhichCompanyWithRadioButtonsOfTheCompaniesDiscussed() {
+        Clarification c = Clarifier.whichCompany(List.of("TCS", "INFY"));
+
+        assertThat(c.kind()).isEqualTo(Clarification.COMPANY);
+        assertThat(c.multiSelect()).isFalse();
+        assertThat(Clarifier.asText(c)).isEqualTo("Which company is this about? Pick one, or type another company's "
+                + "name:\n\n- TCS\n- INFY");
     }
 }
