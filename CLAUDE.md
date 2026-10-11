@@ -57,7 +57,10 @@
   stored once (NseDocumentStore). A filed figure is used only after FiledStatementChecks.
 - Fiscal-year figures come from the filings (FiledAnnualHistoryService); Yahoo's net profit
   is the cross-check, and a year they disagree on is a DATA_CONFLICT for that year only.
-  Years are never mixed across sources.
+  Years are never mixed across sources. A filed year whose revenue is more than 2x larger or smaller than
+  Yahoo's for the same year (non-banks only) fails FiledScaleCheck and every amount in it is INVALID: a filing
+  tagged on the wrong scale (Marksans FY25) is wrong in all its figures together, and no identity inside the
+  filing catches that.
 - Ingested documents (annual reports, concall transcripts, investor presentations) are chunked,
   embedded and searched through searchCompanyDocuments, a plain @Tool like any other - never a
   QuestionAnswerAdvisor, which would inject retrieved text before ToolUsage can record it as
