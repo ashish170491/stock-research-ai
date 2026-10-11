@@ -26,6 +26,9 @@ public class VerdictRenderer {
             + "own. Consider a SEBI-registered investment adviser before you act.";
 
     private static final Map<MetricQuestion, List<ScreeningMetric>> FIGURES = new LinkedHashMap<>();
+    /** SnapshotCalculator's reason when a span is longer than the company's history ("...; 4 available"). */
+    private static final java.util.regex.Pattern SHORT_HISTORY = java.util.regex.Pattern.compile(
+            "needs \\d+ fiscal years[^;]*; (\\d+) available");
 
     static {
         FIGURES.put(MetricQuestion.PROFITABLE, List.of(ScreeningMetric.ROE_PERCENT, ScreeningMetric.ROCE_PERCENT));
@@ -55,10 +58,33 @@ public class VerdictRenderer {
         StringBuilder md = new StringBuilder("### Overall rating\n\n");
         md.append("**Rating: ").append(verdict.rating().label()).append("** - ").append(summary(verdict)).append("\n\n");
         md.append(bar(verdict.quality())).append("\n\n").append(bar(verdict.price())).append("\n\n");
+        verdict.notes().forEach(note -> md.append("_").append(note).append("_\n\n"));
+        if (verdict.rating() == Rating.NO_RATING) {
+            List<RuleResult> known = checks(verdict, false);
+            if (!known.isEmpty()) {
+                md.append("What could be checked:\n");
+                known.forEach(result -> md.append("- ").append(outcome(result)).append(": ")
+                        .append(result.rule().describe()).append(" - ").append(checkFigure(result)).append("\n"));
+                md.append("\n");
+            }
+        }
+        List<RuleResult> unchecked = checks(verdict, true);
+        if (!unchecked.isEmpty()) {
+            md.append("Could not be checked:\n");
+            unchecked.forEach(result -> md.append("- ").append(capitalised(result.rule().describe())).append(": ")
+                    .append(plainReason(result.metric())).append("\n"));
+            md.append("\n");
+        }
         md.append(ruleText(verdict.rule())).append("\n\n");
         md.append("_").append(NOT_ADVICE).append(" It looks only at past figures, not news, management or the "
                 + "economy._\n");
         return md.toString();
+    }
+
+    /** The rating's checks that could ({@code unchecked} false) or could not be run. */
+    private static List<RuleResult> checks(Verdict verdict, boolean unchecked) {
+        return java.util.stream.Stream.concat(verdict.quality().results().stream(), verdict.price().results().stream())
+                .filter(result -> (result.outcome() == RuleOutcome.INSUFFICIENT_DATA) == unchecked).toList();
     }
 
     /**
@@ -127,7 +153,13 @@ public class VerdictRenderer {
                     + "buy nor weak enough to sell.").formatted(quality.met(), quality.total(), price.met(),
                     price.total());
             case SELL -> "it meets only %d of %d quality checks.".formatted(quality.met(), quality.total());
-            case NO_RATING -> "%s, so the application will not guess.".formatted(capitalised(verdict.reason()));
+            case NO_RATING -> quality.coverPercent() < verdict.rule().minimumCover()
+                    || price.coverPercent() < verdict.rule().minimumCover()
+                    ? ("not enough reliable figures yet: %d of %d quality checks and %d of %d price checks could be run, "
+                    + "and at least %d%% of each are needed. The application will not guess; here is what is known.")
+                    .formatted(quality.checkable(), quality.total(), price.checkable(), price.total(),
+                            verdict.rule().minimumCover())
+                    : "%s, so the application will not guess.".formatted(capitalised(verdict.reason()));
         };
     }
 
@@ -149,6 +181,17 @@ public class VerdictRenderer {
 
     private static String figure(Verdict verdict, ScreeningMetric metric) {
         SnapshotMetric value = verdict.snapshot().metric(metric);
+        int shorterYears = verdict.rule().growthFallbackYears();
+        if (value.status() == DataStatus.UNAVAILABLE && shorterYears > 0 && metric.years() > shorterYears) {
+            // the same shorter span the rating used, so the figure shown is the one the check was decided on
+            java.util.Optional<ScreeningMetric> shorter = metric.series()
+                    .flatMap(series -> ScreeningMetric.of(series, shorterYears))
+                    .filter(candidate -> verdict.snapshot().metric(candidate).usable());
+            if (shorter.isPresent()) {
+                metric = shorter.get();
+                value = verdict.snapshot().metric(metric);
+            }
+        }
         String name = capitalised(metric.description());
         if (!value.usable()) {
             return "%s: not available - %s".formatted(name, plainReason(value));
@@ -159,6 +202,12 @@ public class VerdictRenderer {
 
     /** Why a figure could not decide a check, in a sentence a beginner can read; the report has the detail. */
     static String plainReason(SnapshotMetric value) {
+        java.util.regex.Matcher shortHistory = SHORT_HISTORY.matcher(value.statusReason() == null ? ""
+                : value.statusReason());
+        if (value.status() == DataStatus.UNAVAILABLE && shortHistory.find()) {
+            return "only %s years of full-year results are available for this company so far"
+                    .formatted(shortHistory.group(1));
+        }
         if (value.status() == DataStatus.VALID) {
             return "it could not be cross-checked against a second source";
         }

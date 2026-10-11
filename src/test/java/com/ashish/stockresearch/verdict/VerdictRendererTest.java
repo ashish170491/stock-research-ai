@@ -52,8 +52,8 @@ class VerdictRendererTest {
         String md = renderer.render(verdict);
 
         assertThat(verdict.rating()).isEqualTo(Rating.NO_RATING);
-        assertThat(md).contains("**Rating: No rating** - Too few of the checks could be run on reliable data")
-                .contains("the application will not guess").contains("| Return on equity, average of the last 3 fiscal years ≥ 15.00% | Could not check | the figures it is built from contradict each other");
+        assertThat(md).contains("**Rating: No rating** - not enough reliable figures yet: 1 of 6 quality checks")
+                .contains("The application will not guess").contains("| Return on equity, average of the last 3 fiscal years ≥ 15.00% | Could not check | the figures it is built from contradict each other");
     }
 
     // A chosen question shows only its own figures and the rating checks that belong to it.
@@ -72,5 +72,29 @@ class VerdictRendererTest {
                 .doesNotContain("Return on equity").doesNotContain("Rating:");
         assertThat(renderer.rating(verdict)).startsWith("### Overall rating\n\n**Rating: Buy**")
                 .contains(VerdictRenderer.NOT_ADVICE).doesNotContain("Is it growing?");
+    }
+
+    // A No rating says what is known, what could not be checked and why, in plain words.
+    @Test
+    void aNoRatingListsWhatIsKnownAndWhatCouldNotBeCheckedInPlainWords() {
+        com.ashish.stockresearch.screening.SnapshotMetric shortHistory = new com.ashish.stockresearch.screening.SnapshotMetric(
+                NET_PROFIT_CAGR_5Y_PERCENT, null, NET_PROFIT_CAGR_5Y_PERCENT.unit(), "UNAVAILABLE", DataStatus.UNAVAILABLE,
+                "a 5-year net profit CAGR needs 6 fiscal years; 4 available", null, null, null, null);
+        Verdict verdict = new VerdictEngine(ScreeningPresetsTest.presets(),
+                new VerdictProperties(null, null, 0, 0, 0, 0, 0)).assess(stock("SKY", IndustryGroup.CONSUMER)
+                .with(withStatus(ROE_3Y_AVG_PERCENT, DataStatus.UNAVAILABLE, null)).with(ROCE_PERCENT, "45.93")
+                .with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.UNAVAILABLE, null)).with(shortHistory)
+                .with(withStatus(OCF_TO_PAT_3Y_MULTIPLE, DataStatus.UNAVAILABLE, null))
+                .with(DEBT_TO_EQUITY_MULTIPLE, "0.73").with(EARNINGS_YIELD_PERCENT, "2").build());
+
+        String md = renderer.rating(verdict);
+
+        assertThat(verdict.rating()).isEqualTo(Rating.NO_RATING);
+        assertThat(md).contains("**Rating: No rating** - not enough reliable figures yet: 2 of 6 quality checks")
+                .contains("What could be checked:\n- Met: return on capital employed")
+                .contains("- Not met: debt-to-equity")
+                .contains("Could not be checked:\n")
+                .contains("Net profit CAGR over the last 5 fiscal years ≥ 10.00%: only 4 years of full-year results "
+                        + "are available for this company so far");
     }
 }

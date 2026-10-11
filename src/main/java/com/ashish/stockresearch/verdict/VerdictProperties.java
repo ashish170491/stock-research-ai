@@ -12,10 +12,13 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  * @param buyPrice        price share at or above which, with {@code buyQuality}, the rating is BUY
  * @param sellBelowQuality quality share below which the rating is SELL
  * @param minimumCover    share of a pillar's rules that must be checkable on reliable data to rate at all
+ * @param growthFallbackYears when a rule's multi-year figure is UNAVAILABLE (the company has not filed that many
+ *                        years yet), the same rule is checked on this shorter span instead, and the card says so;
+ *                        0 never falls back. Default 3.
  */
 @ConfigurationProperties("app.verdict")
 public record VerdictProperties(String qualityPreset, String pricePreset, int buyQuality, int buyPrice,
-                                int sellBelowQuality, int minimumCover) {
+                                int sellBelowQuality, int minimumCover, Integer growthFallbackYears) {
 
     @ConstructorBinding
     public VerdictProperties {
@@ -25,10 +28,11 @@ public record VerdictProperties(String qualityPreset, String pricePreset, int bu
         buyPrice = buyPrice == 0 ? 60 : buyPrice;
         sellBelowQuality = sellBelowQuality == 0 ? 50 : sellBelowQuality;
         minimumCover = minimumCover == 0 ? 70 : minimumCover;
+        growthFallbackYears = growthFallbackYears == null ? 3 : growthFallbackYears;
     }
 
     public static VerdictProperties defaults() {
-        return new VerdictProperties(null, null, 0, 0, 0, 0);
+        return new VerdictProperties(null, null, 0, 0, 0, 0, null);
     }
 
     private static boolean blank(String text) {

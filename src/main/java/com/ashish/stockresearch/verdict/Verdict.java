@@ -8,8 +8,13 @@ import com.ashish.stockresearch.screening.ScreeningResult.RuleResult;
 import java.util.List;
 
 /** A rating with everything it was decided on, so it can be shown and checked. */
+/** @param notes how the rules were applied to this company, e.g. growth checked over a shorter span */
 public record Verdict(Rating rating, String reason, FundamentalsSnapshot snapshot, IndustryGroup group,
-                      Pillar quality, Pillar price, VerdictProperties rule) {
+                      Pillar quality, Pillar price, VerdictProperties rule, List<String> notes) {
+
+    public Verdict {
+        notes = notes == null ? List.of() : List.copyOf(notes);
+    }
 
     /** One set of screening rules and how the company did on them. */
     public record Pillar(String name, List<RuleResult> results) {
