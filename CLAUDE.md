@@ -26,7 +26,9 @@
   question asking whether to invest. It counts how many of the quality-compounder preset's rules a company meets
   and how many of the price rules reasonable-value adds (same StockScreener.evaluate as a screen: only VALID,
   cross-checked figures; a rule that cannot be checked is never met); thresholds are app.verdict.*, and with
-  less than minimum-cover of a pillar checkable the rating is No rating. The rating is rendered by VerdictRenderer
+  less than minimum-cover of a pillar checkable the rating is No rating. A multi-year growth figure that is
+  UNAVAILABLE (too few years filed) is checked on the same series over growth-fallback-years (3) against the
+  same threshold, and the answer says so; an INVALID or DATA_CONFLICT figure is never replaced. The rating is rendered by VerdictRenderer
   with every check and figure, a not-personal-advice notice, and what it does not cover. No model chooses or
   words it, and no prompt, model answer, report or other code may say buy/sell/hold, give a price target or a
   fair value.
@@ -59,6 +61,9 @@
   needs reasoning. Model calls go through OllamaCalls.
 - Yahoo responses are cached (YahooCacheConfiguration) and throttled
   (RequestThrottle). Never cache a price inside a long-lived entry.
+- A consolidated filing that omits the owners' share of profit (or tags it and the minority share as 0) while its
+  own balance sheet shows no minority interest (total equity = owners' equity) has its owners' profit taken from
+  profit for the period, as a CALCULATED, verified point (FiledStatementChecks). Any minority interest: never.
 - NSE filings (marketdata/provider/nse) share one RequestThrottle; each XBRL document is
   stored once (NseDocumentStore). A filed figure is used only after FiledStatementChecks.
 - Fiscal-year figures come from the filings (FiledAnnualHistoryService); Yahoo's net profit

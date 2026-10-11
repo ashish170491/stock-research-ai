@@ -141,6 +141,34 @@ class NseXbrlReaderTest {
                 .contains("₹4,253.00 crore");
     }
 
+    // Sky Gold's FY24 filing does not state the owners' share of the profit, but its balance sheet shows no
+    // minority holders (total equity = owners' equity), so the owners' profit is the profit for the period.
+    @Test
+    void takesTheOwnersProfitFromTheProfitForThePeriodWhenTheBalanceSheetShowsNoMinority() {
+        FiledYear year = read("skygold-fy24-consolidated.xml", "SKYGOLD", 2024, NseFilingListing.Format.RESULTS);
+
+        FinancialDataPoint owners = year.item(FiledItem.PROFIT_ATTRIBUTABLE_TO_OWNERS);
+        assertThat(crore(year, FiledItem.PROFIT_ATTRIBUTABLE_TO_OWNERS)).isEqualByComparingTo("40.48");
+        assertThat(owners.calculationStatus()).isEqualTo(com.ashish.stockresearch.research.model.CalculationStatus.CALCULATED);
+        assertThat(owners.calculation()).contains("FY24 profit for the period").contains("no non-controlling interest");
+        assertThat(crore(year, FiledItem.PROFIT_FOR_PERIOD)).isEqualByComparingTo("40.48");
+        assertThat(year.checks()).filteredOn(check -> check.name().equals(FiledStatementChecks.OWNERS_PROFIT))
+                .singleElement().satisfies(check -> {
+                    assertThat(check.outcome()).isEqualTo(FiledYear.Check.Outcome.PASSED);
+                    assertThat(check.detail()).contains("does not state the owners' share");
+                });
+    }
+
+    // Its FY23 filing tags the owners' and minority shares both as 0 beside a profit of ₹18.61 crore.
+    @Test
+    void readsAProfitSplitTaggedAsZeroTheSameWayWhenThereIsNoMinority() {
+        FiledYear year = read("skygold-fy23-consolidated.xml", "SKYGOLD", 2023, NseFilingListing.Format.RESULTS);
+
+        assertThat(crore(year, FiledItem.PROFIT_ATTRIBUTABLE_TO_OWNERS)).isEqualByComparingTo("18.61");
+        assertThat(year.checks()).filteredOn(check -> check.name().equals(FiledStatementChecks.PROFIT_SPLIT))
+                .singleElement().extracting(FiledYear.Check::outcome).isEqualTo(FiledYear.Check.Outcome.PASSED);
+    }
+
     @Test
     void acceptsAProfitSplitThatAddsUpToWithinTheFilingsRounding() {
         FiledYear year = read("hcltech-fy25-consolidated.xml", "HCLTECH", 2025, NseFilingListing.Format.INTEGRATED);

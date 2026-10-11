@@ -113,4 +113,70 @@ class VerdictEngineTest {
         assertThat(verdict.rating()).isEqualTo(Rating.NO_RATING);
         assertThat(verdict.reason()).contains("industry could not be identified");
     }
+
+    // A company with four filed years has no 5-year growth yet: its 3-year growth is checked instead, and said so.
+    @Test
+    void growthIsCheckedOverThreeYearsWhenFiveYearsOfResultsDoNotExistYet() {
+        FundamentalsSnapshot young = allQualityMet("2")
+                .with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.UNAVAILABLE, null))
+                .with(withStatus(NET_PROFIT_CAGR_5Y_PERCENT, DataStatus.UNAVAILABLE, null))
+                .with(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, "76").with(ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, "5")
+                .build();
+
+        Verdict verdict = engine.assess(young);
+
+        assertThat(verdict.quality().checkable()).isEqualTo(6);
+        assertThat(verdict.quality().results()).extracting(result -> result.rule().metric())
+                .contains(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT)
+                .doesNotContain(REVENUE_CAGR_5Y_PERCENT, NET_PROFIT_CAGR_5Y_PERCENT);
+        // the same thresholds: 76% meets 10%, 5% does not
+        assertThat(verdict.quality().met()).isEqualTo(5);
+        assertThat(verdict.notes()).containsExactly(
+                "Growth was checked over 3 years because 5 years of usable results are not available for this company.");
+        assertThat(verdict.rating()).isEqualTo(Rating.HOLD);
+    }
+
+    @Test
+    void contradictoryFiveYearGrowthIsNeverReplacedByAShorterSpan() {
+        FundamentalsSnapshot invalid = allQualityMet("5")
+                .with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.INVALID, null))
+                .with(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, "20").build();
+
+        Verdict verdict = engine.assess(invalid);
+
+        assertThat(verdict.quality().results()).extracting(result -> result.rule().metric())
+                .contains(REVENUE_CAGR_5Y_PERCENT).doesNotContain(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT);
+        assertThat(verdict.notes()).isEmpty();
+    }
+
+    @Test
+    void theShorterSpanCanBeSwitchedOff() {
+        VerdictEngine strict = new VerdictEngine(ScreeningPresetsTest.presets(),
+                new VerdictProperties(null, null, 0, 0, 0, 0, 0));
+        FundamentalsSnapshot young = allQualityMet("5")
+                .with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.UNAVAILABLE, null))
+                .with(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, "20").build();
+
+        assertThat(strict.assess(young).quality().checkable()).isEqualTo(5);
+    }
+
+    // Sky Gold, once the owners' profit is read from its balance sheet: strong returns and growth over its four
+    // years, negative operating cash flow, debt above the rule, and a price that misses the rule.
+    @Test
+    void aSkyGoldLikeCompanyIsRatedHoldWithItsReasons() {
+        FundamentalsSnapshot skyGold = stock("SKYGOLD", IndustryGroup.CONSUMER)
+                .with(ROE_3Y_AVG_PERCENT, "27.2").with(ROCE_PERCENT, "45.93")
+                .with(withStatus(REVENUE_CAGR_5Y_PERCENT, DataStatus.UNAVAILABLE, null))
+                .with(withStatus(NET_PROFIT_CAGR_5Y_PERCENT, DataStatus.UNAVAILABLE, null))
+                .with(ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, "76.04")
+                .with(ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, "145")
+                .with(OCF_TO_PAT_3Y_MULTIPLE, "-1.0").with(DEBT_TO_EQUITY_MULTIPLE, "0.73")
+                .with(EARNINGS_YIELD_PERCENT, "2.5").build();
+
+        Verdict verdict = engine.assess(skyGold);
+
+        assertThat(verdict.rating()).isEqualTo(Rating.HOLD);
+        assertThat(verdict.quality().met()).isEqualTo(4);
+        assertThat(verdict.quality().checkable()).isEqualTo(6);
+    }
 }

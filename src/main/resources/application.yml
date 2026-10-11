@@ -150,6 +150,17 @@ app:
       # value in the snapshot (besides the company itself); with fewer, none is given.
       minimum-peers: 5
 
+  # The Buy / Hold / Sell / No rating (VerdictEngine), from two screening presets. Percentages are of a pillar's rules.
+  verdict:
+    quality-preset: quality-compounder
+    price-preset: reasonable-value
+    buy-quality: 80
+    buy-price: 60
+    sell-below-quality: 50
+    minimum-cover: 70
+    # A company that has not filed as many years as a growth rule spans (a 5-year CAGR needs six year-ends) is
+    # checked on this shorter span of the same figure, against the same threshold, and the answer says so. 0: never.
+    growth-fallback-years: 3
   screening:
     snapshot:
       # Weekdays at 18:30 India time: after the 15:30 close, once the day's data has settled.
