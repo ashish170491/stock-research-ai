@@ -77,6 +77,11 @@ public enum Formula {
     /** The highest of the inputs, e.g. the high end of a range. Inputs: the values. */
     MAXIMUM,
     /**
+     * The highest minus the lowest of the inputs, e.g. how far a company's operating margin moved over five fiscal
+     * years. Inputs: the values.
+     */
+    RANGE,
+    /**
      * A value's place counted from the highest: 1 + the number of values strictly above it, so equal values share
      * a place. Inputs: the ranked value, then every value it is ranked among, itself included.
      */

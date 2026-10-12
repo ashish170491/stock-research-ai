@@ -374,6 +374,28 @@ class AiServiceRoutingTest {
         verify(focusService, never()).answer(anyString(), any());
     }
 
+    // "Does Asian Paints have a moat?": the signs in its figures, its price and its own words, rendered in code.
+    @Test
+    void aMoatQuestionAboutANamedCompanyIsAnsweredInCode() {
+        when(router.companyNamed("Does Asian Paints have a moat?")).thenReturn(java.util.Optional.of("ASIANPAINT"));
+        when(focusService.answer("ASIANPAINT", List.of(com.ashish.stockresearch.focus.Topic.MOAT)))
+                .thenReturn("THE SIGNS");
+        AiService service = service(UNUSED);
+
+        assertThat(service.chat(CONVERSATION, "Does Asian Paints have a moat?").text()).isEqualTo("THE SIGNS");
+        verify(router, never()).route(eq("Does Asian Paints have a moat?"), any());
+    }
+
+    // "What is a moat?" asks what the term means: the glossary answers it, about no company.
+    @Test
+    void whatAMoatIsStaysWithTheGlossary() {
+        routes("What is a moat?", Intent.EXPLAIN_TERM);
+        AiService service = service(UNUSED);
+
+        assertThat(service.chat(CONVERSATION, "What is a moat?").intent()).isEqualTo(Intent.EXPLAIN_TERM);
+        verify(focusService, never()).answer(anyString(), any());
+    }
+
     // "What is ROE?" asks what a term means, even while a company is being discussed.
     @Test
     void aTermQuestionStaysWithTheGlossaryWhileACompanyIsDiscussed() {

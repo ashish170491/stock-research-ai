@@ -76,18 +76,11 @@ public class VerdictEngine {
      * same threshold, if that figure is usable. A figure that is INVALID or in conflict is never replaced.
      */
     private RuleResult evaluate(Rule rule, FundamentalsSnapshot snapshot, java.util.Set<String> notes) {
-        SnapshotMetric value = snapshot.metric(rule.metric());
-        int shorterYears = this.rule.growthFallbackYears();
-        if (value.status() == DataStatus.UNAVAILABLE && shorterYears > 0 && rule.metric().years() > shorterYears) {
-            java.util.Optional<ScreeningMetric> shorter = rule.metric().series()
-                    .flatMap(series -> ScreeningMetric.of(series, shorterYears));
-            if (shorter.isPresent() && snapshot.metric(shorter.get()).usable()) {
-                notes.add(("Growth was checked over %d years because %d years of usable results are not available for "
-                        + "this company.").formatted(shorterYears, rule.metric().years()));
-                return StockScreener.evaluate(new Rule(shorter.get(), rule.operator(), rule.threshold()),
-                        snapshot.metric(shorter.get()));
-            }
+        StockScreener.Decision decision = StockScreener.evaluate(rule, snapshot, this.rule.growthFallbackYears());
+        if (decision.onShorterSpan()) {
+            notes.add(("Growth was checked over %d years because %d years of usable results are not available for "
+                    + "this company.").formatted(this.rule.growthFallbackYears(), rule.metric().years()));
         }
-        return StockScreener.evaluate(rule, value);
+        return decision.result();
     }
 }

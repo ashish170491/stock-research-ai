@@ -58,7 +58,7 @@ class ClarifierTest {
 
         assertThat(c.multiSelect()).isTrue();
         assertThat(c.options()).extracting(Clarification.Option::id).containsExactly("rating", "profitable", "growing",
-                "cash", "stretched", "price", "performance", "full-report");
+                "cash", "stretched", "price", "moat", "performance", "full-report");
         assertThat(c.options()).filteredOn(Clarification.Option::selected).extracting(Clarification.Option::id)
                 .containsExactly("profitable", "growing");
         assertThat(Clarifier.asText(c)).startsWith("What would you like to know about TCS? Pick one or more:")
@@ -74,6 +74,7 @@ class ClarifierTest {
             "how profitable is it, and is it growing|profitable,growing",
             "Are the profits real cash?|cash",
             "show me everything|full-report",
+            "the moat one|moat",
     })
     void readsATypedChoice(String reply, String ids) {
         assertThat(Topic.matching(reply)).extracting(Topic::id).containsExactly(ids.split(","));
@@ -92,6 +93,11 @@ class ClarifierTest {
             "Is it profitable?|profitable",
             "Is the company growing?|growing",
             "How has the share price performed?|performance",
+            "Does it have a moat?|moat",
+            "What is its competitive advantage?|moat",
+            "Why do investors pay a premium for it?|moat",
+            "Does it have pricing power?|moat",
+            "Is the premium valuation justified?|price,moat",
     })
     void readsAGeneralQuestionOnATopic(String question, String ids) {
         assertThat(Topic.askedAbout(question)).extracting(Topic::id).containsExactly(ids.split(","));

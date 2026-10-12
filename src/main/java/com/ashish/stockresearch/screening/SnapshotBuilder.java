@@ -107,8 +107,11 @@ public class SnapshotBuilder {
 
     private static void financialMetrics(FinancialSummaryResult result, Map<ScreeningMetric, SnapshotMetric> metrics) {
         List<ScreeningMetric> financial = List.of(ScreeningMetric.ROE_3Y_AVG_PERCENT, ScreeningMetric.ROE_5Y_AVG_PERCENT,
+                ScreeningMetric.ROE_3Y_MIN_PERCENT, ScreeningMetric.ROE_5Y_MIN_PERCENT,
                 ScreeningMetric.ROE_PERCENT, ScreeningMetric.ROA_PERCENT, ScreeningMetric.ROCE_PERCENT,
-                ScreeningMetric.OPERATING_MARGIN_PERCENT, ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE,
+                ScreeningMetric.ROCE_3Y_MIN_PERCENT, ScreeningMetric.ROCE_5Y_MIN_PERCENT,
+                ScreeningMetric.OPERATING_MARGIN_PERCENT, ScreeningMetric.OPERATING_MARGIN_3Y_RANGE,
+                ScreeningMetric.OPERATING_MARGIN_5Y_RANGE, ScreeningMetric.DEBT_TO_EQUITY_MULTIPLE,
                 ScreeningMetric.REVENUE_CAGR_3Y_PERCENT, ScreeningMetric.REVENUE_CAGR_5Y_PERCENT,
                 ScreeningMetric.NET_PROFIT_CAGR_3Y_PERCENT, ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT,
                 ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE, ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE,
@@ -126,6 +129,22 @@ public class SnapshotBuilder {
 
         for (ScreeningMetric metric : List.of(ScreeningMetric.ROE_3Y_AVG_PERCENT, ScreeningMetric.ROE_5Y_AVG_PERCENT)) {
             metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.roeAverage(ratios, metric.years(), sources)));
+        }
+        for (ScreeningMetric metric : List.of(ScreeningMetric.ROE_3Y_MIN_PERCENT, ScreeningMetric.ROE_5Y_MIN_PERCENT)) {
+            metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.lowest(ratios, metric.years(),
+                    AnnualRatios::returnOnEquityPercent, "return on equity",
+                    "returnOnEquity%dyLowestPercent".formatted(metric.years()), sources)));
+        }
+        for (ScreeningMetric metric : List.of(ScreeningMetric.ROCE_3Y_MIN_PERCENT, ScreeningMetric.ROCE_5Y_MIN_PERCENT)) {
+            metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.lowest(ratios, metric.years(),
+                    AnnualRatios::returnOnCapitalEmployedPercent, "return on capital employed",
+                    "returnOnCapitalEmployed%dyLowestPercent".formatted(metric.years()), sources)));
+        }
+        for (ScreeningMetric metric : List.of(ScreeningMetric.OPERATING_MARGIN_3Y_RANGE,
+                ScreeningMetric.OPERATING_MARGIN_5Y_RANGE)) {
+            metrics.put(metric, SnapshotMetric.of(metric, SnapshotCalculator.range(ratios, metric.years(),
+                    AnnualRatios::operatingMarginPercent, "operating margin",
+                    "operatingMargin%dyRangePercentagePoints".formatted(metric.years()), sources)));
         }
         latest(ratios, AnnualRatios::returnOnEquityPercent, ScreeningMetric.ROE_PERCENT, metrics);
         latest(ratios, AnnualRatios::returnOnAssetsPercent, ScreeningMetric.ROA_PERCENT, metrics);

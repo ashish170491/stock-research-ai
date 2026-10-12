@@ -63,12 +63,16 @@ public class CriteriaValidator {
             "\\b(?:nifty[\\s-]*(?:next[\\s-]*50|100|200|midcap[\\s-]*\\d*|smallcap[\\s-]*\\d*|bank)|next[\\s-]*50"
                     + "|mid[- ]?caps?|small[- ]?caps?|large[- ]?caps? beyond|sensex|bse[\\s-]*\\d+)\\b",
             Pattern.CASE_INSENSITIVE);
+    /** A span of years in words ("over 5 years", "over the last 3 fiscal years"), which is never a comparison. */
+    private static final Pattern SPAN_PHRASE = Pattern.compile("\\b(?:over|across|in|during)\\s+(?:each\\s+of\\s+)?"
+            + "(?:the\\s+)?(?:last|past|previous)?\\s*\\d+\\s*(?:fiscal\\s+)?(?:years?|yrs?|y)\\b", Pattern.CASE_INSENSITIVE);
     /** The user's comparison words, in the order they are checked: "not less than" is "at least", not "less than". */
     private static final List<Map.Entry<Pattern, Operator>> OPERATOR_WORDS = List.of(
             Map.entry(Pattern.compile("\\bat least\\b|\\bor (?:more|higher|above)\\b|\\bminimum\\b|\\bmin\\b|≥|>=|"
                     + "\\b(?:not|no) (?:less|lower) than\\b", Pattern.CASE_INSENSITIVE), Operator.AT_LEAST),
             Map.entry(Pattern.compile("\\bat most\\b|\\bor (?:less|lower|below)\\b|\\bmaximum\\b|\\bmax\\b|≤|<=|"
-                    + "\\bup to\\b|\\b(?:not|no) (?:more|higher) than\\b", Pattern.CASE_INSENSITIVE), Operator.AT_MOST),
+                    + "\\bup to\\b|\\bwithin\\b|\\b(?:not|no) (?:more|higher) than\\b", Pattern.CASE_INSENSITIVE),
+                    Operator.AT_MOST),
             Map.entry(Pattern.compile("\\babove\\b|\\bover\\b|\\b(?:more|greater|higher) than\\b|\\bexceed\\w*|>",
                     Pattern.CASE_INSENSITIVE), Operator.ABOVE),
             Map.entry(Pattern.compile("\\bbelow\\b|\\bunder\\b|\\b(?:less|lower) than\\b|<",
@@ -367,6 +371,14 @@ public class CriteriaValidator {
                     .collect(Collectors.joining(", ")) + ".");
             return;
         }
+        Optional<ScreeningMetric.Series> narrower = metric.get().series().filter(ScreeningMetric.Series::needsWords);
+        if (narrower.isPresent() && !narrower.get().namedIn(inRequest ? phrase : text)) {
+            // "ROCE above 15%" is one year's ROCE: the lowest of five is screened only when the words ask for it
+            notApplied.add(("“%s”: it was read as the %s, which your words do not ask for, so the criterion was not "
+                    + "applied. To screen on it, say so - for example “ROCE above 15%% every year for 5 years” or "
+                    + "“operating margin steady within 5 points”.").formatted(phrase, narrower.get().description()));
+            return;
+        }
         Optional<Spanned> spanned = spanned(metric.get(), inRequest ? phrase : null, spans, phrase, notApplied);
         if (spanned.isEmpty()) {
             return;
@@ -378,8 +390,11 @@ public class CriteriaValidator {
                     + "was not applied. Thresholds are in the metric's own unit: %s.").formatted(phrase,
                     threshold.toPlainString(), m.shortLabel(), new Rule(m, Operator.AT_LEAST, m.lowestThreshold())
                             .thresholdDisplay(), new Rule(m, Operator.AT_LEAST, m.highestThreshold()).thresholdDisplay(),
-                    m.unit() == com.ashish.stockresearch.research.model.Unit.PERCENT ? "a percentage, 15 for 15%"
-                            : "a multiple, 0.5 for 0.5x"));
+                    switch (m.unit()) {
+                        case PERCENT -> "a percentage, 15 for 15%";
+                        case PERCENTAGE_POINTS -> "percentage points, 5 for 5 points";
+                        default -> "a multiple, 0.5 for 0.5x";
+                    }));
             return;
         }
         Optional<Operator> operator = inRequest ? operatorInWords(phrase) : Optional.empty();
@@ -514,8 +529,10 @@ public class CriteriaValidator {
     }
 
     static Optional<Operator> operatorInWords(String phrase) {
+        // "over 5 years" names a span, not a comparison
+        String text = SPAN_PHRASE.matcher(phrase).replaceAll(" ");
         for (Map.Entry<Pattern, Operator> words : OPERATOR_WORDS) {
-            if (words.getKey().matcher(phrase).find()) {
+            if (words.getKey().matcher(text).find()) {
                 return Optional.of(words.getValue());
             }
         }

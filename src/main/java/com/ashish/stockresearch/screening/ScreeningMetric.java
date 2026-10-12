@@ -30,12 +30,26 @@ public enum ScreeningMetric {
             "returnOnEquityPercent", "-100", "100", Series.ROE_AVERAGE, 3),
     ROE_5Y_AVG_PERCENT("ROE 5y avg", "return on equity, average of the last 5 fiscal years", Unit.PERCENT,
             "returnOnEquityPercent", "-100", "100", Series.ROE_AVERAGE, 5),
+    ROE_3Y_MIN_PERCENT("ROE 3y low", "return on equity, lowest of the last 3 fiscal years", Unit.PERCENT,
+            "returnOnEquityPercent", "-100", "100", Series.ROE_LOWEST, 3),
+    ROE_5Y_MIN_PERCENT("ROE 5y low", "return on equity, lowest of the last 5 fiscal years", Unit.PERCENT,
+            "returnOnEquityPercent", "-100", "100", Series.ROE_LOWEST, 5),
     ROE_PERCENT("ROE", "return on equity, latest fiscal year", Unit.PERCENT, "returnOnEquityPercent", "-100", "100"),
     ROA_PERCENT("ROA", "return on assets, latest fiscal year", Unit.PERCENT, "returnOnAssetsPercent", "-50", "50"),
     ROCE_PERCENT("ROCE", "return on capital employed, latest fiscal year", Unit.PERCENT,
             "returnOnCapitalEmployedPercent", "-100", "100"),
+    ROCE_3Y_MIN_PERCENT("ROCE 3y low", "return on capital employed, lowest of the last 3 fiscal years",
+            Unit.PERCENT, "returnOnCapitalEmployedPercent", "-100", "100", Series.ROCE_LOWEST, 3),
+    ROCE_5Y_MIN_PERCENT("ROCE 5y low", "return on capital employed, lowest of the last 5 fiscal years",
+            Unit.PERCENT, "returnOnCapitalEmployedPercent", "-100", "100", Series.ROCE_LOWEST, 5),
     OPERATING_MARGIN_PERCENT("Operating margin", "operating margin, latest fiscal year", Unit.PERCENT,
             "operatingMarginPercent", "-100", "100"),
+    OPERATING_MARGIN_3Y_RANGE("Op. margin 3y range",
+            "operating margin, highest minus lowest of the last 3 fiscal years", Unit.PERCENTAGE_POINTS,
+            "operatingMarginPercent", "0", "100", Series.OPERATING_MARGIN_RANGE, 3),
+    OPERATING_MARGIN_5Y_RANGE("Op. margin 5y range",
+            "operating margin, highest minus lowest of the last 5 fiscal years", Unit.PERCENTAGE_POINTS,
+            "operatingMarginPercent", "0", "100", Series.OPERATING_MARGIN_RANGE, 5),
     DEBT_TO_EQUITY_MULTIPLE("D/E", "debt-to-equity, latest fiscal year end", Unit.MULTIPLE, "debtToEquityMultiple",
             "0", "10"),
     REVENUE_CAGR_3Y_PERCENT("Revenue CAGR 3y", "revenue CAGR over the last 3 fiscal years", Unit.PERCENT,
@@ -73,19 +87,38 @@ public enum ScreeningMetric {
     /**
      * A measure taken over a span of fiscal years, offered over more than one span. {@code defaultYears} is
      * the span a request means when its words name none - the span the presets use.
+     *
+     * <p>A series with {@code wordsNeeded} measures something narrower than its metric's plain name: the lowest
+     * ROCE of five years is not "ROCE". A request in words is screened on it only when its words say so ("every
+     * year", "lowest", "steady margins"), never because a model chose it ({@code CriteriaValidator}).
      */
     public enum Series {
-        ROE_AVERAGE("average return on equity", 3),
-        REVENUE_CAGR("revenue growth (CAGR)", 5),
-        NET_PROFIT_CAGR("net profit growth (CAGR)", 5),
-        OCF_TO_PAT("operating cash flow to net profit", 3);
+        ROE_AVERAGE("average return on equity", 3, null),
+        ROE_LOWEST("lowest return on equity", 5, Words.LOWEST),
+        ROCE_LOWEST("lowest return on capital employed", 5, Words.LOWEST),
+        OPERATING_MARGIN_RANGE("operating margin range (highest minus lowest)", 5, Words.RANGE),
+        REVENUE_CAGR("revenue growth (CAGR)", 5, null),
+        NET_PROFIT_CAGR("net profit growth (CAGR)", 5, null),
+        OCF_TO_PAT("operating cash flow to net profit", 3, null);
 
         private final String description;
         private final int defaultYears;
+        private final java.util.regex.Pattern wordsNeeded;
 
-        Series(String description, int defaultYears) {
+        Series(String description, int defaultYears, java.util.regex.Pattern wordsNeeded) {
             this.description = description;
             this.defaultYears = defaultYears;
+            this.wordsNeeded = wordsNeeded;
+        }
+
+        /** Whether a request's words ask for this series rather than its metric's plain value; true when it needs no words. */
+        public boolean namedIn(String words) {
+            return wordsNeeded == null || (words != null && wordsNeeded.matcher(words).find());
+        }
+
+        /** True when a request must say it wants this series ({@link #namedIn}). */
+        public boolean needsWords() {
+            return wordsNeeded != null;
         }
 
         public String description() {
@@ -94,6 +127,21 @@ public enum ScreeningMetric {
 
         public int defaultYears() {
             return defaultYears;
+        }
+    }
+
+    /** The words that ask for a series narrower than its metric's plain name. */
+    private static final class Words {
+        static final java.util.regex.Pattern LOWEST = java.util.regex.Pattern.compile(
+                "\\b(?:every|each)\\s+(?:single\\s+)?(?:fiscal\\s+)?year\\b|\\blowest\\b|\\bminimum\\b|\\bconsistent(?:ly)?\\b"
+                        + "|\\bthroughout\\b|\\bnever\\s+(?:fell|dropped|went)\\b|\\ball\\s+(?:of\\s+the\\s+)?(?:last\\s+)?(?:\\d+\\s+)?years\\b",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        static final java.util.regex.Pattern RANGE = java.util.regex.Pattern.compile(
+                "\\branges?\\b|\\bswings?\\b|\\bstable\\b|\\bsteady\\b|\\bvar(?:ied|ies|y|iation)\\b|\\bfluctuat\\w*|\\bmoved\\b"
+                        + "|\\bconsistent(?:ly)?\\b",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        private Words() {
         }
     }
 

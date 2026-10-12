@@ -53,6 +53,34 @@ public class StockScreener {
         return new ScreeningResult(criteria, List.copyOf(screened), List.copyOf(notScreened), filteredOut);
     }
 
+    /**
+     * A rule decided on one company's snapshot, as {@link #evaluate(Rule, SnapshotMetric)} decides it; except that a
+     * multi-year figure the company cannot have yet (UNAVAILABLE: too few years filed) is decided on the
+     * {@code shorterYears} span of the same series, against the same threshold, when that figure is usable. A figure
+     * that is INVALID or in conflict is never replaced. {@code shorterYears} 0 never falls back.
+     */
+    public static Decision evaluate(Rule rule, FundamentalsSnapshot snapshot, int shorterYears) {
+        SnapshotMetric value = snapshot.metric(rule.metric());
+        if (value.status() == DataStatus.UNAVAILABLE && shorterYears > 0 && rule.metric().years() > shorterYears) {
+            Optional<ScreeningMetric> shorter = rule.metric().series()
+                    .flatMap(series -> ScreeningMetric.of(series, shorterYears))
+                    .filter(metric -> snapshot.metric(metric).usable());
+            if (shorter.isPresent()) {
+                Rule onShorter = new Rule(shorter.get(), rule.operator(), rule.threshold());
+                return new Decision(rule, evaluate(onShorter, snapshot.metric(shorter.get())), true);
+            }
+        }
+        return new Decision(rule, evaluate(rule, value), false);
+    }
+
+    /**
+     * @param asked         the rule as configured
+     * @param result        how it was decided, on the rule actually checked
+     * @param onShorterSpan true when the configured span was not available and a shorter one was checked instead
+     */
+    public record Decision(Rule asked, RuleResult result, boolean onShorterSpan) {
+    }
+
     public static RuleResult evaluate(Rule rule, SnapshotMetric metric) {
         if (metric.status() != DataStatus.VALID || metric.value() == null) {
             return new RuleResult(rule, RuleOutcome.INSUFFICIENT_DATA, metric,

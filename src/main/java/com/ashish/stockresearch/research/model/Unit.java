@@ -46,5 +46,10 @@ public enum Unit {
     YEARS,
 
     /** A place counted from the highest: 1 is the highest of the values it is ranked among. */
-    POSITION
+    POSITION,
+    /**
+     * The difference between two percentages: 4.2 means the highest and lowest are 4.2 percentage points apart,
+     * never 4.2% of either.
+     */
+    PERCENTAGE_POINTS
 }

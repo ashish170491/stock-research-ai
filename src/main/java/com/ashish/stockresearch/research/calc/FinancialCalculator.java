@@ -205,6 +205,11 @@ public final class FinancialCalculator {
         return values.stream().max(BigDecimal::compareTo);
     }
 
+    /** The highest minus the lowest value; empty for none or a missing one. */
+    public static Optional<BigDecimal> range(List<BigDecimal> values) {
+        return maximum(values).flatMap(highest -> minimum(values).map(highest::subtract));
+    }
+
     /**
      * Where {@code value} sits among {@code values} counted from the highest: 1 for the highest, and one more than
      * the number of values strictly above it, so equal values share a rank. Empty when {@code value} is not one of
