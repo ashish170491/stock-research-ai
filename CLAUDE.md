@@ -40,6 +40,15 @@
   with every check and figure, a not-personal-advice notice, and what it does not cover. No model chooses or
   words it, and no prompt, model answer, report or other code may say buy/sell/hold, give a price target or a
   fair value.
+- A company's lasting edge ("moat", Topic.MOAT, moat/) is never judged, by a model or code: MoatAssessor counts which
+  of the moat-signs preset's rules its snapshot meets (StockScreener.evaluate, same rule as a screen; the shorter-span
+  fallback is StockScreener.evaluate(rule, snapshot, years) for both this and the rating), per industry group - lowest
+  ROCE / ROE over 5 years, operating-margin range, OCF/PAT, growth, D/E. MoatRenderer shows each with its figure, the
+  P/E and P/B beside the peer median, and what the company says in its own ingested documents (CompanyStatements:
+  Java-picked sentences quoted verbatim with their citation, credited to the document, never one that rates the
+  shares). It never says the company has a moat or why its price is what it is; the model filter still removes such
+  sentences. A screen in words uses a "lowest of N years" or "range" metric only when the user's words ask for it
+  (ScreeningMetric.Series.namedIn); "over N years" is a span, never a comparison.
 - What a term means comes only from MetricGlossary (fixed, reviewed text): never a model-written
   definition, and never an ideal value or a good/bad judgement. Industry notes come from
   IndustryGroup and screen thresholds from ScreeningPresets, not written a second time.

@@ -204,7 +204,7 @@ public class VerdictRenderer {
     }
 
     /** Why a figure could not decide a check, in a sentence a beginner can read; the report has the detail. */
-    static String plainReason(SnapshotMetric value) {
+    public static String plainReason(SnapshotMetric value) {
         java.util.regex.Matcher shortHistory = SHORT_HISTORY.matcher(value.statusReason() == null ? ""
                 : value.statusReason());
         if (value.status() == DataStatus.UNAVAILABLE && shortHistory.find()) {

@@ -167,6 +167,15 @@ app:
     # A company that has not filed as many years as a growth rule spans (a 5-year CAGR needs six year-ends) is
     # checked on this shorter span of the same figure, against the same threshold, and the answer says so. 0: never.
     growth-fallback-years: 3
+  # The signs of a lasting edge ("moat"), looked for in a company's own figures (MoatAssessor). The signs are the
+  # rules of a screening preset, per industry group, decided as a screen decides them; the answer counts them and
+  # never says the company has a moat.
+  moat:
+    preset: moat-signs
+    # A sign over 5 fiscal years that the company has not filed yet is checked over this many, and the answer says so.
+    shorter-span-years: 3
+    # Passages quoted from the company's own documents (annual reports, concall transcripts, presentations).
+    max-statements: 3
   screening:
     snapshot:
       # Weekdays at 18:30 India time: after the 15:30 close, once the day's data has settled.
@@ -221,6 +230,26 @@ app:
             - { metric: ROA_PERCENT, operator: AT_LEAST, threshold: 2 }
             - { metric: ROE_PERCENT, operator: AT_LEAST, threshold: 15 }
             - { metric: PRICE_TO_BOOK_MULTIPLE, operator: AT_MOST, threshold: 3.5 }
+      moat-signs:
+        # What a lasting edge usually leaves in the figures, over 5 fiscal years: high returns on capital in every
+        # year (the lowest of the five), a margin that moved little, profit that came in as cash, growth, and low
+        # borrowing. Signs, not proof: the thresholds are placeholders to set to your own taste.
+        description: "Signs of a lasting edge: high returns on capital every year for 5 years, a steady margin, cash profits, growth and low debt."
+        tie-break: ROE_5Y_MIN_PERCENT
+        rules:
+          default:
+            - { metric: ROCE_5Y_MIN_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: OPERATING_MARGIN_5Y_RANGE, operator: AT_MOST, threshold: 5 }
+            - { metric: OCF_TO_PAT_5Y_MULTIPLE, operator: AT_LEAST, threshold: 0.8 }
+            - { metric: REVENUE_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+            - { metric: DEBT_TO_EQUITY_MULTIPLE, operator: AT_MOST, threshold: 0.5 }
+          # A lender's edge shows in its returns on equity and its profit, not in margins, cash flow or debt.
+          BANK:
+            - { metric: ROE_5Y_MIN_PERCENT, operator: AT_LEAST, threshold: 14 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
+          NBFC:
+            - { metric: ROE_5Y_MIN_PERCENT, operator: AT_LEAST, threshold: 15 }
+            - { metric: NET_PROFIT_CAGR_5Y_PERCENT, operator: AT_LEAST, threshold: 10 }
       dividend:
         description: "A dividend yield of at least 2%, paid out of operating cash flow, with profits that grew."
         tie-break: DIVIDEND_YIELD_PERCENT
@@ -256,6 +285,9 @@ app:
       - phrases: ["good cash conversion", "cash generative", "cash-generative", "strong cash flow", "strong cash flows"]
         preset: quality-compounder
         metrics: [OCF_TO_PAT_3Y_MULTIPLE]
+      - phrases: ["moat", "moats", "economic moat", "competitive advantage", "competitive advantages", "durable advantage", "lasting edge"]
+        preset: moat-signs
+        metrics: [ROCE_5Y_MIN_PERCENT, OPERATING_MARGIN_5Y_RANGE, OCF_TO_PAT_5Y_MULTIPLE, REVENUE_CAGR_5Y_PERCENT, DEBT_TO_EQUITY_MULTIPLE]
       - phrases: ["dividend paying", "dividend-paying", "high dividend", "high dividends", "good dividend", "good dividends", "high dividend yield", "dividend stocks"]
         preset: dividend
         metrics: [DIVIDEND_YIELD_PERCENT]

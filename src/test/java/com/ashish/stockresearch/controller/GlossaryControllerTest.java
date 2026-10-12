@@ -17,7 +17,8 @@ class GlossaryControllerTest {
         GlossaryController.Entry roce = glossary.entries().stream().filter(e -> e.key().equals("roce")).findFirst()
                 .orElseThrow();
         assertThat(roce.question()).isEqualTo("Is it profitable?");
-        assertThat(roce.screeningMetrics()).containsExactly(ScreeningMetric.ROCE_PERCENT);
+        assertThat(roce.screeningMetrics()).containsExactlyInAnyOrder(ScreeningMetric.ROCE_PERCENT,
+                ScreeningMetric.ROCE_3Y_MIN_PERCENT, ScreeningMetric.ROCE_5Y_MIN_PERCENT);
         assertThat(roce.industryNotes()).anyMatch(note -> note.contains(IndustryGroup.BANK.note()));
         assertThat(roce.screenSettings()).isNotEmpty();
         assertThat(roce.readWith()).contains("Return on equity (ROE)");

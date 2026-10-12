@@ -21,6 +21,8 @@ public enum Topic {
             "How much debt does %s have?"),
     PRICE(MetricQuestion.PRICE.heading(), "Price compared with earnings or book value", MetricQuestion.PRICE,
             "How much does the market charge for %s?"),
+    MOAT("Does it have a lasting edge (moat)?", "Signs in its figures, what the market charges, what it says",
+            null, "Does %s have a lasting edge over its rivals?"),
     PERFORMANCE("How has the share price done?", "Returns and the biggest fall over 5 years", null,
             "How has %s's share price done?"),
     FULL_REPORT("Everything: the full research report", "Long: every figure, risk and source", null,
@@ -72,6 +74,8 @@ public enum Topic {
         WORDS.put(STRETCHED, java.util.regex.Pattern.compile("\\b(?:debt|borrow\\w*|leverag\\w*|stretched|loans?)\\b", flags));
         WORDS.put(PRICE, java.util.regex.Pattern.compile(
                 "\\b(?:valuation|valued|p\\s*/\\s*e|expensive|cheap|market charge|earnings yield|price to)\\b", flags));
+        WORDS.put(MOAT, java.util.regex.Pattern.compile("\\b(?:moat|edge|competitive advantage|premium|pricing power)\\b",
+                flags));
         WORDS.put(PERFORMANCE, java.util.regex.Pattern.compile(
                 "\\b(?:share price|stock price|price history|returns?|perform\\w*|drawdown)\\b", flags));
         WORDS.put(FULL_REPORT, java.util.regex.Pattern.compile(
@@ -94,6 +98,10 @@ public enum Topic {
         ASKED.put(CASH, java.util.regex.Pattern.compile("\\b(?:cash flows?|real cash|cash conversion)\\b", flags));
         ASKED.put(PROFITABLE, java.util.regex.Pattern.compile("\\b(?:profitable|profitability|roe|roce)\\b", flags));
         ASKED.put(GROWING, java.util.regex.Pattern.compile("\\b(?:growing|growth)\\b", flags));
+        ASKED.put(MOAT, java.util.regex.Pattern.compile("\\b(?:moats?|economic moat|competitive (?:advantage|edge)s?"
+                + "|lasting edge|durable advantage|pricing power|edge over (?:its )?(?:rivals|competitors|peers)"
+                + "|(?:pay|paying|charge|charging|command|commands|trades? at|trading at)\\s+(?:a\\s+)?premium"
+                + "|premium valuation|valuation premium)\\b", flags));
         ASKED.put(PERFORMANCE, java.util.regex.Pattern.compile(
                 "\\b(?:performed|performance|how has (?:the |its )?(?:share|stock) price|(?:share|stock) price history)\\b",
                 flags));

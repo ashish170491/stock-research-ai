@@ -76,11 +76,30 @@ public class DocumentSearchTools {
         return render(symbol.strip().toUpperCase(Locale.ROOT).replace("'", ""), results(symbol, question));
     }
 
+    /** One passage of a company's ingested documents, with the citation it is shown with. */
+    public record Passage(String citation, String text) {
+    }
+
+    /**
+     * The passages of one company's ingested documents nearest to {@code query}, in full, each with its citation -
+     * for Java to quote from directly (no model reads them on this path). Empty when nothing has been ingested for
+     * the symbol.
+     */
+    public List<Passage> passages(String symbol, String query, int topK) {
+        return results(symbol, query, topK).stream()
+                .map(chunk -> new Passage(citation(chunk), chunk.getText() == null ? "" : chunk.getText().strip()))
+                .toList();
+    }
+
     private List<Document> results(String symbol, String question) {
+        return results(symbol, question, TOP_K);
+    }
+
+    private List<Document> results(String symbol, String question, int topK) {
         String normalized = symbol.strip().toUpperCase(Locale.ROOT).replace("'", "");
         SearchRequest request = SearchRequest.builder()
                 .query(question)
-                .topK(TOP_K)
+                .topK(topK)
                 .filterExpression(DocumentMetadataKeys.SYMBOL + " == '" + normalized + "'")
                 .build();
         return vectorStore.similaritySearch(request);

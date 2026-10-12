@@ -104,7 +104,8 @@ class MetricGlossaryTest {
         // two presets with the same settings are named together
         assertThat(glossary.screenSettings(entry("roe"))).containsExactly("The quality-compounder and reasonable-value "
                 + "screens use ROE 3y avg ≥ 15.00% for non-financial companies, ROE ≥ 14.00% for banks and ROE ≥ 15.00% "
-                + "for NBFCs (non-bank lenders).");
+                + "for NBFCs (non-bank lenders).", "The moat-signs screen uses ROE 5y low ≥ 14.00% for banks and ROE 5y "
+                + "low ≥ 15.00% for NBFCs (non-bank lenders).");
         // companies with the same threshold are named together
         assertThat(glossary.screenSettings(entry("cagr"))).contains("The dividend screen uses Profit CAGR 5y > 0.00% "
                 + "for non-financial companies, banks and NBFCs (non-bank lenders).");

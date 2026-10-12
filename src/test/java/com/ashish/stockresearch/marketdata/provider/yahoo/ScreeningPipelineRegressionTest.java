@@ -68,13 +68,22 @@ class ScreeningPipelineRegressionTest {
         // Yahoo's four fiscal years, with no filings: every metric over at most 3 years is VALID, and none
         // over 5 is measured over fewer years than it says
         Set<ScreeningMetric> fiveYear = Set.of(ScreeningMetric.ROE_5Y_AVG_PERCENT, ScreeningMetric.REVENUE_CAGR_5Y_PERCENT,
-                ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT, ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE);
+                ScreeningMetric.NET_PROFIT_CAGR_5Y_PERCENT, ScreeningMetric.OCF_TO_PAT_5Y_MULTIPLE,
+                ScreeningMetric.ROE_5Y_MIN_PERCENT, ScreeningMetric.ROCE_5Y_MIN_PERCENT,
+                ScreeningMetric.OPERATING_MARGIN_5Y_RANGE);
         assertThat(techm.metrics().values()).filteredOn(m -> !fiveYear.contains(m.metric()))
                 .allSatisfy(m -> assertThat(m.status()).as(m.metric().name()).isEqualTo(DataStatus.VALID));
         assertThat(fiveYear).allSatisfy(m -> assertThat(techm.metric(m).status()).as(m.name())
                 .isEqualTo(DataStatus.UNAVAILABLE));
         assertThat(techm.metric(ScreeningMetric.REVENUE_CAGR_5Y_PERCENT).statusReason())
                 .isEqualTo("a 5-year revenue CAGR needs 6 fiscal years; 4 available");
+        assertThat(techm.metric(ScreeningMetric.ROCE_5Y_MIN_PERCENT).statusReason())
+                .isEqualTo("needs 5 fiscal years of return on capital employed; 4 available");
+        // the 3-year low and margin range are measured from the yearly ratios the report shows
+        assertThat(techm.metric(ScreeningMetric.ROCE_3Y_MIN_PERCENT).calculation())
+                .isEqualTo("lowest of FY24, FY25, FY26 return on capital employed");
+        assertThat(techm.metric(ScreeningMetric.OPERATING_MARGIN_3Y_RANGE).unit())
+                .isEqualTo(com.ashish.stockresearch.research.model.Unit.PERCENTAGE_POINTS);
         // FY26 dividends paid 4,025.50 crore out of 6,172.00 crore operating cash flow
         assertThat(techm.metric(ScreeningMetric.DIVIDENDS_TO_OCF_PERCENT).value()).isEqualByComparingTo("65.22");
         assertThat(techm.metric(ScreeningMetric.OCF_TO_PAT_3Y_MULTIPLE).display()).isEqualTo("1.61x");

@@ -74,6 +74,115 @@ final class SnapshotCalculator {
     }
 
     /**
+     * The lowest of the last {@code years} consecutive fiscal years' calculated {@code name} (return on equity or
+     * on capital employed): at or above a threshold, it held there in every one of those years. As for the average,
+     * every year must be on average balances, so the years are on one basis.
+     */
+    static FinancialDataPoint lowest(List<AnnualRatios> ratios, int years, Function<AnnualRatios, FinancialDataPoint> field,
+                                     String name, String metric, CalculationVerifier.SourceValues sources) {
+        Optional<Window> window = window(ratios, years, field, name, metric, Unit.PERCENT, Formula.MINIMUM, sources);
+        if (window.isEmpty() || window.get().blocked() != null) {
+            return window.map(Window::blocked).orElseThrow();
+        }
+        Window w = window.get();
+        Optional<FinancialDataPoint> onClosing = w.points().stream().filter(point -> !onAverageBalances(point))
+                .findFirst();
+        if (onClosing.isPresent()) {
+            return FinancialDataPoint.unavailable(metric, Unit.PERCENT, w.span(), w.last().source(), ("%s %s is on "
+                    + "closing balances (no prior-year balance sheet), so the %d years are not on one basis")
+                    .formatted(onClosing.get().period().label(), name, years));
+        }
+        return verified(FinancialCalculator.minimum(w.values())
+                .map(value -> FinancialDataPoint.calculated(metric, value, Unit.PERCENT, w.span(), w.last().source(),
+                        Formula.MINIMUM, "lowest of %s %s".formatted(w.labels(), name), w.inputs()))
+                .orElseGet(() -> FinancialDataPoint.unavailable(metric, Unit.PERCENT, w.span(), w.last().source(),
+                        "the lowest could not be calculated")), sources);
+    }
+
+    /**
+     * How far a calculated percentage moved over the last {@code years} consecutive fiscal years: the highest minus
+     * the lowest, in percentage points. Small when it held steady, whatever its level.
+     */
+    static FinancialDataPoint range(List<AnnualRatios> ratios, int years, Function<AnnualRatios, FinancialDataPoint> field,
+                                    String name, String metric, CalculationVerifier.SourceValues sources) {
+        Optional<Window> window = window(ratios, years, field, name, metric, Unit.PERCENTAGE_POINTS, Formula.RANGE,
+                sources);
+        if (window.isEmpty() || window.get().blocked() != null) {
+            return window.map(Window::blocked).orElseThrow();
+        }
+        Window w = window.get();
+        return verified(FinancialCalculator.range(w.values())
+                .map(value -> FinancialDataPoint.calculated(metric, value, Unit.PERCENTAGE_POINTS, w.span(),
+                        w.last().source(), Formula.RANGE, "highest minus lowest of %s %s".formatted(w.labels(), name),
+                        w.inputs()))
+                .orElseGet(() -> FinancialDataPoint.unavailable(metric, Unit.PERCENTAGE_POINTS, w.span(),
+                        w.last().source(), "the range could not be calculated")), sources);
+    }
+
+    /**
+     * The last {@code years} fiscal years of one calculated ratio, ready to be reduced to one figure; or, as
+     * {@code blocked}, why they cannot be: too few years, a gap, or a year that is not VALID.
+     */
+    private record Window(List<FinancialDataPoint> points, ReportingPeriod span, String labels,
+                          List<CalculationInput> inputs, FinancialDataPoint blocked) {
+
+        FinancialDataPoint last() {
+            return points.get(points.size() - 1);
+        }
+
+        List<BigDecimal> values() {
+            return points.stream().map(FinancialDataPoint::value).toList();
+        }
+    }
+
+    private static Optional<Window> window(List<AnnualRatios> ratios, int years,
+                                           Function<AnnualRatios, FinancialDataPoint> field, String name, String metric,
+                                           Unit unit, Formula formula, CalculationVerifier.SourceValues sources) {
+        if (ratios.size() < years) {
+            return Optional.of(new Window(List.of(), null, null, List.of(), FinancialDataPoint.unavailable(metric, unit,
+                    ReportingPeriod.unknown(), null, "needs %d fiscal years of %s; %d available".formatted(years, name,
+                            ratios.size()))));
+        }
+        List<AnnualRatios> chosen = ratios.subList(ratios.size() - years, ratios.size());
+        Optional<String> gap = notConsecutive(chosen.stream().map(AnnualRatios::period).toList());
+        if (gap.isPresent()) {
+            return Optional.of(new Window(List.of(), null, null, List.of(), FinancialDataPoint.unavailable(metric, unit,
+                    ReportingPeriod.unknown(), null, gap.get())));
+        }
+        ReportingPeriod span = span(chosen.get(0).period(), chosen.get(chosen.size() - 1).period(), years);
+        List<FinancialDataPoint> points = chosen.stream().map(field).toList();
+        String labels = String.join(", ", chosen.stream().map(year -> year.period().label()).toList());
+        FinancialDataPoint last = points.get(points.size() - 1);
+        if (last == null) {
+            return Optional.of(new Window(List.of(), null, null, List.of(), FinancialDataPoint.unavailable(metric, unit,
+                    span, null, "an input is missing")));
+        }
+        Optional<FinancialDataPoint> blocked = blocked(metric, unit, span, last, formula,
+                "%s of %s %s".formatted(formula.name().toLowerCase(java.util.Locale.ROOT), labels, name), points);
+        if (blocked.isPresent()) {
+            return Optional.of(new Window(points, span, labels, List.of(), blocked.get()));
+        }
+        // The yearly values are the application's own verified calculations: no provider field to reconcile, but
+        // the figure is still recomputed from them.
+        List<CalculationInput> inputs = points.stream().map(point -> new CalculationInput(
+                point.period().label() + " " + name, null, point.value(), point.unit(), point.period().label())).toList();
+        return Optional.of(new Window(points, span, labels, inputs, null));
+    }
+
+    /**
+     * A return on average balances: its inputs include the prior year-end's balance as well as this year's - three
+     * inputs for return on equity (profit, closing, opening equity), five for return on capital employed (EBIT and
+     * the two year-ends' total assets and current liabilities).
+     */
+    private static boolean onAverageBalances(FinancialDataPoint point) {
+        return switch (point.formula()) {
+            case AVERAGE_BALANCE_RETURN_PERCENT -> point.inputs().size() == 3;
+            case RETURN_ON_CAPITAL_EMPLOYED_PERCENT -> point.inputs().size() == 5;
+            default -> false;
+        };
+    }
+
+    /**
      * Profit over the average of opening and closing equity: besides the year's profit, its inputs are balances
      * at two different dates, the prior year-end's and this year's.
      */

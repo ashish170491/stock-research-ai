@@ -36,8 +36,9 @@ public class ScreeningPresetsTest {
     }
 
     @Test
-    void definesTheThreePresets() {
-        assertThat(presets().names()).containsExactly("quality-compounder", "reasonable-value", "dividend");
+    void definesTheFourPresets() {
+        assertThat(presets().names()).containsExactly("quality-compounder", "reasonable-value", "moat-signs",
+                "dividend");
         assertThat(presets().find("Quality Compounder")).isPresent();
         assertThat(presets().find("nonsense")).isEmpty();
     }

@@ -31,17 +31,19 @@ final class GlossaryEntries {
             // --- Is it profitable? -------------------------------------------------------------------
             new GlossaryEntry("roe", "Return on equity (ROE)",
                     List.of("ROE", "return on equity", "average ROE"), PROFITABLE,
-                    Set.of("returnOnEquityPercent", "returnOnEquity3yAveragePercent", "returnOnEquity5yAveragePercent"),
+                    Set.of("returnOnEquityPercent", "returnOnEquity3yAveragePercent", "returnOnEquity5yAveragePercent",
+                            "returnOnEquity3yLowestPercent", "returnOnEquity5yLowestPercent"),
                     Set.of(ScreeningMetric.ROE_PERCENT, ScreeningMetric.ROE_3Y_AVG_PERCENT,
-                            ScreeningMetric.ROE_5Y_AVG_PERCENT),
+                            ScreeningMetric.ROE_5Y_AVG_PERCENT, ScreeningMetric.ROE_3Y_MIN_PERCENT,
+                            ScreeningMetric.ROE_5Y_MIN_PERCENT),
                     Set.of("returnOnEquityPercent"), List.of("return on equity"),
                     "The profit a company made for each ₹100 of its shareholders' money (the equity in its balance "
                             + "sheet) in a fiscal year.",
                     "Net profit attributable to the parent's owners, divided by the average of the opening and closing "
                             + "shareholders' equity, x 100, both from the company's filing with NSE. When the prior "
                             + "year's balance sheet is not available, closing equity is used and the calculation says "
-                            + "so. The three- and five-year figures are the plain average of each year's ROE, and are "
-                            + "given only when every year is on average equity.",
+                            + "so. The three- and five-year figures are the plain average of each year's ROE, and the "
+                            + "lowest of those years' ROE; both are given only when every year is on average equity.",
                     "A higher ROE means more profit for each rupee of shareholders' money. Borrowing raises ROE without "
                             + "the business earning more on what it owns, because debt adds assets but not equity. A "
                             + "share buyback, a large dividend or a write-off shrinks equity and raises ROE; a one-off "
@@ -67,14 +69,19 @@ final class GlossaryEntries {
 
             new GlossaryEntry("roce", "Return on capital employed (ROCE)",
                     List.of("ROCE", "return on capital employed", "return on capital"), PROFITABLE,
-                    Set.of("returnOnCapitalEmployedPercent"), Set.of(ScreeningMetric.ROCE_PERCENT),
+                    Set.of("returnOnCapitalEmployedPercent", "returnOnCapitalEmployed3yLowestPercent",
+                            "returnOnCapitalEmployed5yLowestPercent"),
+                    Set.of(ScreeningMetric.ROCE_PERCENT, ScreeningMetric.ROCE_3Y_MIN_PERCENT,
+                            ScreeningMetric.ROCE_5Y_MIN_PERCENT),
                     Set.of("returnOnCapitalEmployedPercent"), List.of("ROCE"),
                     "The operating profit a company made for each ₹100 of the long-term money in the business: "
                             + "shareholders' equity and borrowings together.",
                     "EBIT (profit before tax plus finance costs), divided by the average of the opening and closing "
                             + "capital employed, x 100. Capital employed is total assets minus current liabilities. All "
                             + "from the company's filing with NSE. When the prior year's balance sheet is not available, "
-                            + "closing capital employed is used and the calculation says so.",
+                            + "closing capital employed is used and the calculation says so. The three- and five-year "
+                            + "figures are the lowest of those years' ROCE, given only when every year is on average "
+                            + "capital employed: at or above a level, ROCE held there in every one of those years.",
                     "ROCE measures the business before it is financed: interest is added back and borrowings count as "
                             + "capital, so a company cannot raise it simply by borrowing, as it can its ROE. An ROE far "
                             + "above ROCE usually means borrowing is lifting the ROE. Large cash balances count as "
@@ -83,13 +90,18 @@ final class GlossaryEntries {
 
             new GlossaryEntry("operating-margin", "Operating margin",
                     List.of("operating margin", "EBIT margin"), PROFITABLE,
-                    Set.of("operatingMarginPercent"), Set.of(ScreeningMetric.OPERATING_MARGIN_PERCENT),
+                    Set.of("operatingMarginPercent", "operatingMargin3yRangePercentagePoints",
+                            "operatingMargin5yRangePercentagePoints"),
+                    Set.of(ScreeningMetric.OPERATING_MARGIN_PERCENT, ScreeningMetric.OPERATING_MARGIN_3Y_RANGE,
+                            ScreeningMetric.OPERATING_MARGIN_5Y_RANGE),
                     Set.of("operatingMarginPercent"), List.of("operating margin"),
                     "The share of each ₹100 of revenue left after the costs of running the business, before interest, "
                             + "tax and other income.",
                     "Operating profit divided by revenue from operations, x 100. Operating profit is revenue from "
                             + "operations minus total expenses, with finance costs added back, from the company's "
-                            + "filing; other income (interest, dividends, gains on investments) is left out.",
+                            + "filing; other income (interest, dividends, gains on investments) is left out. The three- "
+                            + "and five-year range is the highest minus the lowest of those years' margins, in "
+                            + "percentage points: how far the margin moved, whatever its level.",
                     "Margins differ widely between industries: a retailer or a commodity processor works on thin "
                             + "margins and large volumes, a software company on wider ones. A margin that moves over "
                             + "the years shows whether costs rose faster or slower than revenue. A change in how excise "
@@ -388,6 +400,47 @@ final class GlossaryEntries {
                             + "consolidated and standalone figures in one calculation.",
                     "For a company with large subsidiaries the two can differ a great deal, so a figure is read with "
                             + "the scope it is on.",
-                    List.of("fiscal-year"))
+                    List.of("fiscal-year")),
+
+            // --- Reading a company's position --------------------------------------------------------
+            new GlossaryEntry("moat", "Economic moat (a lasting edge)",
+                    List.of("moat", "economic moat", "competitive advantage", "competitive edge", "durable advantage",
+                            "lasting edge"), GENERAL,
+                    Set.of(), Set.of(), Set.of(), List.of(),
+                    "Something that lets a company keep earning more on its capital than its rivals can compete away, "
+                            + "for many years: a brand customers pay more for, a network that grows more useful as it "
+                            + "grows, products that are costly or slow to switch away from, patents or licences, or "
+                            + "costs lower than anyone else's at its scale.",
+                    "The application does not measure a moat; no figure can. It looks for the signs a lasting edge "
+                            + "usually leaves in the company's own filed figures, each a rule of the moat-signs "
+                            + "screening preset checked on verified figures: return on capital that stayed at or above "
+                            + "the preset's level in every one of the last five fiscal years, an operating margin that "
+                            + "moved within a narrow range, profit that came in as operating cash, sales that grew, and "
+                            + "borrowing that stayed low. Lenders are checked on the lowest return on equity and on "
+                            + "profit growth instead. Beside the signs it quotes what the company itself says about its "
+                            + "position, from the documents added for it, credited to each document and page.",
+                    "The signs show what happened, not why, and not whether it will last: a run of high returns can "
+                            + "come from a business cycle, a one-off or a protected market that later opens up. A "
+                            + "company can have an edge its figures do not show yet, and figures can look like an edge "
+                            + "without one. Read the signs with the company's own account of its position and with its "
+                            + "industry peers' figures.",
+                    List.of("roce", "operating-margin", "ocf-to-pat", "valuation-premium")),
+
+            new GlossaryEntry("valuation-premium", "Valuation premium",
+                    List.of("valuation premium", "premium valuation", "trades at a premium", "trading at a premium",
+                            "pay a premium", "paying a premium"), GENERAL,
+                    Set.of(), Set.of(), Set.of(), List.of(),
+                    "A company's shares trade at a premium when the market charges more for each rupee of its "
+                            + "earnings or of its book value than for most companies in its industry: a P/E or P/B "
+                            + "above its peers' median.",
+                    "The application shows the company's trailing P/E and price-to-book beside the median and range "
+                            + "of its industry peers in the latest stored snapshot, with the snapshot's date and the "
+                            + "number of peers. It does not say why the price is what it is.",
+                    "Investors often pay more for each rupee of today's earnings when they expect profit to keep "
+                            + "growing for longer, or to be steadier, than other companies' - the kind of record the "
+                            + "signs of a lasting edge describe. A premium is the market's expectation, not a fact "
+                            + "about the company: if growth or returns fall short of it, the price can fall even while "
+                            + "profit rises. An unusually low profit year raises the P/E for that year alone.",
+                    List.of("pe", "pb", "moat"))
     );
 }

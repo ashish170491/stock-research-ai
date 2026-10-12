@@ -33,8 +33,9 @@ class FocusServiceTest {
     private final ResearchReportWriter reportWriter = mock(ResearchReportWriter.class);
     private final com.ashish.stockresearch.context.RatioContextService context =
             mock(com.ashish.stockresearch.context.RatioContextService.class);
+    private final com.ashish.stockresearch.moat.MoatService moat = mock(com.ashish.stockresearch.moat.MoatService.class);
     private final FocusService focus = new FocusService(verdicts, new VerdictRenderer(TestGlossary.glossary()), research,
-            reportWriter, new NseSymbolDirectory(), context);
+            reportWriter, new NseSymbolDirectory(), context, moat);
 
     private void ratedInfosys() {
         VerdictEngine engine = new VerdictEngine(ScreeningPresetsTest.presets(), VerdictProperties.defaults());
@@ -66,6 +67,20 @@ class FocusServiceTest {
         assertThat(md).contains("### How has the share price done?")
                 .contains("The share-price history could not be retrieved right now.").doesNotContain("429");
         verify(verdicts, never()).lookup(anyString());
+    }
+
+    // The lasting edge is read from the same snapshot as the rating: one capture of the figures, no model.
+    @Test
+    void theLastingEdgeIsAnsweredFromTheSameSnapshotAsTheRating() {
+        ratedInfosys();
+        when(moat.answer(org.mockito.ArgumentMatchers.argThat(snapshot -> snapshot.symbol().equals("INFY"))))
+                .thenReturn("### Does it have a lasting edge (a moat)?\n\nSIGNS\n");
+
+        String md = focus.answer("Infosys", List.of(Topic.MOAT));
+
+        assertThat(md).startsWith("# INFY Limited (INFY)").contains("SIGNS").doesNotContain("Rating:");
+        verify(verdicts).lookup("INFY");
+        verify(reportWriter, never()).write(anyString());
     }
 
     @Test

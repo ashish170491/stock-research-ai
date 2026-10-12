@@ -151,6 +151,8 @@ public final class CalculationVerifier {
             }
             case MINIMUM -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).min().getAsDouble();
             case MAXIMUM -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).max().getAsDouble();
+            case RANGE -> in.isEmpty() ? null : in.stream().mapToDouble(Double::doubleValue).max().getAsDouble()
+                    - in.stream().mapToDouble(Double::doubleValue).min().getAsDouble();
             case RANK_FROM_HIGHEST -> {
                 if (in.size() < 2 || in.subList(1, in.size()).stream().noneMatch(v -> v.doubleValue() == in.get(0))) {
                     yield null;

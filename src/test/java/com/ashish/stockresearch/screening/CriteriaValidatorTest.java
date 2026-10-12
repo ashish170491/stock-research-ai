@@ -85,6 +85,61 @@ class CriteriaValidatorTest {
                 "“growing”: covered by your own Revenue CAGR 5y criterion");
     }
 
+    // A lowest-of-five-years figure is narrower than "ROCE": it is screened only when the words ask for it.
+    @Test
+    void neverScreensOnTheLowestOfFiveYearsWhenTheWordsAskForOneYearsRoce() {
+        ScreenInterpretation interpretation = validator.interpret("Find companies with ROCE above 15%",
+                read(List.of(), List.of(criterion("ROCE above 15%", "ROCE_5Y_MIN_PERCENT", "ABOVE", "15")), List.of()),
+                false);
+
+        assertThat(interpretation.criteria()).isEmpty();
+        assertThat(interpretation.notApplied()).anyMatch(reason -> reason.contains("“ROCE above 15%”: it was read as "
+                + "the lowest return on capital employed, which your words do not ask for"));
+    }
+
+    @Test
+    void screensOnTheLowestWhenTheWordsSayEveryYear() {
+        ScreenInterpretation interpretation = validator.interpret(
+                "Find companies with ROCE above 15% every year for 5 years",
+                read(List.of(), List.of(criterion("ROCE above 15% every year for 5 years", "ROCE_5Y_MIN_PERCENT",
+                        "ABOVE", "15")), List.of()), false);
+
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.CONSUMER))
+                .containsExactly("ROCE 5y low > 15.00%");
+    }
+
+    @Test
+    void aSteadyMarginIsReadInPercentagePoints() {
+        ScreenInterpretation interpretation = validator.interpret(
+                "Find companies whose operating margin stayed steady within 4 points over 5 years",
+                read(List.of(), List.of(criterion("operating margin stayed steady within 4 points over 5 years",
+                        "OPERATING_MARGIN_5Y_RANGE", "AT_MOST", "4")), List.of()), false);
+
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.CONSUMER))
+                .containsExactly("Op. margin 5y range ≤ 4.00 percentage points");
+    }
+
+    // "over 5 years" names a span, never a comparison: the comparison is the model's, or the words' own
+    @Test
+    void aSpanInWordsIsNeverReadAsAComparison() {
+        assertThat(CriteriaValidator.operatorInWords("revenue growth 10% over 5 years")).isEmpty();
+        assertThat(CriteriaValidator.operatorInWords("ROE over 15% over the last 3 years")).contains(Operator.ABOVE);
+        assertThat(CriteriaValidator.operatorInWords("margin within 4 points over 5 years")).contains(Operator.AT_MOST);
+    }
+
+    // "moat" is read as the moat-signs preset's own rules, every one shown, never as a judgement.
+    @Test
+    void readsAMoatAsTheMoatSignsPresetsRules() {
+        ScreenInterpretation interpretation = validator.interpret("Find consumer companies with a moat",
+                ExtractedCriteria.none(), false);
+
+        assertThat(labels(interpretation.criteria().orElseThrow(), IndustryGroup.CONSUMER)).containsExactlyInAnyOrder(
+                "ROCE 5y low ≥ 15.00%", "Op. margin 5y range ≤ 5.00 percentage points", "OCF/PAT 5y ≥ 0.80x",
+                "Revenue CAGR 5y ≥ 10.00%", "D/E ≤ 0.50x");
+        assertThat(interpretation.readings()).anyMatch(r -> r.contains("“moat” → ROCE 5y low ≥ 15.00%")
+                && r.contains("the moat-signs preset's threshold"));
+    }
+
     // S4-3: an unknown metric is rejected with a message naming what can be screened.
     @Test
     void rejectsAMetricNotOnTheWhitelistWithAMessage() {
@@ -95,7 +150,7 @@ class CriteriaValidatorTest {
         assertThat(interpretation.criteria()).isEmpty();
         assertThat(interpretation.notApplied()).singleElement().asString()
                 .contains("“promoter holding above 50%”: ‘PROMOTER_HOLDING’ is not a metric the screen can test")
-                .contains("It can test: ROE 3y avg, ROE 5y avg, ROE, ROA, ROCE");
+                .contains("It can test: ROE 3y avg, ROE 5y avg, ROE 3y low, ROE 5y low, ROE, ROA, ROCE");
         assertThat(interpretation.refusal()).startsWith("I found no criteria in your request that the screen can apply");
     }
 

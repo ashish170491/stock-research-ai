@@ -28,16 +28,19 @@ public class FocusService {
     private final ResearchReportWriter reportWriter;
     private final NseSymbolDirectory directory;
     private final com.ashish.stockresearch.context.RatioContextService context;
+    private final com.ashish.stockresearch.moat.MoatService moat;
 
     public FocusService(VerdictService verdicts, VerdictRenderer renderer, StockResearchService research,
                         ResearchReportWriter reportWriter, NseSymbolDirectory directory,
-                        com.ashish.stockresearch.context.RatioContextService context) {
+                        com.ashish.stockresearch.context.RatioContextService context,
+                        com.ashish.stockresearch.moat.MoatService moat) {
         this.verdicts = verdicts;
         this.renderer = renderer;
         this.research = research;
         this.reportWriter = reportWriter;
         this.directory = directory;
         this.context = context;
+        this.moat = moat;
     }
 
     public String answer(String company, List<Topic> topics) {
@@ -46,7 +49,8 @@ public class FocusService {
         }
         String symbol = directory.resolve(company).map(NseSymbolDirectory.Listing::symbol).orElse(company);
         StringBuilder md = new StringBuilder();
-        boolean needsFigures = topics.stream().anyMatch(topic -> topic == Topic.RATING || topic.question() != null);
+        boolean needsFigures = topics.stream().anyMatch(topic -> topic == Topic.RATING || topic == Topic.MOAT
+                || topic.question() != null);
         Verdict verdict = null;
         if (needsFigures) {
             VerdictService.Lookup lookup = Progress.step("Gathering %s's figures (company filings, Yahoo Finance)"
@@ -65,6 +69,8 @@ public class FocusService {
             } else if (topic.question() != null && verdict != null) {
                 md.append(renderer.question(verdict, topic.question()));
                 md.append(peerLines(verdict, topic)).append("\n");
+            } else if (topic == Topic.MOAT && verdict != null) {
+                md.append(moat.answer(verdict.snapshot())).append("\n");
             } else if (topic == Topic.PERFORMANCE) {
                 md.append(performance(company, symbol)).append("\n");
             }

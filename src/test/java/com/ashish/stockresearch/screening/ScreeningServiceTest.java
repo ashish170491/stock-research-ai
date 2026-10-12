@@ -164,7 +164,7 @@ class ScreeningServiceTest {
     @Test
     void namesTheAvailableChoicesForAnUnknownPresetUniverseOrGroup() {
         assertThat(service.screen("momentum", null, null).message())
-                .contains("quality-compounder, reasonable-value, dividend");
+                .contains("quality-compounder, reasonable-value, moat-signs, dividend");
         assertThat(service.screen("dividend", "SENSEX", null).status())
                 .isEqualTo(ScreeningOutcome.Status.UNKNOWN_UNIVERSE);
         assertThat(service.screen("dividend", null, "banks").message()).contains("BANK, NBFC");
