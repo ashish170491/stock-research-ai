@@ -4,9 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.documents")
 /**
- * @param vectorStorePath where the ingested-document vector store is persisted as a single JSON
- *                        file; loaded on startup if present, saved again after every ingestion, so
- *                        it survives a restart without re-ingesting anything.
+ * @param vectorStorePath where earlier versions kept the ingested documents as one JSON file (SimpleVectorStore);
+ *                        read only by the one-off import into PostgreSQL ({@code migration.LegacyDataImport})
  */
 public record DocumentsProperties(String vectorStorePath) {
 }

@@ -2,18 +2,15 @@ package com.ashish.stockresearch.tool;
 
 import com.ashish.stockresearch.documents.DocType;
 import com.ashish.stockresearch.documents.DocumentIngestionService;
-import com.ashish.stockresearch.documents.DocumentsProperties;
 import com.ashish.stockresearch.documents.FixedEmbeddingModel;
 import com.ashish.stockresearch.research.report.NumericClaimVerifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 
-import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,8 +23,6 @@ class DocumentSearchToolsTest {
 
     private static final Resource FIXTURE = new ClassPathResource("fixtures/documents/hdfcbank-annual-report-fy2026.pdf");
 
-    @TempDir
-    Path tempDir;
 
     private DocumentSearchTools tools;
     private ToolUsage usage;
@@ -36,8 +31,7 @@ class DocumentSearchToolsTest {
     @BeforeEach
     void ingestForTwoCompanies() {
         SimpleVectorStore store = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
-        DocumentIngestionService ingestion = new DocumentIngestionService(store,
-                new DocumentsProperties(tempDir.resolve("vector-store.json").toString()));
+        DocumentIngestionService ingestion = new DocumentIngestionService(store);
         ingestion.ingest(FIXTURE, "HDFCBANK", DocType.ANNUAL_REPORT, 2026, "HDFC Bank Annual Report FY2026.pdf");
         ingestion.ingest(FIXTURE, "ICICIBANK", DocType.ANNUAL_REPORT, 2026, "ICICI Bank Annual Report FY2026.pdf");
 

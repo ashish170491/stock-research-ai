@@ -4,8 +4,12 @@
 
 - Java 21
 - Maven (or use the included `./mvnw`)
+- Docker, for PostgreSQL - [OrbStack](https://orbstack.dev) (`brew install --cask orbstack`) or Docker Desktop.
+  The application starts the database itself (`compose.yaml`), and the tests run against a real PostgreSQL in
+  a container, so Docker must be running for both.
 - [Ollama](https://ollama.com) installed
-- `qwen3:8b` model pulled (`ollama pull qwen3:8b`)
+- `qwen3:8b` model pulled (`ollama pull qwen3:8b`), and `nomic-embed-text` for document search
+  (`ollama pull nomic-embed-text`)
 
 ## How to start Ollama
 
@@ -21,7 +25,8 @@ ollama serve
 ./mvnw spring-boot:run
 ```
 
-The app starts on `http://localhost:8080`. The model name is configurable via `spring.ai.ollama.chat.options.model` in `src/main/resources/application.yml`.
+The app starts on `http://localhost:8080`, after starting PostgreSQL from `compose.yaml` if it is not
+already running (it is left running when the app stops). The model name is configurable via `spring.ai.ollama.chat.options.model` in `src/main/resources/application.yml`.
 
 Note the `num-ctx: 16384` setting alongside it. Ollama's 4096-token default is not
 enough to hold five tool schemas, their JSON results and the model's reasoning at
@@ -212,11 +217,51 @@ model call that sees only the evidence; sentences with figures not in the
 evidence, unsupported claims, or conclusions about withheld topics are removed. `GET /api/research/report/data`
 returns the structured report with no model involved.
 
+## Where data is kept
+
+Everything the application keeps is in one PostgreSQL database (with the pgvector extension). Its schema is
+created and upgraded only by Flyway (`src/main/resources/db/migration`); a change is a new `V<n>__*.sql`,
+never an edit to a released one.
+
+| Table | Holds |
+| --- | --- |
+| `snapshot_run`, `fundamentals_snapshot`, `snapshot_metric`, `snapshot_failure` | The screening snapshots, one set of rows per run, kept for history and watchlist diffs |
+| `saved_screen` | Screens saved to the watchlist |
+| `vector_store` | Chunks of ingested annual reports, transcripts and presentations, with their embeddings |
+| `spring_ai_chat_memory`, `conversation_session` | Conversations: the last 20 messages, the companies discussed, chosen topics, pending questions and a research plan paused for "continue" |
+
+- **Conversations** survive a restart and are deleted after 30 days without use (`app.conversations.retention`,
+  nightly at 03:00 India time). "New conversation" in the page deletes the one it leaves
+  (`DELETE /api/ai/conversations/{id}`).
+- **NSE filings** stay as files under `data/nse-filings/`: each XBRL document is downloaded once and never changes.
+- **Backup:** `scripts/backup-db.sh` writes a `pg_dump` to `backups/` (git-ignored); the script shows how to
+  restore it.
+- **Production:** run with the `prod` profile and `DB_URL`, `DB_USER`, `DB_PASSWORD`; Docker Compose is then not
+  used. Flyway's first migration creates the `vector` and `uuid-ossp` extensions, which needs a role allowed to
+  create extensions (or create them beforehand).
+
+### Upgrading from a version that used H2
+
+Earlier versions kept the snapshots in `data/stock-research.mv.db` and documents in
+`data/documents/vector-store.json`. Stop any running copy of the old version, then start once with:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments=--app.migrate.h2-file=./data/stock-research
+```
+
+Every snapshot run and saved screen is copied with its ids, in one transaction, and the log shows the rows per
+table; documents are embedded again into pgvector (Ollama must be running). It never runs into a database that
+already holds data, and the old files are left untouched.
+
 ## Running the tests
 
 ```bash
 ./mvnw test
 ```
+
+Docker must be running: database tests use one PostgreSQL container (`pgvector/pgvector:pg17`, Testcontainers)
+and a fresh database in it per test. With OrbStack, Testcontainers may need its socket named once in
+`~/.testcontainers.properties`: `docker.host=unix:///Users/<you>/.orbstack/run/docker.sock`.
 
 ### Running the llm suite
 

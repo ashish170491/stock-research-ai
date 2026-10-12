@@ -14,6 +14,9 @@ import java.util.Optional;
  *
  * Earlier evidence carries its own dates (a quote says when it was taken, a financial figure names
  * its period), so a figure repeated from it is never presented as newer than it is.
+ *
+ * Every change is handed, as a {@link SessionState}, to the listener {@link ResearchSessions} gives it, which
+ * stores it ({@link SessionStore}); a session built with no listener keeps its state in memory only.
  */
 public final class ResearchSession {
 
@@ -26,6 +29,34 @@ public final class ResearchSession {
     private List<String> focus = List.of();
     private String awaitingChoiceAbout;
     private String awaitingCompanyFor;
+    private final java.util.function.Consumer<SessionState> onChange;
+
+    /** An empty session that is not stored. */
+    public ResearchSession() {
+        this(SessionState.empty(), state -> {
+        });
+    }
+
+    /** A session that starts from {@code initial} and hands every change to {@code onChange}. */
+    public ResearchSession(SessionState initial, java.util.function.Consumer<SessionState> onChange) {
+        this.companies = initial.companies();
+        this.evidence.addAll(initial.evidence());
+        this.checkpoint = initial.checkpoint();
+        this.focus = initial.focus();
+        this.awaitingChoiceAbout = initial.awaitingChoiceAbout();
+        this.awaitingCompanyFor = initial.awaitingCompanyFor();
+        this.onChange = onChange;
+    }
+
+    /** Everything the session holds, as one value. */
+    public synchronized SessionState state() {
+        return new SessionState(companies, List.copyOf(evidence), checkpoint, focus, awaitingChoiceAbout,
+                awaitingCompanyFor);
+    }
+
+    private void changed() {
+        onChange.accept(state());
+    }
 
     /** The companies the most recent company-specific turn was about, in order; empty at the start. */
     public synchronized List<String> companies() {
@@ -34,8 +65,9 @@ public final class ResearchSession {
 
     /** Remembers the companies a turn was about; a turn about no company leaves the earlier ones. */
     public synchronized void rememberCompanies(List<String> discussed) {
-        if (discussed != null && !discussed.isEmpty()) {
+        if (discussed != null && !discussed.isEmpty() && !discussed.equals(companies)) {
             companies = List.copyOf(discussed);
+            changed();
         }
     }
 
@@ -45,23 +77,31 @@ public final class ResearchSession {
      */
     public synchronized Optional<String> takeAwaitingChoice() {
         Optional<String> company = Optional.ofNullable(awaitingChoiceAbout);
-        awaitingChoiceAbout = null;
+        if (company.isPresent()) {
+            awaitingChoiceAbout = null;
+            changed();
+        }
         return company;
     }
 
     public synchronized void awaitChoiceAbout(String company) {
         awaitingChoiceAbout = company;
+        changed();
     }
 
     /** The question asked before the user was asked which company it is about; taking it clears it. */
     public synchronized Optional<String> takeAwaitingCompany() {
         Optional<String> question = Optional.ofNullable(awaitingCompanyFor);
-        awaitingCompanyFor = null;
+        if (question.isPresent()) {
+            awaitingCompanyFor = null;
+            changed();
+        }
         return question;
     }
 
     public synchronized void awaitCompanyFor(String question) {
         awaitingCompanyFor = question;
+        changed();
     }
 
     /** The topics the user last chose to hear about (their ids), ticked first the next time they are asked. */
@@ -70,8 +110,9 @@ public final class ResearchSession {
     }
 
     public synchronized void rememberFocus(List<String> topics) {
-        if (topics != null && !topics.isEmpty()) {
+        if (topics != null && !topics.isEmpty() && !topics.equals(focus)) {
             focus = List.copyOf(topics);
+            changed();
         }
     }
 
@@ -84,6 +125,7 @@ public final class ResearchSession {
         while (evidence.size() > EVIDENCE_TURNS) {
             evidence.removeFirst();
         }
+        changed();
     }
 
     /** The evidence of the earlier turns still kept, oldest first. */
@@ -98,9 +140,13 @@ public final class ResearchSession {
 
     public synchronized void pause(OrchestratorCheckpoint checkpoint) {
         this.checkpoint = checkpoint;
+        changed();
     }
 
     public synchronized void clearCheckpoint() {
-        this.checkpoint = null;
+        if (checkpoint != null) {
+            this.checkpoint = null;
+            changed();
+        }
     }
 }

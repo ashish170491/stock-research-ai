@@ -35,8 +35,11 @@ build/
 ### Application logs ###
 logs/
 
-### Screening snapshot database ###
+### Local data: NSE filings, files of earlier versions ###
 data/
+
+### Database dumps (scripts/backup-db.sh) ###
+backups/
 
 ### Local review bundle ###
 REVIEW_BUNDLE.md

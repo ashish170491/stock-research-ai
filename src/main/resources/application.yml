@@ -30,15 +30,26 @@ spring:
       # thread waiting on Yahoo or on the throttle costs almost nothing.
       enabled: true
   datasource:
-    # The screening snapshot, in a local file next to where the application is started
-    # (data/ is git-ignored). Screening reads it instead of calling Yahoo.
-    url: jdbc:h2:file:./data/stock-research;DB_CLOSE_ON_EXIT=FALSE
-    username: sa
-    password: ""
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:db/screening-schema.sql
+    # PostgreSQL with pgvector: the screening snapshot, saved screens, conversations and ingested documents. In
+    # development compose.yaml runs it and spring-boot-docker-compose connects to it (these values are then only a
+    # fallback); in production set DB_URL, DB_USER and DB_PASSWORD and use the prod profile.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/stockresearch}
+    username: ${DB_USER:stockresearch}
+    password: ${DB_PASSWORD:stockresearch}
+    hikari:
+      # the nightly snapshot job and chat requests share it; Ollama, not the database, is the bottleneck
+      maximum-pool-size: 10
+      # milliseconds
+      connection-timeout: 10000
+  flyway:
+    # The schema is Flyway's alone: a change is a new db/migration/V<n>__*.sql, never an edit to a released one.
+    locations: classpath:db/migration
+  docker:
+    compose:
+      file: compose.yaml
+      # Start PostgreSQL with the application but leave it running when the application stops, so a restart
+      # (or a test run) does not wait for the database again.
+      lifecycle-management: start-only
   ai:
     retry:
       # Spring AI's defaults (10 attempts, waits growing 5x from 2s) suit a
@@ -83,6 +94,21 @@ spring:
           # Pulled separately from the chat model (ollama pull nomic-embed-text); used only to
           # embed and search ingested documents (Step 7), never for chat.
           model: nomic-embed-text
+    vectorstore:
+      pgvector:
+        # db/migration/V2__documents.sql creates the table; Spring AI only checks it at startup, so a changed
+        # embedding model (another size than 768) stops the application instead of corrupting the search.
+        initialize-schema: false
+        schema-validation: true
+        dimensions: 768
+        distance-type: cosine-distance
+        index-type: hnsw
+    chat:
+      memory:
+        repository:
+          jdbc:
+            # db/migration/V3__conversations.sql creates spring_ai_chat_memory
+            initialize-schema: never
 
 app:
   market-data:
@@ -124,10 +150,15 @@ app:
       listing-ttl: 12h
 
   documents:
-    # Chunks embedded from ingested annual reports / concall transcripts (searchCompanyDocuments).
-    # A single JSON file (SimpleVectorStore), loaded on startup if present and saved again after
-    # every ingestion, so nothing needs re-ingesting after a restart.
+    # Ingested documents are stored in PostgreSQL (pgvector). This is where earlier versions kept them, as one
+    # JSON file: read only by the one-off import (migration.LegacyDataImport).
     vector-store-path: ./data/documents/vector-store.json
+
+  conversations:
+    # A conversation unused for this long is deleted, with its memory, topic choices and any paused research
+    # plan (ConversationRetentionJob, nightly at 03:00 India time).
+    retention: 30d
+    cleanup-cron: "0 0 3 * * *"
 
   orchestrator:
     # The autonomous research orchestrator's budgets (roadmap Step 8): exceeding any one stops the
@@ -341,3 +372,13 @@ logging:
       # Also prune archives when the app starts, so an app that was stopped for
       # a while does not keep stale files until its next midnight rollover.
       clean-history-on-start: true
+
+---
+# Production: no Docker Compose; the database comes from DB_URL, DB_USER and DB_PASSWORD only.
+spring:
+  config:
+    activate:
+      on-profile: prod
+  docker:
+    compose:
+      enabled: false

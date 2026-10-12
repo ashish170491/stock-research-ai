@@ -1,18 +1,15 @@
 package com.ashish.stockresearch.controller;
 
 import com.ashish.stockresearch.documents.DocumentIngestionService;
-import com.ashish.stockresearch.documents.DocumentsProperties;
 import com.ashish.stockresearch.documents.FixedEmbeddingModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.nio.file.Path;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -21,16 +18,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** {@code POST /api/documents} (S7-2): a PDF upload with its metadata reaches the ingestion service. */
 class DocumentIngestionControllerTest {
 
-    @TempDir
-    Path tempDir;
 
     private MockMvc mvc;
 
     @BeforeEach
     void wireUpTheController() {
         SimpleVectorStore store = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
-        DocumentIngestionService service = new DocumentIngestionService(store,
-                new DocumentsProperties(tempDir.resolve("vector-store.json").toString()));
+        DocumentIngestionService service = new DocumentIngestionService(store);
         mvc = MockMvcBuilders.standaloneSetup(new DocumentIngestionController(service)).build();
     }
 

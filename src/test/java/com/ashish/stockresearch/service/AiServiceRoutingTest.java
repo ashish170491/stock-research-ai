@@ -143,7 +143,7 @@ class AiServiceRoutingTest {
     private static final String CONVERSATION = "c1";
     private final ChatMemory chatMemory = MessageWindowChatMemory.builder()
             .chatMemoryRepository(new InMemoryChatMemoryRepository()).maxMessages(20).build();
-    private final ResearchSessions sessions = new ResearchSessions(chatMemory);
+    private final ResearchSessions sessions = new ResearchSessions(com.ashish.stockresearch.agent.SessionStore.NONE);
 
     private AiService service(ChatModel model) {
         return service(model, mock(VectorStore.class));
@@ -727,8 +727,7 @@ class AiServiceRoutingTest {
         java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("doc-vector-store");
         org.springframework.ai.vectorstore.SimpleVectorStore store = org.springframework.ai.vectorstore.SimpleVectorStore
                 .builder(new com.ashish.stockresearch.documents.FixedEmbeddingModel()).build();
-        new com.ashish.stockresearch.documents.DocumentIngestionService(store,
-                new com.ashish.stockresearch.documents.DocumentsProperties(dir.resolve("store.json").toString()))
+        new com.ashish.stockresearch.documents.DocumentIngestionService(store)
                 .ingest(new org.springframework.core.io.ClassPathResource("fixtures/documents/hdfcbank-annual-report-fy2026.pdf"),
                         "HDFCBANK", com.ashish.stockresearch.documents.DocType.ANNUAL_REPORT, 2026,
                         "HDFC Bank Annual Report FY2026.pdf");

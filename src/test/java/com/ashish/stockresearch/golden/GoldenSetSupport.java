@@ -6,7 +6,6 @@ import com.ashish.stockresearch.agent.ScreenerAgent;
 import com.ashish.stockresearch.context.RatioContextService;
 import com.ashish.stockresearch.documents.DocType;
 import com.ashish.stockresearch.documents.DocumentIngestionService;
-import com.ashish.stockresearch.documents.DocumentsProperties;
 import com.ashish.stockresearch.documents.FixedEmbeddingModel;
 import com.ashish.stockresearch.glossary.MetricGlossary;
 import com.ashish.stockresearch.glossary.TestGlossary;
@@ -141,7 +140,7 @@ final class GoldenSetSupport {
 
         ChatMemory chatMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(new InMemoryChatMemoryRepository()).maxMessages(20).build();
-        ResearchSessions sessions = new ResearchSessions(chatMemory);
+        ResearchSessions sessions = new ResearchSessions(com.ashish.stockresearch.agent.SessionStore.NONE);
 
         return new AiService(chatClientBuilder, router, stockPriceTool, stockResearchTools, screeningTools,
                 documentSearchTools, conversationTraceAdvisor, researchReportWriter, comparisonService,
@@ -155,8 +154,7 @@ final class GoldenSetSupport {
     private static SimpleVectorStore documentStore(Path tempDir) {
         Resource pdf = new ClassPathResource("fixtures/documents/hdfcbank-annual-report-fy2026.pdf");
         SimpleVectorStore store = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
-        DocumentIngestionService ingestion = new DocumentIngestionService(store,
-                new DocumentsProperties(tempDir.resolve("golden-vector-store.json").toString()));
+        DocumentIngestionService ingestion = new DocumentIngestionService(store);
         ingestion.ingest(pdf, "HDFCBANK", DocType.ANNUAL_REPORT, 2026, "HDFC Bank Annual Report FY2026.pdf");
         return store;
     }

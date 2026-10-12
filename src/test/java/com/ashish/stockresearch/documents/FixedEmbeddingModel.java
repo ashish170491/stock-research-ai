@@ -18,7 +18,16 @@ import java.util.Locale;
  */
 public final class FixedEmbeddingModel implements EmbeddingModel {
 
-    private static final int DIMENSIONS = 32;
+    private final int dimensions;
+
+    public FixedEmbeddingModel() {
+        this(32);
+    }
+
+    /** @param dimensions the vector size: 768 to fill the application's pgvector table (nomic-embed-text's size) */
+    public FixedEmbeddingModel(int dimensions) {
+        this.dimensions = dimensions;
+    }
 
     @Override
     public EmbeddingResponse call(EmbeddingRequest request) {
@@ -35,8 +44,8 @@ public final class FixedEmbeddingModel implements EmbeddingModel {
         return vector(document.getText());
     }
 
-    private static float[] vector(String text) {
-        float[] v = new float[DIMENSIONS];
+    private float[] vector(String text) {
+        float[] v = new float[dimensions];
         if (text == null) {
             return v;
         }
@@ -44,7 +53,7 @@ public final class FixedEmbeddingModel implements EmbeddingModel {
             if (word.isBlank()) {
                 continue;
             }
-            v[Math.floorMod(word.hashCode(), DIMENSIONS)] += 1f;
+            v[Math.floorMod(word.hashCode(), dimensions)] += 1f;
         }
         return v;
     }

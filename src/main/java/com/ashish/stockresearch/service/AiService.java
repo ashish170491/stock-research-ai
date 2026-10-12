@@ -452,6 +452,12 @@ public class AiService {
 				List.of());
 	}
 
+	/** Deletes a conversation now: its chat history and its session, in memory and in the database. */
+	public void forget(String conversationId) {
+		chatMemory.clear(conversationId);
+		sessions.forget(conversationId);
+	}
+
 	/**
 	 * Answers only the topics the user chose about a company (from a clarification's choices, or a suggestion),
 	 * rendered in Java. {@code message} is how the choice reads in the conversation.

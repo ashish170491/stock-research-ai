@@ -1,0 +1,23 @@
+# The application's database for local development: PostgreSQL with the pgvector extension. Spring Boot
+# starts it with the application (spring-boot-docker-compose) and leaves it running when the application stops;
+# Flyway creates and upgrades the schema (src/main/resources/db/migration). In production the `prod` profile
+# turns this off and the database is configured from DB_URL, DB_USER and DB_PASSWORD.
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: stockresearch
+      POSTGRES_USER: ${DB_USER:-stockresearch}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-stockresearch}
+    ports:
+      - "5432:5432"
+    volumes:
+      - stock-research-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  stock-research-pg:

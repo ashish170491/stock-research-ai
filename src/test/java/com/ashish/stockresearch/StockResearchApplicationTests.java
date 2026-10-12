@@ -6,6 +6,8 @@ import ch.qos.logback.core.FileAppender;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,13 +20,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * start. Nothing here calls Ollama or Yahoo: beans are created, not used.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        // the snapshot database in memory, and the document vector store under target/, so the
-        // build never writes or reads ./data
+        // the test container's PostgreSQL, never compose.yaml's, and nothing under ./data
         properties = {
-                "spring.datasource.url=jdbc:h2:mem:context-test;DB_CLOSE_DELAY=-1",
+                "spring.docker.compose.enabled=false",
                 "app.documents.vector-store-path=target/test-data/vector-store.json"
         })
 class StockResearchApplicationTests {
+
+    /** A database of its own in the tests' PostgreSQL container; the application's Flyway migrates it on start. */
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        String url = TestPostgres.newDatabaseUrl();
+        registry.add("spring.datasource.url", () -> url);
+        registry.add("spring.datasource.username", () -> TestPostgres.container().getUsername());
+        registry.add("spring.datasource.password", () -> TestPostgres.container().getPassword());
+    }
 
     @Test
     void contextLoads() {

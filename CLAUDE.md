@@ -119,5 +119,15 @@
   Spring AI's RelevancyEvaluator alongside its own intent/tool/fact checks. Chat latency and token usage
   are Micrometer observations (gen_ai.client.operation, gen_ai.client.token.usage) exposed at
   /actuator/metrics once spring-boot-starter-actuator is on the classpath - no extra config needed.
-- Run ./mvnw test before finishing. Use fixtures, never live Yahoo or NSE, in tests.
+- Everything kept is in PostgreSQL + pgvector (compose.yaml in development, the prod profile and DB_* env in
+  production). The schema is Flyway's only (db/migration): a change is a new V<n>__*.sql, never an edit to a
+  released migration, and Spring AI never creates tables (initialize-schema off; pgvector schema-validation on, so
+  an embedding model of another size than 768 stops startup). Conversations persist: chat memory through
+  JdbcChatMemoryRepository, and ResearchSession's state (SessionState: companies, evidence, focus, pending
+  questions, an orchestrator checkpoint) written through by ResearchSessions to JdbcSessionStore on every change; a
+  store failure is logged, never fails a turn. ConversationRetentionJob deletes conversations unused for
+  app.conversations.retention (30d). Re-ingesting a document replaces its chunks. LegacyDataImport copies an
+  earlier version's H2 file and JSON vector store once (app.migrate.h2-file).
+- Run ./mvnw test before finishing (Docker must be running: database tests use Testcontainers PostgreSQL through
+  TestPostgres / SnapshotDatabase, a fresh database per test). Use fixtures, never live Yahoo or NSE, in tests.
 - Roadmap: docs/AGENT_ROADMAP.md

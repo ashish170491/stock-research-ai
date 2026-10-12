@@ -2,15 +2,12 @@ package com.ashish.stockresearch.documents;
 
 import com.ashish.stockresearch.documents.DocumentIngestionService.IngestResult;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 
-import java.io.File;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,18 +20,11 @@ class DocumentIngestionServiceTest {
 
     private static final Resource FIXTURE = new ClassPathResource("fixtures/documents/hdfcbank-annual-report-fy2026.pdf");
 
-    @TempDir
-    Path tempDir;
-
-    private DocumentsProperties properties() {
-        return new DocumentsProperties(tempDir.resolve("vector-store.json").toString());
-    }
-
     // S7-2
     @Test
     void ingestsEveryPageAsChunksTaggedWithTheDocumentsMetadata() {
         SimpleVectorStore store = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
-        DocumentIngestionService service = new DocumentIngestionService(store, properties());
+        DocumentIngestionService service = new DocumentIngestionService(store);
 
         IngestResult result = service.ingest(FIXTURE, "hdfcbank", DocType.ANNUAL_REPORT, 2026,
                 "HDFC Bank Annual Report FY2026.pdf");
@@ -57,22 +47,21 @@ class DocumentIngestionServiceTest {
                 .containsEntry("page", 2);
     }
 
-    // S7-3
+    // Ingesting the same document again replaces its chunks: a search never returns a page twice.
     @Test
-    void theVectorStoreFileSurvivesAFreshStoreLoadingIt() {
-        File file = new File(properties().vectorStorePath());
-        SimpleVectorStore first = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
-        new DocumentIngestionService(first, properties())
-                .ingest(FIXTURE, "HDFCBANK", DocType.ANNUAL_REPORT, 2026, "HDFC Bank Annual Report FY2026.pdf");
-        assertThat(file).exists();
+    void ingestingTheSameDocumentAgainReplacesItsChunks() {
+        SimpleVectorStore store = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
+        DocumentIngestionService service = new DocumentIngestionService(store);
+        int chunks = service.ingest(FIXTURE, "HDFCBANK", DocType.ANNUAL_REPORT, 2026,
+                "HDFC Bank Annual Report FY2026.pdf").chunks();
 
-        // A fresh store, as a restarted application would build, loading what was saved before.
-        SimpleVectorStore restarted = SimpleVectorStore.builder(new FixedEmbeddingModel()).build();
-        restarted.load(file);
+        service.ingest(FIXTURE, "HDFCBANK", DocType.ANNUAL_REPORT, 2026, "HDFC Bank Annual Report FY2026.pdf");
+        // another year's report of the same company is a different document, and stays
+        service.ingest(FIXTURE, "HDFCBANK", DocType.ANNUAL_REPORT, 2025, "HDFC Bank Annual Report FY2025.pdf");
 
-        List<Document> hits = restarted.similaritySearch(SearchRequest.builder()
-                .query("Capital Adequacy Ratio").topK(10)
+        List<Document> all = store.similaritySearch(SearchRequest.builder().query("bank").topK(100)
                 .filterExpression("symbol == 'HDFCBANK'").build());
-        assertThat(hits).isNotEmpty();
+        assertThat(all).filteredOn(d -> Integer.valueOf(2026).equals(d.getMetadata().get("fiscalYear"))).hasSize(chunks);
+        assertThat(all).filteredOn(d -> Integer.valueOf(2025).equals(d.getMetadata().get("fiscalYear"))).hasSize(chunks);
     }
 }

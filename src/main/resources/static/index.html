@@ -256,7 +256,7 @@
   </div>
   <div class="spacer"></div>
   <span class="conv">Conversation <code id="conv-id"></code></span>
-  <button class="secondary" id="new-conv" title="Start a conversation with no memory">New conversation</button>
+  <button class="secondary" id="new-conv" title="Start a conversation with no memory; the current one is deleted">New conversation</button>
 </header>
 
 <main>
@@ -722,7 +722,13 @@
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(input.value); }
   });
-  $('new-conv').addEventListener('click', () => { state = fresh(); save(); renderAll(); input.focus(); });
+  // "New conversation" deletes the old one on the server too (its history and session are stored for 30 days
+  // otherwise); a failed delete never stops the new conversation from starting.
+  $('new-conv').addEventListener('click', () => {
+    const old = state.conversationId;
+    fetch('/api/ai/conversations/' + encodeURIComponent(old), { method: 'DELETE' }).catch(() => {});
+    state = fresh(); save(); renderAll(); input.focus();
+  });
 
   // --- tabs ---
   document.querySelectorAll('.tabs button').forEach(tab => tab.addEventListener('click', () => {
